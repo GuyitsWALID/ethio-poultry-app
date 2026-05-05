@@ -2,8 +2,195 @@
 
 import { useState } from "react";
 
+import { createClient } from "@/utils/supabase/client";
+
 export default function DailyRecordsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFormError(null);
+    setFormSuccess(null);
+    setIsSubmitting(true);
+
+    const formData = new FormData(event.currentTarget);
+    const parseNumber = (value: FormDataEntryValue | null) => {
+      if (value === null || value === "") {
+        return null;
+      }
+      const parsed = Number(value);
+      return Number.isNaN(parsed) ? null : parsed;
+    };
+
+    const supabase = createClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      setFormError("Unable to verify your session. Please sign in again.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("org_id")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile?.org_id) {
+      setFormError("Organization not found for this user.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const orgId = profile.org_id;
+    const flockId = formData.get("flock_id")?.toString().trim();
+    const recordDate = formData.get("record_date")?.toString();
+
+    if (!flockId || !recordDate) {
+      setFormError("Record date and flock ID are required.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const dailyRecordPayload = {
+      org_id: orgId,
+      flock_id: flockId,
+      record_date: recordDate,
+      live_count: parseNumber(formData.get("live_count")),
+      deaths: parseNumber(formData.get("deaths")) ?? 0,
+      culls: parseNumber(formData.get("culls")) ?? 0,
+      feed_consumed_kg: parseNumber(formData.get("feed_consumed_kg")),
+      feed_type: formData.get("feed_type")?.toString() || null,
+      water_liters: parseNumber(formData.get("water_liters")),
+      temperature_c: parseNumber(formData.get("temperature_c")),
+      humidity_pct: parseNumber(formData.get("humidity_pct")),
+      recorded_by: user.id,
+    };
+
+    const { error: dailyError } = await supabase
+      .from("daily_farm_records")
+      .insert(dailyRecordPayload);
+
+    if (dailyError) {
+      setFormError(dailyError.message);
+      setIsSubmitting(false);
+      return;
+    }
+
+    const mortalityCount = parseNumber(formData.get("deaths"));
+    const mortalityCause = formData.get("death_cause")?.toString().trim();
+    const mortalityNotes = formData.get("mortality_notes")?.toString().trim();
+    const mortalityDiagnosis = formData
+      .get("mortality_diagnosis")
+      ?.toString()
+      .trim();
+    const recordedTime = formData.get("recorded_time")?.toString() || null;
+    const shouldInsertMortality =
+      mortalityCount !== null ||
+      mortalityCause ||
+      mortalityNotes ||
+      mortalityDiagnosis ||
+      recordedTime;
+
+    if (shouldInsertMortality) {
+      const { error: mortalityError } = await supabase
+        .from("mortality_events")
+        .insert({
+          org_id: orgId,
+          flock_id: flockId,
+          record_date: recordDate,
+          recorded_time: recordedTime,
+          count: mortalityCount ?? 0,
+          cause: mortalityCause || "unspecified",
+          notes: mortalityNotes || null,
+          diagnosis: mortalityDiagnosis || null,
+          observed_by: user.id,
+        });
+
+      if (mortalityError) {
+        setFormError(mortalityError.message);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    const eggFields = [
+      "total_eggs",
+      "good_eggs",
+      "broken_eggs",
+      "dirty_eggs",
+      "floor_eggs",
+    ];
+    const hasEggData = eggFields.some((field) => {
+      const value = formData.get(field);
+      return value !== null && value !== "";
+    });
+
+    if (hasEggData) {
+      const { error: eggError } = await supabase.from("daily_egg_records").insert({
+        org_id: orgId,
+        flock_id: flockId,
+        record_date: recordDate,
+        total_eggs: parseNumber(formData.get("total_eggs")),
+        good_eggs: parseNumber(formData.get("good_eggs")),
+        broken_eggs: parseNumber(formData.get("broken_eggs")),
+        dirty_eggs: parseNumber(formData.get("dirty_eggs")),
+        floor_eggs: parseNumber(formData.get("floor_eggs")),
+      });
+
+      if (eggError) {
+        setFormError(eggError.message);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    const weightSample = parseNumber(formData.get("weight_sample"));
+    const avgWeight = parseNumber(formData.get("avg_weight"));
+    if (weightSample || avgWeight) {
+      const { error: weightError } = await supabase.from("weight_records").insert({
+        org_id: orgId,
+        flock_id: flockId,
+        record_date: recordDate,
+        sample_count: weightSample,
+        average_weight_g: avgWeight,
+      });
+
+      if (weightError) {
+        setFormError(weightError.message);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    const medication = formData.get("medication")?.toString().trim();
+    if (medication) {
+      const { error: healthError } = await supabase.from("health_events").insert({
+        org_id: orgId,
+        flock_id: flockId,
+        event_date: recordDate,
+        event_type: "treatment",
+        description: medication,
+      });
+
+      if (healthError) {
+        setFormError(healthError.message);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    setFormSuccess("Daily record saved successfully.");
+    event.currentTarget.reset();
+    setIsSubmitting(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -50,7 +237,7 @@ export default function DailyRecordsPage() {
                 Close
               </button>
             </div>
-            <form className="mt-6 grid gap-6">
+            <form className="mt-6 grid gap-6" onSubmit={handleSubmit}>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="grid gap-2">
                   <label className="text-sm font-medium text-forest-900" htmlFor="record-date">
@@ -58,8 +245,10 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="record-date"
+                    name="record_date"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     type="date"
+                    required
                   />
                 </div>
                 <div className="grid gap-2">
@@ -68,9 +257,11 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="flock-id"
+                    name="flock_id"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="LAY-2026-003"
                     type="text"
+                    required
                   />
                 </div>
                 <div className="grid gap-2">
@@ -79,6 +270,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="farm"
+                    name="farm_name"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="Addis Farm"
                     type="text"
@@ -90,6 +282,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="house"
+                    name="house_name"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="House 2"
                     type="text"
@@ -104,6 +297,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="live-count"
+                    name="live_count"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="1240"
                     type="number"
@@ -115,6 +309,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="deaths"
+                    name="deaths"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="12"
                     type="number"
@@ -126,6 +321,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="culls"
+                    name="culls"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="0"
                     type="number"
@@ -137,9 +333,44 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="death-cause"
+                    name="death_cause"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="Respiratory disease"
                     type="text"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-forest-900" htmlFor="recorded-time">
+                    Recorded time
+                  </label>
+                  <input
+                    id="recorded-time"
+                    name="recorded_time"
+                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                    type="time"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-forest-900" htmlFor="mortality-diagnosis">
+                    Diagnosis
+                  </label>
+                  <input
+                    id="mortality-diagnosis"
+                    name="mortality_diagnosis"
+                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                    placeholder="Suspected infection"
+                    type="text"
+                  />
+                </div>
+                <div className="md:col-span-3 grid gap-2">
+                  <label className="text-sm font-medium text-forest-900" htmlFor="mortality-notes">
+                    Mortality notes
+                  </label>
+                  <textarea
+                    id="mortality-notes"
+                    name="mortality_notes"
+                    className="min-h-[96px] rounded-xl border border-sand-200 px-3 py-2 text-sm"
+                    placeholder="Additional details or observations"
                   />
                 </div>
               </div>
@@ -151,6 +382,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="feed-consumed"
+                    name="feed_consumed_kg"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="320"
                     type="number"
@@ -163,6 +395,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="feed-type"
+                    name="feed_type"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="Layer mash"
                     type="text"
@@ -174,6 +407,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="water"
+                    name="water_liters"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="900"
                     type="number"
@@ -186,6 +420,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="medication"
+                    name="medication"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="Vitamin supplement"
                     type="text"
@@ -200,6 +435,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="temperature"
+                    name="temperature_c"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="26.5"
                     type="number"
@@ -212,6 +448,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="humidity"
+                    name="humidity_pct"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="62"
                     type="number"
@@ -224,6 +461,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="weight-sample"
+                    name="weight_sample"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="40"
                     type="number"
@@ -235,6 +473,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="avg-weight"
+                    name="avg_weight"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="980"
                     type="number"
@@ -250,6 +489,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="eggs-total"
+                    name="total_eggs"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="1200"
                     type="number"
@@ -261,6 +501,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="eggs-good"
+                    name="good_eggs"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="1150"
                     type="number"
@@ -272,6 +513,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="eggs-broken"
+                    name="broken_eggs"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="18"
                     type="number"
@@ -283,6 +525,7 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="eggs-dirty"
+                    name="dirty_eggs"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="22"
                     type="number"
@@ -294,12 +537,24 @@ export default function DailyRecordsPage() {
                   </label>
                   <input
                     id="eggs-floor"
+                    name="floor_eggs"
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                     placeholder="10"
                     type="number"
                   />
                 </div>
               </div>
+
+              {formError ? (
+                <p className="rounded-xl border border-ember-500/40 bg-ember-500/10 px-4 py-3 text-sm text-ember-500">
+                  {formError}
+                </p>
+              ) : null}
+              {formSuccess ? (
+                <p className="rounded-xl border border-leaf-500/40 bg-leaf-500/10 px-4 py-3 text-sm text-leaf-500">
+                  {formSuccess}
+                </p>
+              ) : null}
 
               <div className="flex flex-wrap justify-end gap-3">
                 <button
@@ -310,10 +565,11 @@ export default function DailyRecordsPage() {
                   Cancel
                 </button>
                 <button
-                  className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50"
+                  className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:cursor-not-allowed disabled:opacity-60"
                   type="submit"
+                  disabled={isSubmitting}
                 >
-                  Save record
+                  {isSubmitting ? "Saving..." : "Save record"}
                 </button>
               </div>
             </form>
