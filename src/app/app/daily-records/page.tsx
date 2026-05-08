@@ -1,27 +1,153 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import { createClient } from "@/utils/supabase/client";
 
+type DailyRow = {
+  id: string;
+  record_date: string;
+  flock_id: string;
+  live_count: number | null;
+  deaths: number | null;
+  culls: number | null;
+  feed_consumed_kg: number | null;
+  feed_type: string | null;
+  water_liters: number | null;
+  temperature_c: number | null;
+  humidity_pct: number | null;
+  has_egg_record: boolean;
+  has_weight_record: boolean;
+  has_health_record: boolean;
+  has_mortality_event: boolean;
+};
+
 export default function DailyRecordsPage() {
-  const {
-    scope,
-    setScope,
-    branches,
-    filteredFarms,
-    filteredBatches,
-    filteredHouses,
-    filteredFlocks,
-    farms,
-    houses,
-    flocks,
-    batches,
-  } = useFarmScope();
+  const { scope, setScope, filteredFarms, filteredFlocks, filteredBatches, filteredHouses, batches } =
+    useFarmScope();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [rows, setRows] = useState<DailyRow[]>([]);
+  const [loadingRows, setLoadingRows] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [filterDate, setFilterDate] = useState("");
+
+  const parseNumber = (value: FormDataEntryValue | null) => {
+    if (value === null || value === "") return null;
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+  const parseText = (value: FormDataEntryValue | null) => {
+    const parsed = value?.toString().trim();
+    return parsed && parsed.length > 0 ? parsed : null;
+  };
+
+  const loadRows = async () => {
+    setLoadingRows(true);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setRows([]);
+      setLoadingRows(false);
+      return;
+    }
+
+    const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+    if (!profile?.org_id) {
+      setRows([]);
+      setLoadingRows(false);
+      return;
+    }
+
+    let query = supabase
+      .from("daily_farm_records")
+      .select(
+        "id, record_date, flock_id, live_count, deaths, culls, feed_consumed_kg, feed_type, water_liters, temperature_c, humidity_pct"
+      )
+      .eq("org_id", profile.org_id)
+      .order("record_date", { ascending: false })
+      .limit(200);
+
+    if (scope.flockId) query = query.eq("flock_id", scope.flockId);
+    if (filterDate) query = query.eq("record_date", filterDate);
+
+    const { data } = await query;
+    const dailyRows = (data ?? []) as Array<Omit<DailyRow, "has_egg_record" | "has_weight_record" | "has_health_record" | "has_mortality_event">>;
+
+    if (dailyRows.length === 0) {
+      setRows([]);
+      setLoadingRows(false);
+      return;
+    }
+
+    const flockIds = Array.from(new Set(dailyRows.map((r) => r.flock_id)));
+    const recordDates = Array.from(new Set(dailyRows.map((r) => r.record_date)));
+
+    const [eggRes, weightRes, healthRes, mortalityRes] = await Promise.all([
+      supabase
+        .from("daily_egg_records")
+        .select("flock_id, record_date")
+        .eq("org_id", profile.org_id)
+        .in("flock_id", flockIds)
+        .in("record_date", recordDates),
+      supabase
+        .from("weight_records")
+        .select("flock_id, record_date")
+        .eq("org_id", profile.org_id)
+        .in("flock_id", flockIds)
+        .in("record_date", recordDates),
+      supabase
+        .from("health_events")
+        .select("flock_id, event_date, description")
+        .eq("org_id", profile.org_id)
+        .in("flock_id", flockIds)
+        .in("event_date", recordDates),
+      supabase
+        .from("mortality_events")
+        .select("flock_id, record_date")
+        .eq("org_id", profile.org_id)
+        .in("flock_id", flockIds)
+        .in("record_date", recordDates),
+    ]);
+
+    const key = (flockId: string, date: string) => `${flockId}::${date}`;
+    const eggKeys = new Set((eggRes.data ?? []).map((r) => key(r.flock_id, r.record_date)));
+    const weightKeys = new Set((weightRes.data ?? []).map((r) => key(r.flock_id, r.record_date)));
+    const healthKeys = new Set(
+      (healthRes.data ?? [])
+        .filter((r) => !(r.description ?? "").startsWith("SCHEDULE_"))
+        .map((r) => key(r.flock_id, r.event_date))
+    );
+    const mortalityKeys = new Set((mortalityRes.data ?? []).map((r) => key(r.flock_id, r.record_date)));
+
+    const enrichedRows: DailyRow[] = dailyRows.map((row) => {
+      const rowKey = key(row.flock_id, row.record_date);
+      return {
+        ...row,
+        has_egg_record: eggKeys.has(rowKey),
+        has_weight_record: weightKeys.has(rowKey),
+        has_health_record: healthKeys.has(rowKey),
+        has_mortality_event: mortalityKeys.has(rowKey),
+      };
+    });
+
+    setRows(enrichedRows);
+    setLoadingRows(false);
+  };
+
+  useEffect(() => {
+    void loadRows();
+  }, [scope.flockId, filterDate]);
+
+  const flockLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    filteredFlocks.forEach((f) => map.set(f.id, f.flock_code));
+    return map;
+  }, [filteredFlocks]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -29,27 +155,45 @@ export default function DailyRecordsPage() {
     setFormSuccess(null);
     setIsSubmitting(true);
 
+    if (!scope.farmId || !scope.houseId || !scope.flockId) {
+      setFormError("Select farm, house, and flock from scope filters first.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!filteredHouses.some((h) => h.id === scope.houseId)) {
+      setFormError("Selected house is not valid for selected farm.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (!filteredFlocks.some((f) => f.id === scope.flockId && f.house_id === scope.houseId)) {
+      setFormError("Selected flock is not valid for selected house.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (scope.batchId && !batches.some((b) => b.id === scope.batchId && b.flock_id === scope.flockId)) {
+      setFormError("Selected batch is not valid for selected flock.");
+      setIsSubmitting(false);
+      return;
+    }
+
     const formData = new FormData(event.currentTarget);
-    const parseNumber = (value: FormDataEntryValue | null) => {
-      if (value === null || value === "") {
-        return null;
-      }
-      const parsed = Number(value);
-      return Number.isNaN(parsed) ? null : parsed;
-    };
-    const parseText = (value: FormDataEntryValue | null) => {
-      const parsed = value?.toString().trim();
-      return parsed && parsed.length > 0 ? parsed : null;
-    };
+    const recordDate = formData.get("record_date")?.toString();
+    if (!recordDate) {
+      setFormError("Record date is required.");
+      setIsSubmitting(false);
+      return;
+    }
 
     const supabase = createClient();
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser();
-
     if (userError || !user) {
-      setFormError("Unable to verify your session. Please sign in again.");
+      setFormError("Unable to verify your session.");
       setIsSubmitting(false);
       return;
     }
@@ -59,7 +203,6 @@ export default function DailyRecordsPage() {
       .select("org_id")
       .eq("id", user.id)
       .single();
-
     if (profileError || !profile?.org_id) {
       setFormError("Organization not found for this user.");
       setIsSubmitting(false);
@@ -67,47 +210,7 @@ export default function DailyRecordsPage() {
     }
 
     const orgId = profile.org_id;
-    const flockId = scope.flockId || formData.get("flock_id")?.toString().trim();
-    const recordDate = formData.get("record_date")?.toString();
-
-    if (!flockId || !recordDate) {
-      setFormError("Record date and flock ID are required.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (scope.farmId) {
-      const farmExists = farms.some((f) => f.id === scope.farmId && (!scope.branchId || f.branch_id === scope.branchId));
-      if (!farmExists) {
-        setFormError("Selected farm is not valid for the selected branch.");
-        setIsSubmitting(false);
-        return;
-      }
-    }
-    if (scope.houseId) {
-      const houseExists = houses.some((h) => h.id === scope.houseId && (!scope.farmId || h.farm_id === scope.farmId));
-      if (!houseExists) {
-        setFormError("Selected house is not valid for the selected farm.");
-        setIsSubmitting(false);
-        return;
-      }
-    }
-    const flockExists = flocks.some(
-      (f) => f.id === flockId && (!scope.farmId || f.farm_id === scope.farmId) && (!scope.houseId || f.house_id === scope.houseId)
-    );
-    if (!flockExists) {
-      setFormError("Selected flock is not valid for the selected house/farm.");
-      setIsSubmitting(false);
-      return;
-    }
-    if (scope.batchId) {
-      const batchExists = batches.some((b) => b.id === scope.batchId && b.flock_id === flockId);
-      if (!batchExists) {
-        setFormError("Selected batch is not valid for the selected flock.");
-        setIsSubmitting(false);
-        return;
-      }
-    }
+    const flockId = scope.flockId;
 
     const { error: dailyError } = await supabase.from("daily_farm_records").insert({
       org_id: orgId,
@@ -123,7 +226,6 @@ export default function DailyRecordsPage() {
       humidity_pct: parseNumber(formData.get("humidity_pct")),
       recorded_by: user.id,
     });
-
     if (dailyError) {
       setFormError(dailyError.message);
       setIsSubmitting(false);
@@ -136,11 +238,7 @@ export default function DailyRecordsPage() {
     const mortalityDiagnosis = parseText(formData.get("mortality_diagnosis"));
     const recordedTime = parseText(formData.get("recorded_time"));
     const shouldInsertMortality =
-      mortalityCount !== null ||
-      mortalityCause ||
-      mortalityNotes ||
-      mortalityDiagnosis ||
-      recordedTime;
+      mortalityCount !== null || mortalityCause || mortalityNotes || mortalityDiagnosis || recordedTime;
 
     if (shouldInsertMortality) {
       const { error: mortalityError } = await supabase.from("mortality_events").insert({
@@ -154,7 +252,6 @@ export default function DailyRecordsPage() {
         diagnosis: mortalityDiagnosis,
         observed_by: user.id,
       });
-
       if (mortalityError) {
         setFormError(mortalityError.message);
         setIsSubmitting(false);
@@ -167,7 +264,6 @@ export default function DailyRecordsPage() {
       const value = formData.get(field);
       return value !== null && value !== "";
     });
-
     if (hasEggData) {
       const { error: eggError } = await supabase.from("daily_egg_records").insert({
         org_id: orgId,
@@ -179,7 +275,6 @@ export default function DailyRecordsPage() {
         dirty_eggs: parseNumber(formData.get("dirty_eggs")),
         floor_eggs: parseNumber(formData.get("floor_eggs")),
       });
-
       if (eggError) {
         setFormError(eggError.message);
         setIsSubmitting(false);
@@ -200,7 +295,6 @@ export default function DailyRecordsPage() {
         max_weight_g: parseNumber(formData.get("max_weight")),
         uniformity_pct: parseNumber(formData.get("uniformity_pct")),
       });
-
       if (weightError) {
         setFormError(weightError.message);
         setIsSubmitting(false);
@@ -214,7 +308,6 @@ export default function DailyRecordsPage() {
     const medicationDuration = parseText(formData.get("medication_duration_days"));
     const diseaseObservation = parseText(formData.get("disease_observation"));
     const diseaseDiagnosis = parseText(formData.get("disease_diagnosis"));
-
     if (medication) {
       const { error: treatmentError } = await supabase.from("health_events").insert({
         org_id: orgId,
@@ -223,18 +316,14 @@ export default function DailyRecordsPage() {
         event_type: "treatment",
         description: medication,
         diagnosis: diseaseDiagnosis,
-        treatment: [medicationDosage, medicationRoute, medicationDuration]
-          .filter(Boolean)
-          .join(" | "),
+        treatment: [medicationDosage, medicationRoute, medicationDuration].filter(Boolean).join(" | "),
       });
-
       if (treatmentError) {
         setFormError(treatmentError.message);
         setIsSubmitting(false);
         return;
       }
     }
-
     if (diseaseObservation || diseaseDiagnosis) {
       const { error: observationError } = await supabase.from("health_events").insert({
         org_id: orgId,
@@ -244,7 +333,6 @@ export default function DailyRecordsPage() {
         description: diseaseObservation || "Daily flock health observation",
         diagnosis: diseaseDiagnosis,
       });
-
       if (observationError) {
         setFormError(observationError.message);
         setIsSubmitting(false);
@@ -255,74 +343,149 @@ export default function DailyRecordsPage() {
     setFormSuccess("Daily record saved successfully.");
     event.currentTarget.reset();
     setIsSubmitting(false);
+    setIsModalOpen(false);
+    await loadRows();
   };
 
-  const inputClass = "h-10 w-full min-w-[120px] rounded-lg border border-sand-200 px-2 text-sm";
+  const inputClass = "h-11 w-full rounded-xl border border-sand-200 px-3 text-sm";
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Daily records</p>
-        <h2 className="text-2xl font-semibold text-forest-900">Spreadsheet Daily Input</h2>
-        <p className="mt-2 text-sm text-forest-600">
-          Enter daily farm inputs in grid format for KPI calculation.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Daily records</p>
+          <h2 className="text-2xl font-semibold text-forest-900">Daily Operations Inputs</h2>
+        </div>
+        <button
+          className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50"
+          type="button"
+          onClick={() => setIsModalOpen(true)}
+        >
+          New record
+        </button>
       </div>
 
-      <form className="space-y-4" onSubmit={handleSubmit}>
-        <div className="overflow-x-auto rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
-          <table className="min-w-[1400px] w-full border-separate border-spacing-2">
+      <section className="rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="grid gap-1 text-xs text-forest-600">
+            Farm
+            <select
+              className={inputClass}
+              value={scope.farmId}
+              onChange={(e) => setScope((prev) => ({ ...prev, farmId: e.target.value, houseId: "", flockId: "", batchId: "" }))}
+            >
+              <option value="">All Farms</option>
+              {filteredFarms.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs text-forest-600">
+            Flock
+            <select
+              className={inputClass}
+              value={scope.flockId}
+              onChange={(e) => setScope((prev) => ({ ...prev, flockId: e.target.value }))}
+            >
+              <option value="">All Flocks</option>
+              {filteredFlocks.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.flock_code}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-xs text-forest-600">
+            Date
+            <input className={inputClass} type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+          </label>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
+        <h3 className="text-base font-semibold text-forest-900">Previous Records</h3>
+        <div className="mt-3 overflow-x-auto">
+          <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-[0.12em] text-forest-600">
-                <th>Record Date</th>
-                <th>Branch</th>
-                <th>Farm</th>
-                <th>Batch</th>
-                <th>House</th>
-                <th>Flock</th>
-                <th>Live</th>
-                <th>Deaths</th>
-                <th>Culls</th>
-                <th>Feed Kg</th>
-                <th>Feed Type</th>
-                <th>Water L</th>
-                <th>Temp C</th>
-                <th>Humidity %</th>
-                <th>Total Eggs</th>
-                <th>Good Eggs</th>
-                <th>Broken</th>
-                <th>Dirty</th>
-                <th>Floor</th>
+              <tr className="border-b border-sand-200 text-left text-xs uppercase tracking-[0.12em] text-forest-600">
+                <th className="px-2 py-2">Date</th>
+                <th className="px-2 py-2">Flock</th>
+                <th className="px-2 py-2">Live</th>
+                <th className="px-2 py-2">Deaths</th>
+                <th className="px-2 py-2">Culls</th>
+                <th className="px-2 py-2">Feed Kg</th>
+                <th className="px-2 py-2">Feed Type</th>
+                <th className="px-2 py-2">Water L</th>
+                <th className="px-2 py-2">Temp C</th>
+                <th className="px-2 py-2">Humidity %</th>
+                <th className="px-2 py-2">Egg</th>
+                <th className="px-2 py-2">Weight</th>
+                <th className="px-2 py-2">Health</th>
+                <th className="px-2 py-2">Mortality</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td><input name="record_date" type="date" required className={inputClass} /></td>
-                <td>
-                  <select
-                    className={inputClass}
-                    value={scope.branchId}
-                    onChange={(e) => setScope({ branchId: e.target.value, farmId: "", batchId: "", houseId: "", flockId: "" })}
-                  >
-                    <option value="">All Branches</option>
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <select
-                    className={inputClass}
-                    value={scope.farmId}
-                    onChange={(e) => setScope((prev) => ({ ...prev, farmId: e.target.value, batchId: "", houseId: "", flockId: "" }))}
-                  >
-                    <option value="">Select Farm</option>
-                    {filteredFarms.map((f) => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
-                    ))}
-                  </select>
-                </td>
-                <td>
+              {loadingRows ? (
+                <tr>
+                  <td className="px-2 py-4 text-forest-600" colSpan={14}>
+                    Loading records...
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td className="px-2 py-4 text-forest-600" colSpan={14}>
+                    No records found for selected filters.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr key={row.id} className="border-b border-sand-100">
+                    <td className="px-2 py-2 text-forest-700">{row.record_date}</td>
+                    <td className="px-2 py-2 text-forest-700">{flockLabelMap.get(row.flock_id) ?? row.flock_id}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.live_count ?? "-"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.deaths ?? "-"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.culls ?? "-"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.feed_consumed_kg ?? "-"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.feed_type ?? "-"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.water_liters ?? "-"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.temperature_c ?? "-"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.humidity_pct ?? "-"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.has_egg_record ? "Yes" : "No"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.has_weight_record ? "Yes" : "No"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.has_health_record ? "Yes" : "No"}</td>
+                    <td className="px-2 py-2 text-forest-700">{row.has_mortality_event ? "Yes" : "No"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {isModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
+          <div className="h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-forest-900">New Daily Record</h3>
+              <button className="text-sm text-forest-600" type="button" onClick={() => setIsModalOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            <form className="mt-6 grid gap-6" onSubmit={handleSubmit}>
+              <div className="grid gap-4 md:grid-cols-3">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Record Date
+                  <input name="record_date" type="date" required className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Branch
+                  <input value={scope.branchId ? "Selected in top filters" : "Not selected"} readOnly className={`${inputClass} bg-sand-50`} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Batch
                   <select
                     className={inputClass}
                     value={scope.batchId}
@@ -330,133 +493,179 @@ export default function DailyRecordsPage() {
                   >
                     <option value="">Select Batch</option>
                     {filteredBatches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.batch_code}</option>
+                      <option key={b.id} value={b.id}>
+                        {b.batch_code}
+                      </option>
                     ))}
                   </select>
-                </td>
-                <td>
-                  <select
-                    className={inputClass}
-                    value={scope.houseId}
-                    onChange={(e) => setScope((prev) => ({ ...prev, houseId: e.target.value, flockId: "" }))}
-                  >
-                    <option value="">Select House</option>
-                    {filteredHouses.map((h) => (
-                      <option key={h.id} value={h.id}>{h.name}</option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <select
-                    name="flock_id"
-                    required
-                    className={inputClass}
-                    value={scope.flockId}
-                    onChange={(e) => setScope((prev) => ({ ...prev, flockId: e.target.value }))}
-                  >
-                    <option value="">Select Flock</option>
-                    {filteredFlocks
-                      .filter((f) => !scope.batchId || filteredBatches.some((b) => b.id === scope.batchId && b.flock_id === f.id))
-                      .map((f) => (
-                        <option key={f.id} value={f.id}>{f.flock_code}</option>
-                      ))}
-                  </select>
-                </td>
-                <td><input name="live_count" type="number" className={inputClass} /></td>
-                <td><input name="deaths" type="number" className={inputClass} /></td>
-                <td><input name="culls" type="number" className={inputClass} /></td>
-                <td><input name="feed_consumed_kg" type="number" step="0.01" className={inputClass} /></td>
-                <td><input name="feed_type" type="text" className={inputClass} /></td>
-                <td><input name="water_liters" type="number" step="0.1" className={inputClass} /></td>
-                <td><input name="temperature_c" type="number" step="0.1" className={inputClass} /></td>
-                <td><input name="humidity_pct" type="number" step="0.1" className={inputClass} /></td>
-                <td><input name="total_eggs" type="number" className={inputClass} /></td>
-                <td><input name="good_eggs" type="number" className={inputClass} /></td>
-                <td><input name="broken_eggs" type="number" className={inputClass} /></td>
-                <td><input name="dirty_eggs" type="number" className={inputClass} /></td>
-                <td><input name="floor_eggs" type="number" className={inputClass} /></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                </label>
+              </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
-          <table className="min-w-[1200px] w-full border-separate border-spacing-2">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-[0.12em] text-forest-600">
-                <th>Weight Sample</th>
-                <th>Avg Wt g</th>
-                <th>Min Wt g</th>
-                <th>Max Wt g</th>
-                <th>Uniformity %</th>
-                <th>Mortality Cause</th>
-                <th>Mortality Time</th>
-                <th>Mortality Diagnosis</th>
-                <th>Mortality Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><input name="weight_sample" type="number" className={inputClass} /></td>
-                <td><input name="avg_weight" type="number" step="0.1" className={inputClass} /></td>
-                <td><input name="min_weight" type="number" step="0.1" className={inputClass} /></td>
-                <td><input name="max_weight" type="number" step="0.1" className={inputClass} /></td>
-                <td><input name="uniformity_pct" type="number" min={0} max={100} step="0.1" className={inputClass} /></td>
-                <td><input name="death_cause" type="text" className={inputClass} /></td>
-                <td><input name="recorded_time" type="time" className={inputClass} /></td>
-                <td><input name="mortality_diagnosis" type="text" className={inputClass} /></td>
-                <td><input name="mortality_notes" type="text" className={inputClass} /></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Live Count
+                  <input name="live_count" type="number" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Deaths
+                  <input name="deaths" type="number" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Culls
+                  <input name="culls" type="number" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Consumed (kg)
+                  <input name="feed_consumed_kg" type="number" step="0.01" className={inputClass} />
+                </label>
+              </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
-          <table className="min-w-[1000px] w-full border-separate border-spacing-2">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-[0.12em] text-forest-600">
-                <th>Medication</th>
-                <th>Dosage</th>
-                <th>Route</th>
-                <th>Duration Days</th>
-                <th>Disease Observation</th>
-                <th>Vet Diagnosis</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><input name="medication" type="text" className={inputClass} /></td>
-                <td><input name="medication_dosage" type="text" className={inputClass} /></td>
-                <td><input name="medication_route" type="text" className={inputClass} /></td>
-                <td><input name="medication_duration_days" type="number" min={1} className={inputClass} /></td>
-                <td><input name="disease_observation" type="text" className={inputClass} /></td>
-                <td><input name="disease_diagnosis" type="text" className={inputClass} /></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Type
+                  <input name="feed_type" type="text" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Water (L)
+                  <input name="water_liters" type="number" step="0.1" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Temperature (C)
+                  <input name="temperature_c" type="number" step="0.1" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Humidity (%)
+                  <input name="humidity_pct" type="number" step="0.1" className={inputClass} />
+                </label>
+              </div>
 
-        {formError ? (
-          <p className="rounded-xl border border-ember-500/40 bg-ember-500/10 px-4 py-3 text-sm text-ember-500">
-            {formError}
-          </p>
-        ) : null}
-        {formSuccess ? (
-          <p className="rounded-xl border border-leaf-500/40 bg-leaf-500/10 px-4 py-3 text-sm text-leaf-500">
-            {formSuccess}
-          </p>
-        ) : null}
+              <div className="grid gap-4 md:grid-cols-5">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Total Eggs
+                  <input name="total_eggs" type="number" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Good Eggs
+                  <input name="good_eggs" type="number" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Broken Eggs
+                  <input name="broken_eggs" type="number" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Dirty Eggs
+                  <input name="dirty_eggs" type="number" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Floor Eggs
+                  <input name="floor_eggs" type="number" className={inputClass} />
+                </label>
+              </div>
 
-        <div className="flex justify-end">
-          <button
-            className="rounded-full bg-forest-900 px-5 py-2 text-sm text-sand-50 disabled:opacity-60"
-            type="submit"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Saving..." : "Save Daily Record"}
-          </button>
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Weight Sample
+                  <input name="weight_sample" type="number" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Avg Weight (g)
+                  <input name="avg_weight" type="number" step="0.1" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Min Weight (g)
+                  <input name="min_weight" type="number" step="0.1" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Max Weight (g)
+                  <input name="max_weight" type="number" step="0.1" className={inputClass} />
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Uniformity (%)
+                  <input name="uniformity_pct" type="number" min={0} max={100} step="0.1" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Mortality Cause
+                  <input name="death_cause" type="text" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Mortality Time
+                  <input name="recorded_time" type="time" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Mortality Diagnosis
+                  <input name="mortality_diagnosis" type="text" className={inputClass} />
+                </label>
+              </div>
+
+              <label className="grid gap-2 text-sm text-forest-700">
+                Mortality Notes
+                <textarea name="mortality_notes" className="min-h-[80px] rounded-xl border border-sand-200 px-3 py-2 text-sm" />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Medication
+                  <input name="medication" type="text" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Dosage
+                  <input name="medication_dosage" type="text" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Route
+                  <input name="medication_route" type="text" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Duration (days)
+                  <input name="medication_duration_days" type="number" min={1} className={inputClass} />
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Disease Observation
+                  <input name="disease_observation" type="text" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Vet Diagnosis
+                  <input name="disease_diagnosis" type="text" className={inputClass} />
+                </label>
+              </div>
+
+              {formError ? (
+                <p className="rounded-xl border border-ember-500/40 bg-ember-500/10 px-4 py-3 text-sm text-ember-500">
+                  {formError}
+                </p>
+              ) : null}
+              {formSuccess ? (
+                <p className="rounded-xl border border-leaf-500/40 bg-leaf-500/10 px-4 py-3 text-sm text-leaf-500">
+                  {formSuccess}
+                </p>
+              ) : null}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-full bg-forest-900 px-5 py-2 text-sm text-sand-50 disabled:opacity-60"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Saving..." : "Save Daily Record"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </form>
+      ) : null}
     </div>
   );
 }

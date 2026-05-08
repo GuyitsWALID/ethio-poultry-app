@@ -26,6 +26,7 @@ const ceoNavSections: NavSection[] = [
     items: [
       { label: "Farm Network", href: "/app/farms" },
       { label: "Flock Portfolio", href: "/app/flocks" },
+      { label: "Batches", href: "/app/batches" },
       { label: "Daily Records", href: "/app/daily-records" },
       { label: "Mortality", href: "/app/mortality" },
       { label: "Alerts", href: "/app/alerts" },
@@ -62,6 +63,7 @@ const farmManagerNavSections: NavSection[] = [
       { label: "Mortality", href: "/app/mortality" },
       { label: "Farm Monitoring", href: "/app/farms" },
       { label: "Flock & Batch Tracking", href: "/app/flocks" },
+      { label: "Batches", href: "/app/batches" },
     ],
   },
   {
