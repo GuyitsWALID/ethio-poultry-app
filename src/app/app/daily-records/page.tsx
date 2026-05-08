@@ -1,96 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import { useFarmScope } from "@/components/farm-scope-context";
 import { createClient } from "@/utils/supabase/client";
 
 export default function DailyRecordsPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const {
+    scope,
+    setScope,
+    branches,
+    filteredFarms,
+    filteredBatches,
+    filteredHouses,
+    filteredFlocks,
+    farms,
+    houses,
+    flocks,
+    batches,
+  } = useFarmScope();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
-  const [mortalityEvents, setMortalityEvents] = useState<
-    Array<{
-      id: string;
-      flock_id: string;
-      record_date: string;
-      recorded_time: string | null;
-      count: number;
-      cause: string;
-      notes: string | null;
-      diagnosis: string | null;
-    }>
-  >([]);
-  const [mortalitySummary, setMortalitySummary] = useState<
-    Array<{
-      flock_id: string;
-      record_date: string;
-      total_count: number;
-    }>
-  >([]);
-  const [isLoadingMortality, setIsLoadingMortality] = useState(false);
-
-  const loadMortalityData = async () => {
-    setIsLoadingMortality(true);
-    const supabase = createClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      setIsLoadingMortality(false);
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("org_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile?.org_id) {
-      setIsLoadingMortality(false);
-      return;
-    }
-
-    const { data: events, error: eventsError } = await supabase
-      .from("mortality_events")
-      .select("id, flock_id, record_date, recorded_time, count, cause, notes, diagnosis")
-      .eq("org_id", profile.org_id)
-      .order("record_date", { ascending: false })
-      .order("recorded_time", { ascending: false, nullsFirst: false })
-      .limit(200);
-
-    if (eventsError || !events) {
-      setIsLoadingMortality(false);
-      return;
-    }
-
-    setMortalityEvents(events);
-    const summaryMap = new Map<string, { flock_id: string; record_date: string; total_count: number }>();
-    events.forEach((event) => {
-      const key = `${event.flock_id}-${event.record_date}`;
-      const current = summaryMap.get(key) ?? {
-        flock_id: event.flock_id,
-        record_date: event.record_date,
-        total_count: 0,
-      };
-      current.total_count += event.count ?? 0;
-      summaryMap.set(key, current);
-    });
-
-    setMortalitySummary(
-      Array.from(summaryMap.values()).sort((a, b) =>
-        a.record_date < b.record_date ? 1 : -1
-      )
-    );
-    setIsLoadingMortality(false);
-  };
-
-  useEffect(() => {
-    void loadMortalityData();
-  }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -105,6 +36,10 @@ export default function DailyRecordsPage() {
       }
       const parsed = Number(value);
       return Number.isNaN(parsed) ? null : parsed;
+    };
+    const parseText = (value: FormDataEntryValue | null) => {
+      const parsed = value?.toString().trim();
+      return parsed && parsed.length > 0 ? parsed : null;
     };
 
     const supabase = createClient();
@@ -132,7 +67,7 @@ export default function DailyRecordsPage() {
     }
 
     const orgId = profile.org_id;
-    const flockId = formData.get("flock_id")?.toString().trim();
+    const flockId = scope.flockId || formData.get("flock_id")?.toString().trim();
     const recordDate = formData.get("record_date")?.toString();
 
     if (!flockId || !recordDate) {
@@ -141,7 +76,40 @@ export default function DailyRecordsPage() {
       return;
     }
 
-    const dailyRecordPayload = {
+    if (scope.farmId) {
+      const farmExists = farms.some((f) => f.id === scope.farmId && (!scope.branchId || f.branch_id === scope.branchId));
+      if (!farmExists) {
+        setFormError("Selected farm is not valid for the selected branch.");
+        setIsSubmitting(false);
+        return;
+      }
+    }
+    if (scope.houseId) {
+      const houseExists = houses.some((h) => h.id === scope.houseId && (!scope.farmId || h.farm_id === scope.farmId));
+      if (!houseExists) {
+        setFormError("Selected house is not valid for the selected farm.");
+        setIsSubmitting(false);
+        return;
+      }
+    }
+    const flockExists = flocks.some(
+      (f) => f.id === flockId && (!scope.farmId || f.farm_id === scope.farmId) && (!scope.houseId || f.house_id === scope.houseId)
+    );
+    if (!flockExists) {
+      setFormError("Selected flock is not valid for the selected house/farm.");
+      setIsSubmitting(false);
+      return;
+    }
+    if (scope.batchId) {
+      const batchExists = batches.some((b) => b.id === scope.batchId && b.flock_id === flockId);
+      if (!batchExists) {
+        setFormError("Selected batch is not valid for the selected flock.");
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    const { error: dailyError } = await supabase.from("daily_farm_records").insert({
       org_id: orgId,
       flock_id: flockId,
       record_date: recordDate,
@@ -149,16 +117,12 @@ export default function DailyRecordsPage() {
       deaths: parseNumber(formData.get("deaths")) ?? 0,
       culls: parseNumber(formData.get("culls")) ?? 0,
       feed_consumed_kg: parseNumber(formData.get("feed_consumed_kg")),
-      feed_type: formData.get("feed_type")?.toString() || null,
+      feed_type: parseText(formData.get("feed_type")),
       water_liters: parseNumber(formData.get("water_liters")),
       temperature_c: parseNumber(formData.get("temperature_c")),
       humidity_pct: parseNumber(formData.get("humidity_pct")),
       recorded_by: user.id,
-    };
-
-    const { error: dailyError } = await supabase
-      .from("daily_farm_records")
-      .insert(dailyRecordPayload);
+    });
 
     if (dailyError) {
       setFormError(dailyError.message);
@@ -167,13 +131,10 @@ export default function DailyRecordsPage() {
     }
 
     const mortalityCount = parseNumber(formData.get("deaths"));
-    const mortalityCause = formData.get("death_cause")?.toString().trim();
-    const mortalityNotes = formData.get("mortality_notes")?.toString().trim();
-    const mortalityDiagnosis = formData
-      .get("mortality_diagnosis")
-      ?.toString()
-      .trim();
-    const recordedTime = formData.get("recorded_time")?.toString() || null;
+    const mortalityCause = parseText(formData.get("death_cause"));
+    const mortalityNotes = parseText(formData.get("mortality_notes"));
+    const mortalityDiagnosis = parseText(formData.get("mortality_diagnosis"));
+    const recordedTime = parseText(formData.get("recorded_time"));
     const shouldInsertMortality =
       mortalityCount !== null ||
       mortalityCause ||
@@ -182,19 +143,17 @@ export default function DailyRecordsPage() {
       recordedTime;
 
     if (shouldInsertMortality) {
-      const { error: mortalityError } = await supabase
-        .from("mortality_events")
-        .insert({
-          org_id: orgId,
-          flock_id: flockId,
-          record_date: recordDate,
-          recorded_time: recordedTime,
-          count: mortalityCount ?? 0,
-          cause: mortalityCause || "unspecified",
-          notes: mortalityNotes || null,
-          diagnosis: mortalityDiagnosis || null,
-          observed_by: user.id,
-        });
+      const { error: mortalityError } = await supabase.from("mortality_events").insert({
+        org_id: orgId,
+        flock_id: flockId,
+        record_date: recordDate,
+        recorded_time: recordedTime,
+        count: mortalityCount ?? 0,
+        cause: mortalityCause || "unspecified",
+        notes: mortalityNotes,
+        diagnosis: mortalityDiagnosis,
+        observed_by: user.id,
+      });
 
       if (mortalityError) {
         setFormError(mortalityError.message);
@@ -203,13 +162,7 @@ export default function DailyRecordsPage() {
       }
     }
 
-    const eggFields = [
-      "total_eggs",
-      "good_eggs",
-      "broken_eggs",
-      "dirty_eggs",
-      "floor_eggs",
-    ];
+    const eggFields = ["total_eggs", "good_eggs", "broken_eggs", "dirty_eggs", "floor_eggs"];
     const hasEggData = eggFields.some((field) => {
       const value = formData.get(field);
       return value !== null && value !== "";
@@ -243,6 +196,9 @@ export default function DailyRecordsPage() {
         record_date: recordDate,
         sample_count: weightSample,
         average_weight_g: avgWeight,
+        min_weight_g: parseNumber(formData.get("min_weight")),
+        max_weight_g: parseNumber(formData.get("max_weight")),
+        uniformity_pct: parseNumber(formData.get("uniformity_pct")),
       });
 
       if (weightError) {
@@ -252,488 +208,255 @@ export default function DailyRecordsPage() {
       }
     }
 
-    const medication = formData.get("medication")?.toString().trim();
+    const medication = parseText(formData.get("medication"));
+    const medicationDosage = parseText(formData.get("medication_dosage"));
+    const medicationRoute = parseText(formData.get("medication_route"));
+    const medicationDuration = parseText(formData.get("medication_duration_days"));
+    const diseaseObservation = parseText(formData.get("disease_observation"));
+    const diseaseDiagnosis = parseText(formData.get("disease_diagnosis"));
+
     if (medication) {
-      const { error: healthError } = await supabase.from("health_events").insert({
+      const { error: treatmentError } = await supabase.from("health_events").insert({
         org_id: orgId,
         flock_id: flockId,
         event_date: recordDate,
         event_type: "treatment",
         description: medication,
+        diagnosis: diseaseDiagnosis,
+        treatment: [medicationDosage, medicationRoute, medicationDuration]
+          .filter(Boolean)
+          .join(" | "),
       });
 
-      if (healthError) {
-        setFormError(healthError.message);
+      if (treatmentError) {
+        setFormError(treatmentError.message);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    if (diseaseObservation || diseaseDiagnosis) {
+      const { error: observationError } = await supabase.from("health_events").insert({
+        org_id: orgId,
+        flock_id: flockId,
+        event_date: recordDate,
+        event_type: "observation",
+        description: diseaseObservation || "Daily flock health observation",
+        diagnosis: diseaseDiagnosis,
+      });
+
+      if (observationError) {
+        setFormError(observationError.message);
         setIsSubmitting(false);
         return;
       }
     }
 
     setFormSuccess("Daily record saved successfully.");
-    await loadMortalityData();
     event.currentTarget.reset();
     setIsSubmitting(false);
   };
 
+  const inputClass = "h-10 w-full min-w-[120px] rounded-lg border border-sand-200 px-2 text-sm";
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-forest-500">
-            Daily records
-          </p>
-          <h2 className="text-2xl font-semibold text-forest-900">
-            Daily operations tracking
-          </h2>
-          <p className="mt-2 text-sm text-forest-600">
-            Feed intake, mortality, egg collection, and water usage.
-          </p>
-        </div>
-        <button
-          className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50"
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-        >
-          New record
-        </button>
-      </div>
-
-      <div className="rounded-2xl border border-dashed border-sand-200 bg-white/70 p-10 text-center">
-        <p className="text-sm font-semibold text-forest-900">No daily records yet</p>
+      <div>
+        <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Daily records</p>
+        <h2 className="text-2xl font-semibold text-forest-900">Spreadsheet Daily Input</h2>
         <p className="mt-2 text-sm text-forest-600">
-          Add the first daily operation record for a flock.
+          Enter daily farm inputs in grid format for KPI calculation.
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-sand-200 bg-white/80 p-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-forest-900">Mortality events</h3>
-            <span className="text-xs text-forest-500">
-              {isLoadingMortality ? "Loading..." : `${mortalityEvents.length} events`}
-            </span>
-          </div>
-          <div className="mt-4 space-y-3">
-            {mortalityEvents.length === 0 ? (
-              <p className="text-sm text-forest-600">No mortality events logged yet.</p>
-            ) : (
-              mortalityEvents.slice(0, 8).map((event) => (
-                <div
-                  key={event.id}
-                  className="rounded-xl border border-sand-100 bg-sand-50/40 p-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-forest-900">
-                      {event.cause}
-                    </p>
-                    <span className="text-xs text-forest-500">
-                      {event.record_date}
-                      {event.recorded_time ? ` • ${event.recorded_time}` : ""}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-forest-600">
-                    Flock: {event.flock_id} • Count: {event.count}
-                  </p>
-                  {event.diagnosis ? (
-                    <p className="mt-1 text-xs text-forest-500">
-                      Diagnosis: {event.diagnosis}
-                    </p>
-                  ) : null}
-                  {event.notes ? (
-                    <p className="mt-1 text-xs text-forest-500">Notes: {event.notes}</p>
-                  ) : null}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-sand-200 bg-white/80 p-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-forest-900">Daily mortality summary</h3>
-            <span className="text-xs text-forest-500">
-              {isLoadingMortality ? "Loading..." : `${mortalitySummary.length} days`}
-            </span>
-          </div>
-          <div className="mt-4 space-y-3">
-            {mortalitySummary.length === 0 ? (
-              <p className="text-sm text-forest-600">No daily summaries available.</p>
-            ) : (
-              mortalitySummary.slice(0, 8).map((summary) => (
-                <div
-                  key={`${summary.flock_id}-${summary.record_date}`}
-                  className="flex items-center justify-between rounded-xl border border-sand-100 bg-sand-50/40 p-3"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-forest-900">
-                      {summary.record_date}
-                    </p>
-                    <p className="text-xs text-forest-500">Flock: {summary.flock_id}</p>
-                  </div>
-                  <span className="text-sm font-semibold text-forest-900">
-                    {summary.total_count}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      {isModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
-          <div className="h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-forest-900">
-                New daily operation record
-              </h3>
-              <button
-                className="text-sm text-forest-600"
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-            <form className="mt-6 grid gap-6" onSubmit={handleSubmit}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="record-date">
-                    Record date
-                  </label>
-                  <input
-                    id="record-date"
-                    name="record_date"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    type="date"
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="flock-id">
-                    Flock ID
-                  </label>
-                  <input
-                    id="flock-id"
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <div className="overflow-x-auto rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
+          <table className="min-w-[1400px] w-full border-separate border-spacing-2">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-[0.12em] text-forest-600">
+                <th>Record Date</th>
+                <th>Branch</th>
+                <th>Farm</th>
+                <th>Batch</th>
+                <th>House</th>
+                <th>Flock</th>
+                <th>Live</th>
+                <th>Deaths</th>
+                <th>Culls</th>
+                <th>Feed Kg</th>
+                <th>Feed Type</th>
+                <th>Water L</th>
+                <th>Temp C</th>
+                <th>Humidity %</th>
+                <th>Total Eggs</th>
+                <th>Good Eggs</th>
+                <th>Broken</th>
+                <th>Dirty</th>
+                <th>Floor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input name="record_date" type="date" required className={inputClass} /></td>
+                <td>
+                  <select
+                    className={inputClass}
+                    value={scope.branchId}
+                    onChange={(e) => setScope({ branchId: e.target.value, farmId: "", batchId: "", houseId: "", flockId: "" })}
+                  >
+                    <option value="">All Branches</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <select
+                    className={inputClass}
+                    value={scope.farmId}
+                    onChange={(e) => setScope((prev) => ({ ...prev, farmId: e.target.value, batchId: "", houseId: "", flockId: "" }))}
+                  >
+                    <option value="">Select Farm</option>
+                    {filteredFarms.map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <select
+                    className={inputClass}
+                    value={scope.batchId}
+                    onChange={(e) => setScope((prev) => ({ ...prev, batchId: e.target.value }))}
+                  >
+                    <option value="">Select Batch</option>
+                    {filteredBatches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.batch_code}</option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <select
+                    className={inputClass}
+                    value={scope.houseId}
+                    onChange={(e) => setScope((prev) => ({ ...prev, houseId: e.target.value, flockId: "" }))}
+                  >
+                    <option value="">Select House</option>
+                    {filteredHouses.map((h) => (
+                      <option key={h.id} value={h.id}>{h.name}</option>
+                    ))}
+                  </select>
+                </td>
+                <td>
+                  <select
                     name="flock_id"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="LAY-2026-003"
-                    type="text"
                     required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="farm">
-                    Farm
-                  </label>
-                  <input
-                    id="farm"
-                    name="farm_name"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="Addis Farm"
-                    type="text"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="house">
-                    House
-                  </label>
-                  <input
-                    id="house"
-                    name="house_name"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="House 2"
-                    type="text"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="live-count">
-                    Live count
-                  </label>
-                  <input
-                    id="live-count"
-                    name="live_count"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="1240"
-                    type="number"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="deaths">
-                    Deaths
-                  </label>
-                  <input
-                    id="deaths"
-                    name="deaths"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="12"
-                    type="number"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="culls">
-                    Culls
-                  </label>
-                  <input
-                    id="culls"
-                    name="culls"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="0"
-                    type="number"
-                  />
-                </div>
-                <div className="md:col-span-3 grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="death-cause">
-                    Mortality cause
-                  </label>
-                  <input
-                    id="death-cause"
-                    name="death_cause"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="Respiratory disease"
-                    type="text"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="recorded-time">
-                    Recorded time
-                  </label>
-                  <input
-                    id="recorded-time"
-                    name="recorded_time"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    type="time"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="mortality-diagnosis">
-                    Diagnosis
-                  </label>
-                  <input
-                    id="mortality-diagnosis"
-                    name="mortality_diagnosis"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="Suspected infection"
-                    type="text"
-                  />
-                </div>
-                <div className="md:col-span-3 grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="mortality-notes">
-                    Mortality notes
-                  </label>
-                  <textarea
-                    id="mortality-notes"
-                    name="mortality_notes"
-                    className="min-h-[96px] rounded-xl border border-sand-200 px-3 py-2 text-sm"
-                    placeholder="Additional details or observations"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="feed-consumed">
-                    Feed consumed (kg)
-                  </label>
-                  <input
-                    id="feed-consumed"
-                    name="feed_consumed_kg"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="320"
-                    type="number"
-                    step="0.01"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="feed-type">
-                    Feed type
-                  </label>
-                  <input
-                    id="feed-type"
-                    name="feed_type"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="Layer mash"
-                    type="text"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="water">
-                    Water consumed (liters)
-                  </label>
-                  <input
-                    id="water"
-                    name="water_liters"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="900"
-                    type="number"
-                    step="0.1"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="medication">
-                    Medication administered
-                  </label>
-                  <input
-                    id="medication"
-                    name="medication"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="Vitamin supplement"
-                    type="text"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="temperature">
-                    Temperature (°C)
-                  </label>
-                  <input
-                    id="temperature"
-                    name="temperature_c"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="26.5"
-                    type="number"
-                    step="0.1"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="humidity">
-                    Humidity (%)
-                  </label>
-                  <input
-                    id="humidity"
-                    name="humidity_pct"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="62"
-                    type="number"
-                    step="0.1"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="weight-sample">
-                    Weight sample count
-                  </label>
-                  <input
-                    id="weight-sample"
-                    name="weight_sample"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="40"
-                    type="number"
-                  />
-                </div>
-                <div className="md:col-span-3 grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="avg-weight">
-                    Average weight (g)
-                  </label>
-                  <input
-                    id="avg-weight"
-                    name="avg_weight"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="980"
-                    type="number"
-                    step="0.1"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-5">
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="eggs-total">
-                    Total eggs
-                  </label>
-                  <input
-                    id="eggs-total"
-                    name="total_eggs"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="1200"
-                    type="number"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="eggs-good">
-                    Good eggs
-                  </label>
-                  <input
-                    id="eggs-good"
-                    name="good_eggs"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="1150"
-                    type="number"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="eggs-broken">
-                    Broken eggs
-                  </label>
-                  <input
-                    id="eggs-broken"
-                    name="broken_eggs"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="18"
-                    type="number"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="eggs-dirty">
-                    Dirty eggs
-                  </label>
-                  <input
-                    id="eggs-dirty"
-                    name="dirty_eggs"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="22"
-                    type="number"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-forest-900" htmlFor="eggs-floor">
-                    Floor eggs
-                  </label>
-                  <input
-                    id="eggs-floor"
-                    name="floor_eggs"
-                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                    placeholder="10"
-                    type="number"
-                  />
-                </div>
-              </div>
-
-              {formError ? (
-                <p className="rounded-xl border border-ember-500/40 bg-ember-500/10 px-4 py-3 text-sm text-ember-500">
-                  {formError}
-                </p>
-              ) : null}
-              {formSuccess ? (
-                <p className="rounded-xl border border-leaf-500/40 bg-leaf-500/10 px-4 py-3 text-sm text-leaf-500">
-                  {formSuccess}
-                </p>
-              ) : null}
-
-              <div className="flex flex-wrap justify-end gap-3">
-                <button
-                  className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  type="submit"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Saving..." : "Save record"}
-                </button>
-              </div>
-            </form>
-          </div>
+                    className={inputClass}
+                    value={scope.flockId}
+                    onChange={(e) => setScope((prev) => ({ ...prev, flockId: e.target.value }))}
+                  >
+                    <option value="">Select Flock</option>
+                    {filteredFlocks
+                      .filter((f) => !scope.batchId || filteredBatches.some((b) => b.id === scope.batchId && b.flock_id === f.id))
+                      .map((f) => (
+                        <option key={f.id} value={f.id}>{f.flock_code}</option>
+                      ))}
+                  </select>
+                </td>
+                <td><input name="live_count" type="number" className={inputClass} /></td>
+                <td><input name="deaths" type="number" className={inputClass} /></td>
+                <td><input name="culls" type="number" className={inputClass} /></td>
+                <td><input name="feed_consumed_kg" type="number" step="0.01" className={inputClass} /></td>
+                <td><input name="feed_type" type="text" className={inputClass} /></td>
+                <td><input name="water_liters" type="number" step="0.1" className={inputClass} /></td>
+                <td><input name="temperature_c" type="number" step="0.1" className={inputClass} /></td>
+                <td><input name="humidity_pct" type="number" step="0.1" className={inputClass} /></td>
+                <td><input name="total_eggs" type="number" className={inputClass} /></td>
+                <td><input name="good_eggs" type="number" className={inputClass} /></td>
+                <td><input name="broken_eggs" type="number" className={inputClass} /></td>
+                <td><input name="dirty_eggs" type="number" className={inputClass} /></td>
+                <td><input name="floor_eggs" type="number" className={inputClass} /></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      ) : null}
+
+        <div className="overflow-x-auto rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
+          <table className="min-w-[1200px] w-full border-separate border-spacing-2">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-[0.12em] text-forest-600">
+                <th>Weight Sample</th>
+                <th>Avg Wt g</th>
+                <th>Min Wt g</th>
+                <th>Max Wt g</th>
+                <th>Uniformity %</th>
+                <th>Mortality Cause</th>
+                <th>Mortality Time</th>
+                <th>Mortality Diagnosis</th>
+                <th>Mortality Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input name="weight_sample" type="number" className={inputClass} /></td>
+                <td><input name="avg_weight" type="number" step="0.1" className={inputClass} /></td>
+                <td><input name="min_weight" type="number" step="0.1" className={inputClass} /></td>
+                <td><input name="max_weight" type="number" step="0.1" className={inputClass} /></td>
+                <td><input name="uniformity_pct" type="number" min={0} max={100} step="0.1" className={inputClass} /></td>
+                <td><input name="death_cause" type="text" className={inputClass} /></td>
+                <td><input name="recorded_time" type="time" className={inputClass} /></td>
+                <td><input name="mortality_diagnosis" type="text" className={inputClass} /></td>
+                <td><input name="mortality_notes" type="text" className={inputClass} /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
+          <table className="min-w-[1000px] w-full border-separate border-spacing-2">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-[0.12em] text-forest-600">
+                <th>Medication</th>
+                <th>Dosage</th>
+                <th>Route</th>
+                <th>Duration Days</th>
+                <th>Disease Observation</th>
+                <th>Vet Diagnosis</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input name="medication" type="text" className={inputClass} /></td>
+                <td><input name="medication_dosage" type="text" className={inputClass} /></td>
+                <td><input name="medication_route" type="text" className={inputClass} /></td>
+                <td><input name="medication_duration_days" type="number" min={1} className={inputClass} /></td>
+                <td><input name="disease_observation" type="text" className={inputClass} /></td>
+                <td><input name="disease_diagnosis" type="text" className={inputClass} /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {formError ? (
+          <p className="rounded-xl border border-ember-500/40 bg-ember-500/10 px-4 py-3 text-sm text-ember-500">
+            {formError}
+          </p>
+        ) : null}
+        {formSuccess ? (
+          <p className="rounded-xl border border-leaf-500/40 bg-leaf-500/10 px-4 py-3 text-sm text-leaf-500">
+            {formSuccess}
+          </p>
+        ) : null}
+
+        <div className="flex justify-end">
+          <button
+            className="rounded-full bg-forest-900 px-5 py-2 text-sm text-sand-50 disabled:opacity-60"
+            type="submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Saving..." : "Save Daily Record"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

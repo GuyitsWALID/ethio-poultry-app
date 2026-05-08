@@ -234,6 +234,120 @@ export type Database = {
           },
         ]
       }
+      batches: {
+        Row: {
+          age_at_placement_days: number | null
+          batch_code: string
+          branch_id: string
+          created_at: string
+          farm_id: string
+          female_count: number | null
+          flock_id: string
+          house_id: string
+          id: string
+          male_count: number | null
+          notes: string | null
+          org_id: string
+          other_cost: number | null
+          placement_date: string
+          purchase_cost_per_bird: number | null
+          purchase_date: string | null
+          source: Database["public"]["Enums"]["flock_source"]
+          status: string
+          supplier_name: string | null
+          total_batch_cost: number | null
+          total_count: number
+          transport_cost: number | null
+          updated_at: string
+        }
+        Insert: {
+          age_at_placement_days?: number | null
+          batch_code: string
+          branch_id: string
+          created_at?: string
+          farm_id: string
+          female_count?: number | null
+          flock_id: string
+          house_id: string
+          id?: string
+          male_count?: number | null
+          notes?: string | null
+          org_id: string
+          other_cost?: number | null
+          placement_date: string
+          purchase_cost_per_bird?: number | null
+          purchase_date?: string | null
+          source: Database["public"]["Enums"]["flock_source"]
+          status?: string
+          supplier_name?: string | null
+          total_batch_cost?: number | null
+          total_count: number
+          transport_cost?: number | null
+          updated_at?: string
+        }
+        Update: {
+          age_at_placement_days?: number | null
+          batch_code?: string
+          branch_id?: string
+          created_at?: string
+          farm_id?: string
+          female_count?: number | null
+          flock_id?: string
+          house_id?: string
+          id?: string
+          male_count?: number | null
+          notes?: string | null
+          org_id?: string
+          other_cost?: number | null
+          placement_date?: string
+          purchase_cost_per_bird?: number | null
+          purchase_date?: string | null
+          source?: Database["public"]["Enums"]["flock_source"]
+          status?: string
+          supplier_name?: string | null
+          total_batch_cost?: number | null
+          total_count?: number
+          transport_cost?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_farm_id_fkey"
+            columns: ["farm_id"]
+            isOneToOne: false
+            referencedRelation: "farms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_flock_id_fkey"
+            columns: ["flock_id"]
+            isOneToOne: false
+            referencedRelation: "flocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_house_id_fkey"
+            columns: ["house_id"]
+            isOneToOne: false
+            referencedRelation: "houses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       breed_standards: {
         Row: {
           breed_id: string
