@@ -1,22 +1,121 @@
-const kpis = [
-  { label: "Live Birds", value: "128,440", trend: "+3.2% vs last week" },
-  { label: "Egg Output / Day", value: "102,380", trend: "+1.1% stable growth" },
-  { label: "Open Alerts", value: "14", trend: "-6 critical resolved today" },
-  { label: "Net Margin", value: "18.7%", trend: "+0.9% month to date" },
-];
+"use client";
 
-const farmRows = [
-  { farm: "Addis Farm A", hdep: "91.4%", mortality: "0.38%", feedCost: "ETB 14.2/egg" },
-  { farm: "Bishoftu Farm B", hdep: "89.8%", mortality: "0.44%", feedCost: "ETB 14.8/egg" },
-  { farm: "Adama Farm C", hdep: "92.2%", mortality: "0.31%", feedCost: "ETB 13.9/egg" },
-];
+import { useEffect, useMemo, useState } from "react";
 
-const branchOptions = ["All Branches", "Addis Branch", "Bishoftu Branch", "Adama Branch"];
-const farmOptions = ["All Farms", "Addis Farm A", "Bishoftu Farm B", "Adama Farm C"];
-const batchOptions = ["All Batches", "BATCH-2026-01", "BATCH-2026-02", "BATCH-2026-03"];
-const flockOptions = ["All Flocks", "FLK-LAY-001", "FLK-LAY-002", "FLK-REA-007"];
+import { useFarmScope } from "@/components/farm-scope-context";
+import { createClient } from "@/utils/supabase/client";
+
+type Kpi = {
+  label: string;
+  value: string;
+};
+
+type FarmSummaryRow = {
+  farmId: string;
+  farmName: string;
+  housesCount: number;
+  flocksCount: number;
+  batchesCount: number;
+};
 
 export default function AdminOverview() {
+  const { scope, setScope, branches, houses, flocks, batches, filteredFarms, filteredFlocks, filteredBatches } =
+    useFarmScope();
+  const [kpis, setKpis] = useState<Kpi[]>([
+    { label: "Live Birds", value: "-" },
+    { label: "Egg Output / Day", value: "-" },
+    { label: "Open Alerts", value: "-" },
+    { label: "Active Farms", value: "-" },
+  ]);
+  const [kpiLoading, setKpiLoading] = useState(true);
+
+  useEffect(() => {
+    const loadKpis = async () => {
+      setKpiLoading(true);
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setKpiLoading(false);
+        return;
+      }
+
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+      if (!profile?.org_id) {
+        setKpiLoading(false);
+        return;
+      }
+
+      const orgId = profile.org_id;
+
+      const [{ data: latestDailyRow }, { data: latestEggRow }, { count: openAlertsCount }, { count: activeFarmsCount }] =
+        await Promise.all([
+          supabase
+            .from("daily_farm_records")
+            .select("record_date")
+            .eq("org_id", orgId)
+            .order("record_date", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from("daily_egg_records")
+            .select("record_date")
+            .eq("org_id", orgId)
+            .order("record_date", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase.from("alerts").select("id", { count: "exact", head: true }).eq("org_id", orgId).neq("status", "resolved"),
+          supabase.from("farms").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+        ]);
+
+      let liveBirdsTotal = 0;
+      if (latestDailyRow?.record_date) {
+        const { data: liveRows } = await supabase
+          .from("daily_farm_records")
+          .select("live_count")
+          .eq("org_id", orgId)
+          .eq("record_date", latestDailyRow.record_date);
+        liveBirdsTotal = (liveRows ?? []).reduce((acc, row) => acc + (row.live_count ?? 0), 0);
+      }
+
+      let eggOutputTotal = 0;
+      if (latestEggRow?.record_date) {
+        const { data: eggRows } = await supabase
+          .from("daily_egg_records")
+          .select("total_eggs")
+          .eq("org_id", orgId)
+          .eq("record_date", latestEggRow.record_date);
+        eggOutputTotal = (eggRows ?? []).reduce((acc, row) => acc + (row.total_eggs ?? 0), 0);
+      }
+
+      setKpis([
+        { label: "Live Birds", value: liveBirdsTotal.toLocaleString() },
+        { label: "Egg Output / Day", value: eggOutputTotal.toLocaleString() },
+        { label: "Open Alerts", value: (openAlertsCount ?? 0).toLocaleString() },
+        { label: "Active Farms", value: (activeFarmsCount ?? 0).toLocaleString() },
+      ]);
+      setKpiLoading(false);
+    };
+
+    void loadKpis();
+  }, []);
+
+  const farmSummaryRows = useMemo<FarmSummaryRow[]>(() => {
+    return filteredFarms.map((farm) => {
+      const housesCount = houses.filter((house) => house.farm_id === farm.id).length;
+      const flocksCount = flocks.filter((flock) => flock.farm_id === farm.id).length;
+      const batchesCount = batches.filter((batch) => batch.farm_id === farm.id).length;
+      return {
+        farmId: farm.id,
+        farmName: farm.name,
+        housesCount,
+        flocksCount,
+        batchesCount,
+      };
+    });
+  }, [batches, filteredFarms, flocks, houses]);
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-sand-200 bg-gradient-to-r from-forest-900 to-forest-700 p-6 text-sand-50">
@@ -37,6 +136,7 @@ export default function AdminOverview() {
           </div>
           <button
             type="button"
+            onClick={() => setScope({ branchId: "", farmId: "", batchId: "", houseId: "", flockId: "" })}
             className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
           >
             Reset filters
@@ -45,40 +145,77 @@ export default function AdminOverview() {
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="grid gap-2 text-sm text-forest-700">
             Branch
-            <select className="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900">
-              {branchOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+            <select
+              className="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
+              value={scope.branchId}
+              onChange={(event) =>
+                setScope((prev) => ({
+                  ...prev,
+                  branchId: event.target.value,
+                  farmId: "",
+                  houseId: "",
+                  flockId: "",
+                  batchId: "",
+                }))
+              }
+            >
+              <option value="">All Branches</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
                 </option>
               ))}
             </select>
           </label>
           <label className="grid gap-2 text-sm text-forest-700">
             Farm
-            <select className="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900">
-              {farmOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+            <select
+              className="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
+              value={scope.farmId}
+              onChange={(event) =>
+                setScope((prev) => ({
+                  ...prev,
+                  farmId: event.target.value,
+                  houseId: "",
+                  flockId: "",
+                  batchId: "",
+                }))
+              }
+            >
+              <option value="">All Farms</option>
+              {filteredFarms.map((farm) => (
+                <option key={farm.id} value={farm.id}>
+                  {farm.name}
                 </option>
               ))}
             </select>
           </label>
           <label className="grid gap-2 text-sm text-forest-700">
             Batch
-            <select className="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900">
-              {batchOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+            <select
+              className="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
+              value={scope.batchId}
+              onChange={(event) => setScope((prev) => ({ ...prev, batchId: event.target.value }))}
+            >
+              <option value="">All Batches</option>
+              {filteredBatches.map((batch) => (
+                <option key={batch.id} value={batch.id}>
+                  {batch.batch_code}
                 </option>
               ))}
             </select>
           </label>
           <label className="grid gap-2 text-sm text-forest-700">
             Flock
-            <select className="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900">
-              {flockOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+            <select
+              className="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
+              value={scope.flockId}
+              onChange={(event) => setScope((prev) => ({ ...prev, flockId: event.target.value }))}
+            >
+              <option value="">All Flocks</option>
+              {filteredFlocks.map((flock) => (
+                <option key={flock.id} value={flock.id}>
+                  {flock.flock_code}
                 </option>
               ))}
             </select>
@@ -90,55 +227,62 @@ export default function AdminOverview() {
         {kpis.map((kpi) => (
           <article key={kpi.label} className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
             <p className="text-xs uppercase tracking-[0.2em] text-forest-500">{kpi.label}</p>
-            <p className="mt-3 text-3xl font-semibold text-forest-900">{kpi.value}</p>
-            <p className="mt-2 text-xs text-forest-600">{kpi.trend}</p>
+            <p className="mt-3 text-3xl font-semibold text-forest-900">{kpiLoading ? "..." : kpi.value}</p>
           </article>
         ))}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
         <section className="xl:col-span-2 rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-forest-900">Farm performance board</h3>
+          <h3 className="text-lg font-semibold text-forest-900">Farm summary board</h3>
           <p className="mt-1 text-sm text-forest-600">
-            Compare production efficiency and mortality across core farms.
+            Overview of farm structure and active entities.
           </p>
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-sand-200 text-xs uppercase tracking-[0.15em] text-forest-500">
                   <th className="px-2 py-2">Farm</th>
-                  <th className="px-2 py-2">HDEP</th>
-                  <th className="px-2 py-2">Mortality</th>
-                  <th className="px-2 py-2">Feed Cost</th>
+                  <th className="px-2 py-2">Houses</th>
+                  <th className="px-2 py-2">Flocks</th>
+                  <th className="px-2 py-2">Batches</th>
                 </tr>
               </thead>
               <tbody>
-                {farmRows.map((row) => (
-                  <tr key={row.farm} className="border-b border-sand-100">
-                    <td className="px-2 py-3 font-medium text-forest-900">{row.farm}</td>
-                    <td className="px-2 py-3 text-forest-700">{row.hdep}</td>
-                    <td className="px-2 py-3 text-forest-700">{row.mortality}</td>
-                    <td className="px-2 py-3 text-forest-700">{row.feedCost}</td>
+                {farmSummaryRows.length === 0 ? (
+                  <tr>
+                    <td className="px-2 py-3 text-forest-700" colSpan={4}>
+                      No farms available for the selected scope.
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  farmSummaryRows.map((row) => (
+                    <tr key={row.farmId} className="border-b border-sand-100">
+                      <td className="px-2 py-3 font-medium text-forest-900">{row.farmName}</td>
+                      <td className="px-2 py-3 text-forest-700">{row.housesCount}</td>
+                      <td className="px-2 py-3 text-forest-700">{row.flocksCount}</td>
+                      <td className="px-2 py-3 text-forest-700">{row.batchesCount}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </section>
 
         <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-forest-900">Priority actions</h3>
-          <ul className="mt-4 space-y-3 text-sm text-forest-700">
-            <li className="rounded-xl border border-sand-200 bg-sand-50 p-3">
-              Review feed variance in Bishoftu Farm B.
-            </li>
-            <li className="rounded-xl border border-sand-200 bg-sand-50 p-3">
-              Approve medicine restock for central warehouse.
-            </li>
-            <li className="rounded-xl border border-sand-200 bg-sand-50 p-3">
-              Confirm training schedule for new farm supervisors.
-            </li>
-          </ul>
+          <h3 className="text-lg font-semibold text-forest-900">Scope status</h3>
+          <div className="mt-4 space-y-3 text-sm text-forest-700">
+            <p className="rounded-xl border border-sand-200 bg-sand-50 p-3">
+              Branches in scope: {branches.length}
+            </p>
+            <p className="rounded-xl border border-sand-200 bg-sand-50 p-3">
+              Farms in scope: {filteredFarms.length}
+            </p>
+            <p className="rounded-xl border border-sand-200 bg-sand-50 p-3">
+              Flocks in scope: {filteredFlocks.length}
+            </p>
+          </div>
         </section>
       </div>
 

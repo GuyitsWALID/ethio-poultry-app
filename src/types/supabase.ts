@@ -144,96 +144,6 @@ export type Database = {
           },
         ]
       }
-      biosecurity_checks: {
-        Row: {
-          checklist_date: string
-          completed_by: string | null
-          created_at: string
-          farm_id: string
-          id: string
-          notes: string | null
-          org_id: string
-          updated_at: string
-        }
-        Insert: {
-          checklist_date: string
-          completed_by?: string | null
-          created_at?: string
-          farm_id: string
-          id?: string
-          notes?: string | null
-          org_id: string
-          updated_at?: string
-        }
-        Update: {
-          checklist_date?: string
-          completed_by?: string | null
-          created_at?: string
-          farm_id?: string
-          id?: string
-          notes?: string | null
-          org_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "biosecurity_checks_completed_by_fkey"
-            columns: ["completed_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "biosecurity_checks_farm_id_fkey"
-            columns: ["farm_id"]
-            isOneToOne: false
-            referencedRelation: "farms"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "biosecurity_checks_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      branches: {
-        Row: {
-          created_at: string
-          id: string
-          location: string | null
-          name: string
-          org_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          location?: string | null
-          name: string
-          org_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          location?: string | null
-          name?: string
-          org_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "branches_org_id_fkey"
-            columns: ["org_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       batches: {
         Row: {
           age_at_placement_days: number | null
@@ -341,6 +251,96 @@ export type Database = {
           },
           {
             foreignKeyName: "batches_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      biosecurity_checks: {
+        Row: {
+          checklist_date: string
+          completed_by: string | null
+          created_at: string
+          farm_id: string
+          id: string
+          notes: string | null
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          checklist_date: string
+          completed_by?: string | null
+          created_at?: string
+          farm_id: string
+          id?: string
+          notes?: string | null
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          checklist_date?: string
+          completed_by?: string | null
+          created_at?: string
+          farm_id?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "biosecurity_checks_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "biosecurity_checks_farm_id_fkey"
+            columns: ["farm_id"]
+            isOneToOne: false
+            referencedRelation: "farms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "biosecurity_checks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      branches: {
+        Row: {
+          created_at: string
+          id: string
+          location: string | null
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          location?: string | null
+          name: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          location?: string | null
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branches_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -1388,26 +1388,38 @@ export type Database = {
       }
       organizations: {
         Row: {
+          branch_count: number | null
+          contact_email: string | null
+          contact_phone: string | null
           created_at: string
           id: string
           name: string
           plan: string | null
+          primary_location: string | null
           settings_json: Json | null
           updated_at: string
         }
         Insert: {
+          branch_count?: number | null
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           id?: string
           name: string
           plan?: string | null
+          primary_location?: string | null
           settings_json?: Json | null
           updated_at?: string
         }
         Update: {
+          branch_count?: number | null
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           id?: string
           name?: string
           plan?: string | null
+          primary_location?: string | null
           settings_json?: Json | null
           updated_at?: string
         }
@@ -1714,6 +1726,62 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      role_aliases: {
+        Row: {
+          alias: string
+          created_at: string
+          id: string
+          role_code: string
+        }
+        Insert: {
+          alias: string
+          created_at?: string
+          id?: string
+          role_code: string
+        }
+        Update: {
+          alias?: string
+          created_at?: string
+          id?: string
+          role_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_aliases_role_code_fkey"
+            columns: ["role_code"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          code: string
+          created_at: string
+          default_route: string
+          display_name: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          default_route: string
+          display_name: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          default_route?: string
+          display_name?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       sales_order_items: {
         Row: {
@@ -2426,6 +2494,10 @@ export type Database = {
     }
     Functions: {
       auth_org_id: { Args: never; Returns: string }
+      normalize_user_role: {
+        Args: { input_role: string }
+        Returns: Database["public"]["Enums"]["user_role"]
+      }
     }
     Enums: {
       account_type: "asset" | "liability" | "equity" | "revenue" | "expense"
