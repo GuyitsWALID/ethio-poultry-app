@@ -27,9 +27,14 @@ export default function AdminDashboardPage() {
   const loadMetrics = async () => {
     setLoading(true);
     setError(null);
-    const response = await fetch("/api/admin/overview", { cache: "no-store" });
+    const response = await fetch("/api/admin/overview", {
+      cache: "no-store",
+      credentials: "include",
+    });
     if (!response.ok) {
-      setError("Unable to load admin metrics.");
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      const detail = payload?.message ? ` (${payload.message})` : "";
+      setError(`Unable to load admin metrics${detail}.`);
       setLoading(false);
       return;
     }
@@ -69,6 +74,7 @@ export default function AdminDashboardPage() {
     const response = await fetch("/api/admin/onboard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(payload),
     });
 
@@ -82,13 +88,12 @@ export default function AdminDashboardPage() {
     const data = (await response.json()) as OnboardResult;
     setResult(data);
     setSubmitState("success");
-    event.currentTarget.reset();
+    event.currentTarget?.reset();
     await loadMetrics();
   };
 
   return (
-    <main className="min-h-screen bg-sand-50 px-6 py-10">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-forest-500">System admin</p>
           <h1 className="mt-2 text-2xl font-semibold text-forest-900">
@@ -282,7 +287,6 @@ export default function AdminDashboardPage() {
             </div>
           </form>
         </section>
-      </div>
-    </main>
+    </div>
   );
 }

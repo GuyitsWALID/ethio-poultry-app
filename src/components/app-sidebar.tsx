@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Bird, Box, Briefcase, Factory, LineChart, Shield } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { AppRole } from "@/lib/roles";
+import { SignOutButton } from "@/components/sign-out-button";
 import { createClient } from "@/utils/supabase/client";
 
 type NavSection = {
@@ -15,7 +17,7 @@ const ceoNavSections: NavSection[] = [
   {
     title: "Executive",
     items: [
-      { label: "Command Center", href: "/app/admin" },
+      { label: "Command Center", href: "/app/ceo" },
       { label: "Analytics", href: "/app/analytics" },
       { label: "Reports", href: "/app/reports" },
       { label: "Accounting", href: "/app/accounting" },
@@ -87,6 +89,8 @@ const farmManagerNavSections: NavSection[] = [
 
 export function AppSidebar() {
   const [role, setRole] = useState<AppRole>("ceo");
+  const [collapsed, setCollapsed] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const resolveRole = async () => {
@@ -138,32 +142,120 @@ export function AppSidebar() {
             ]
           : ceoNavSections;
   const footer = role === "farm_manager" ? "Assigned Branch Scope" : "Organization Scope";
+  const sectionIcons = useMemo(
+    () => ({
+      Executive: LineChart,
+      "Operations Oversight": Factory,
+      "Health & Supply Oversight": Shield,
+      Organization: Briefcase,
+      "Farm Operations": Bird,
+      "Branch Analytics": LineChart,
+      "Support Functions": Briefcase,
+      Veterinary: Shield,
+      "Store Operations": Box,
+    }),
+    []
+  );
+
+  useEffect(() => {
+    const defaults: Record<string, boolean> = {};
+    navSections.forEach((section) => {
+      defaults[section.title] = true;
+    });
+    setOpenSections(defaults);
+  }, [navSections]);
 
   return (
-    <aside className="hidden w-64 flex-col border-r border-sand-200 bg-forest-900 text-sand-50 lg:flex">
-      <div className="px-6 py-6">
-        <p className="text-xs uppercase tracking-[0.3em] text-sand-200">Ethiopoultry</p>
-        <h1 className="mt-2 text-2xl font-semibold font-[var(--font-display)]">Management System</h1>
-      </div>
-      <nav className="flex-1 space-y-6 px-4 pb-6 text-sm">
-        {navSections.map((section) => (
-          <div key={section.title}>
-            <p className="px-3 text-xs uppercase tracking-[0.25em] text-sand-200">{section.title}</p>
-            <div className="mt-2 space-y-1">
-              {section.items.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sand-100 transition hover:bg-forest-800"
-                >
-                  <span>{item.label}</span>
-                </Link>
-              ))}
+    <aside
+      className={`hidden flex-col border-r border-sand-200 bg-forest-900 text-sand-50 lg:flex ${
+        collapsed ? "w-20" : "w-64"
+      } transition-all duration-300`}
+    >
+      <div className="flex items-center justify-between px-6 py-6">
+        <div className="flex items-center gap-3">
+          {collapsed ? <Bird aria-hidden="true" className="h-6 w-6" /> : null}
+          {!collapsed ? (
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-sand-200">
+                Ethiopoultry
+              </p>
+              <h1 className="mt-1 text-xl font-semibold font-[var(--font-display)]">
+                Management System
+              </h1>
             </div>
-          </div>
-        ))}
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed((prev) => !prev)}
+          className="rounded-full border border-sand-200/30 px-2 py-1 text-xs text-sand-50"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? ">>" : "<<"}
+        </button>
+      </div>
+
+      <nav className="flex-1 space-y-4 px-4 pb-6 text-sm">
+        {navSections.map((section) => {
+          const isOpen = openSections[section.title];
+          return (
+            <div key={section.title}>
+              <button
+                type="button"
+                onClick={() =>
+                  setOpenSections((prev) => ({
+                    ...prev,
+                    [section.title]: !prev[section.title],
+                  }))
+                }
+                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sand-100 transition hover:bg-forest-800"
+              >
+                <span className="flex items-center gap-2">
+                  {collapsed ? (() => {
+                    const Icon = sectionIcons[section.title];
+                    return Icon ? (
+                      <span className="flex h-5 w-5 items-center justify-center">
+                        <Icon aria-hidden="true" className="h-5 w-5" />
+                      </span>
+                    ) : null;
+                  })() : null}
+                  {!collapsed ? (
+                    <span className="text-xs uppercase tracking-[0.25em]">
+                      {section.title}
+                    </span>
+                  ) : null}
+                </span>
+                {!collapsed ? (
+                  <span aria-hidden="true">{isOpen ? "−" : "+"}</span>
+                ) : null}
+              </button>
+              {isOpen && !collapsed ? (
+                <div className="mt-2 space-y-1">
+                  {section.items.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sand-100 transition hover:bg-forest-800"
+                    >
+                      <span>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </nav>
-      <div className="border-t border-forest-800 px-6 py-4 text-xs text-sand-200">{footer}</div>
+      <div className="mt-auto border-t border-forest-800 px-6 py-4">
+        {!collapsed ? (
+          <div className="flex items-center justify-between text-xs text-sand-200">
+            <span>{footer}</span>
+            <SignOutButton />
+          </div>
+        ) : (
+          <SignOutButton iconOnly />
+        )}
+      </div>
     </aside>
   );
 }

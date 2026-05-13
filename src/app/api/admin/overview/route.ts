@@ -1,45 +1,59 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 
+import { normalizeRole } from "@/lib/roles";
 import { createClient as createAuthedClient } from "@/utils/supabase/server";
 
 const adminRoles = new Set(["system_admin", "super_admin"]);
 
 export async function GET() {
-  const supabase = createAuthedClient(cookies());
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createAuthedClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-  if (userError || !user) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
+    if (userError || !user) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+    const metadataRole = normalizeRole(user.user_metadata?.role);
+    let normalizedRole = metadataRole;
 
-  if (!profile || !adminRoles.has(profile.role)) {
-    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-  }
+    if (!adminRoles.has(metadataRole)) {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (profileError) {
+        return NextResponse.json({ message: profileError.message }, { status: 500 });
+      }
 
-  if (!serviceKey || !supabaseUrl) {
-    return NextResponse.json({ message: "Missing server configuration" }, { status: 500 });
-  }
+      normalizedRole = normalizeRole(profile?.role);
+    }
 
-  const adminClient = createClient(supabaseUrl, serviceKey, {
-    auth: { persistSession: false },
-  });
+    if (!adminRoles.has(normalizedRole)) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
 
-  const [{ count: totalOrganizations }, { count: totalUsers }, { count: activeUsers }] =
-    await Promise.all([
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    if (!serviceKey || !supabaseUrl) {
+      return NextResponse.json(
+        { message: "Missing server configuration" },
+        { status: 500 }
+      );
+    }
+
+    const adminClient = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
+    });
+
+    const [orgResult, userResult, activeResult] = await Promise.all([
       adminClient.from("organizations").select("id", { count: "exact", head: true }),
       adminClient.from("profiles").select("id", { count: "exact", head: true }),
       adminClient
@@ -48,18 +62,38 @@ export async function GET() {
         .eq("is_active", true),
     ]);
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    if (orgResult.error || userResult.error || activeResult.error) {
+      return NextResponse.json(
+        {
+          message: orgResult.error?.message ??
+            userResult.error?.message ??
+            activeResult.error?.message ??
+            "Unable to load metrics",
+        },
+        { status: 500 }
+      );
+    }
 
-  const { count: newOrganizations30d } = await adminClient
-    .from("organizations")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", thirtyDaysAgo.toISOString());
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  return NextResponse.json({
-    totalOrganizations: totalOrganizations ?? 0,
-    activeOrganizations: activeUsers ?? 0,
-    totalUsers: totalUsers ?? 0,
-    newOrganizations30d: newOrganizations30d ?? 0,
-  });
+    const { count: newOrganizations30d, error: newOrgError } = await adminClient
+      .from("organizations")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", thirtyDaysAgo.toISOString());
+
+    if (newOrgError) {
+      return NextResponse.json({ message: newOrgError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      totalOrganizations: orgResult.count ?? 0,
+      activeOrganizations: activeResult.count ?? 0,
+      totalUsers: userResult.count ?? 0,
+      newOrganizations30d: newOrganizations30d ?? 0,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected server error";
+    return NextResponse.json({ message }, { status: 500 });
+  }
 }

@@ -3,9 +3,9 @@ import type { Enums } from "@/types/supabase";
 export type AppRole = Enums<"user_role">;
 
 const roleRouteMap: Record<AppRole, string> = {
-  super_admin: "/app/admin",
-  system_admin: "/app/admin",
-  ceo: "/app/admin",
+  super_admin: "/app/ceo",
+  system_admin: "/app/ceo",
+  ceo: "/app/ceo",
   farm_manager: "/app/farm-manager",
   veterinarian: "/app/veterinarian",
   store_keeper: "/app/store-keeper",

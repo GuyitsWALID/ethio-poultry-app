@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { normalizeRole } from "@/lib/roles";
 import { createClient } from "@/utils/supabase/client";
 
 export default function AdminLoginPage() {
@@ -35,13 +36,26 @@ export default function AdminLoginPage() {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user?.id ?? "")
-      .single();
+    const metadataRole = normalizeRole(user?.user_metadata?.role);
+    let normalizedRole = metadataRole;
 
-    if (!profile || (profile.role !== "system_admin" && profile.role !== "super_admin")) {
+    if (!user) {
+      setError("Unable to verify your session.");
+      setIsLoading(false);
+      return;
+    }
+
+    if (metadataRole !== "system_admin" && metadataRole !== "super_admin") {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      normalizedRole = normalizeRole(profile?.role);
+    }
+
+    if (normalizedRole !== "system_admin" && normalizedRole !== "super_admin") {
       await supabase.auth.signOut();
       setError("This account does not have system admin access.");
       setIsLoading(false);

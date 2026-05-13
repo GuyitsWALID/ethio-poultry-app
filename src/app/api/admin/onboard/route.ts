@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 
+import { normalizeRole } from "@/lib/roles";
 import { createClient as createAuthedClient } from "@/utils/supabase/server";
 
 const adminRoles = new Set(["system_admin", "super_admin"]);
@@ -24,7 +24,7 @@ type OnboardPayload = {
 };
 
 export async function POST(request: Request) {
-  const supabase = createAuthedClient(cookies());
+  const supabase = await createAuthedClient();
   const {
     data: { user },
     error: userError,
@@ -34,13 +34,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  const metadataRole = normalizeRole(user.user_metadata?.role);
+  let normalizedRole = metadataRole;
 
-  if (!profile || !adminRoles.has(profile.role)) {
+  if (!adminRoles.has(metadataRole)) {
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      return NextResponse.json({ message: profileError.message }, { status: 500 });
+    }
+
+    normalizedRole = normalizeRole(profile?.role);
+  }
+
+  if (!adminRoles.has(normalizedRole)) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
