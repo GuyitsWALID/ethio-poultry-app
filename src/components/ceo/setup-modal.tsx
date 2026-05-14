@@ -17,10 +17,7 @@ interface FarmConfig {
     name: string;
     capacity: number;
     flocks: Array<{
-      type: string;
-      age_at_placement_weeks: number;
-      template_id: string;
-    }>;
+      }>;
   }>;
 }
 
@@ -77,11 +74,11 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
   const [formData, setFormData] = useState(initialData);
 
   const updateBranch = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, branch: { ...prev.branch, [field]: value } }));
+    setFormData(prev => ({ ...prev, branch: { ...(prev.branch || {}), [field]: value } }));
   };
 
   const updateIntake = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, intakeBatch: { ...prev.intakeBatch, [field]: value } }));
+    setFormData(prev => ({ ...prev, intakeBatch: { ...(prev.intakeBatch || {}), [field]: value } }));
   };
 
   const addFarm = () => {
@@ -133,11 +130,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
   const addFlockToHouse = (farmIndex: number, houseIndex: number) => {
     setFormData(prev => {
       const updatedFarms = [...(prev.farms || [])];
-      updatedFarms[farmIndex].houses[houseIndex].flocks.push({
-        type: "",
-        age_at_placement_weeks: 0,
-        template_id: "",
-      });
+      updatedFarms[farmIndex].houses[houseIndex].flocks.push({});
       return { ...prev, farms: updatedFarms };
     });
   };
@@ -159,7 +152,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
   };
 
   const updateManager = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, manager: { ...prev.manager, [field]: value } }));
+    setFormData(prev => ({ ...prev, manager: { ...(prev.manager || {}), [field]: value } }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -174,7 +167,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
       const response = await fetch("/api/ceo/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, orgId: profile?.org_id }),
+        body: JSON.stringify({ ...formData, orgId: profile?.org_id || "" }),
       });
 
       const resData = await response.json();
@@ -418,32 +411,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
                                     </button>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                       <div className="space-y-1">
-                                        <label className="text-[9px] text-forest-500">Flock Type</label>
-                                        <input
-                                          required
-                                          className="w-full rounded border border-sand-200 bg-white px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-forest-600"
-                                          value={flock.type}
-                                          onChange={(e) => updateFlock(farmIndex, houseIndex, flockIndex, "type", e.target.value)}
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[9px] text-forest-500">Placement Weeks</label>
-                                        <input
-                                          required
-                                          type="number"
-                                          className="w-full rounded border border-sand-200 bg-white px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-forest-600"
-                                          value={flock.age_at_placement_weeks}
-                                          onChange={(e) => updateFlock(farmIndex, houseIndex, flockIndex, "age_at_placement_weeks", parseInt(e.target.value) || 0)}
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[9px] text-forest-500">Template ID</label>
-                                        <input
-                                          required
-                                          className="w-full rounded border border-sand-200 bg-white px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-forest-600"
-                                          value={flock.template_id}
-                                          onChange={(e) => updateFlock(farmIndex, houseIndex, flockIndex, "template_id", e.target.value)}
-                                        />
+                                        <span className="text-[9px] text-forest-400 italic">Flock ID auto-generated</span>
                                       </div>
                                     </div>
                                   </div>
