@@ -86,14 +86,28 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
 
       setIsFarmManager(true);
 
-      const { data: accessRows } = await supabase
-        .from("user_farm_access")
-        .select("farm_id")
-        .eq("profile_id", profile.id);
+      // Fetch branch access and farm access in parallel
+      const [{ data: branchAccessRows }, { data: farmAccessRows }] = await Promise.all([
+        supabase
+          .from("user_branch_access")
+          .select("branch_id")
+          .eq("profile_id", profile.id),
+        supabase
+          .from("user_farm_access")
+          .select("farm_id")
+          .eq("profile_id", profile.id),
+      ]);
 
-      const allowedFarmIds = (accessRows ?? []).map((row) => row.farm_id);
+      const allowedBranchIds = (branchAccessRows ?? []).map((row) => row.branch_id);
+      const allowedFarmIds = (farmAccessRows ?? []).map((row) => row.farm_id);
+
       let farmsQuery = supabase.from("farms").select("id, name, branch_id").eq("org_id", profile.org_id);
-      if (allowedFarmIds.length > 0) farmsQuery = farmsQuery.in("id", allowedFarmIds);
+
+      if (allowedBranchIds.length > 0 || allowedFarmIds.length > 0) {
+        // Filter farms that are either in an allowed branch OR explicitly allowed
+        farmsQuery = farmsQuery.or(`branch_id.in.(${allowedBranchIds.join(",")}) , id.in.(${allowedFarmIds.join(",")})`);
+      }
+
       const { data: farmRows } = await farmsQuery.order("name");
       const effectiveFarms = (farmRows ?? []) as Farm[];
       setFarms(effectiveFarms);

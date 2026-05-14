@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Bird, Box, Briefcase, Factory, LineChart, Shield } from "lucide-react";
+import {
+  Bird,
+  Box,
+  Briefcase,
+  Factory,
+  LineChart,
+  Shield,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { AppRole } from "@/lib/roles";
@@ -18,6 +26,7 @@ const ceoNavSections: NavSection[] = [
     title: "Executive",
     items: [
       { label: "Command Center", href: "/app/ceo" },
+      { label: "Branch Network", href: "/app/ceo/setup" },
       { label: "Analytics", href: "/app/analytics" },
       { label: "Reports", href: "/app/reports" },
       { label: "Accounting", href: "/app/accounting" },
@@ -142,7 +151,7 @@ export function AppSidebar() {
             ]
           : ceoNavSections;
   const footer = role === "farm_manager" ? "Assigned Branch Scope" : "Organization Scope";
-  const sectionIcons = useMemo(
+  const sectionIcons = useMemo<Record<string, LucideIcon>>(
     () => ({
       Executive: LineChart,
       "Operations Oversight": Factory,

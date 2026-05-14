@@ -26,12 +26,6 @@ export default function AppLayout({
               </div>
               <div className="flex items-center gap-3 text-sm text-forest-700">
                 <SignOutButton />
-                <button
-                  className="rounded-full bg-forest-900 px-4 py-2 text-sand-50"
-                  type="button"
-                >
-                  New alert
-                </button>
               </div>
             </header>
 
