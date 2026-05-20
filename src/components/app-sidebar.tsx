@@ -42,7 +42,6 @@ const ceoNavSections: NavSection[] = [
       { label: "Batches", href: "/app/batches" },
       { label: "Daily Records", href: "/app/daily-records" },
       { label: "Mortality", href: "/app/mortality" },
-      { label: "Alerts", href: "/app/alerts" },
       { label: "Sensors", href: "/app/sensors" },
     ],
   },
@@ -56,14 +55,7 @@ const ceoNavSections: NavSection[] = [
   },
   {
     title: "Organization",
-    items: [
-      { label: "CRM", href: "/app/crm" },
-      { label: "Training", href: "/app/training" },
-      { label: "HR", href: "/app/hr" },
-      { label: "Fleet", href: "/app/fleet" },
-      { label: "Users & Roles", href: "/app/users" },
-      { label: "Settings", href: "/app/settings" },
-    ],
+    items: [],
   },
 ];
 
@@ -84,7 +76,6 @@ const farmManagerNavSections: NavSection[] = [
     items: [
       { label: "Operations Analytics", href: "/app/analytics" },
       { label: "Branch Reports", href: "/app/reports" },
-      { label: "Alerts", href: "/app/alerts" },
       { label: "Sensors", href: "/app/sensors" },
     ],
   },
@@ -93,7 +84,6 @@ const farmManagerNavSections: NavSection[] = [
     items: [
       { label: "Health Log", href: "/app/health" },
       { label: "Inventory Log", href: "/app/inventory" },
-      { label: "Settings", href: "/app/settings" },
     ],
   },
 ];
@@ -101,7 +91,7 @@ const farmManagerNavSections: NavSection[] = [
 export function AppSidebar() {
   const [role, setRole] = useState<AppRole>("ceo");
   const [collapsed, setCollapsed] = useState(false);
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [closedSections, setClosedSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const resolveRole = async () => {
@@ -118,32 +108,38 @@ export function AppSidebar() {
     void resolveRole();
   }, []);
 
-  const navSections =
-    role === "farm_manager"
-      ? farmManagerNavSections
-      : role === "veterinarian"
-        ? [
-            {
-              title: "Veterinary",
-              items: [
-                { label: "Vet Dashboard", href: "/app/veterinarian" },
-                { label: "Mortality", href: "/app/mortality" },
-                { label: "Health", href: "/app/health" },
-              ],
-            },
-          ]
-        : role === "store_keeper"
-          ? [
-              {
-                title: "Store Operations",
-                items: [
-                  { label: "Store Dashboard", href: "/app/store-keeper" },
-                  { label: "Inventory", href: "/app/inventory" },
-                ],
-              },
-            ]
-          : ceoNavSections;
+  const navSections = useMemo<NavSection[]>(() => {
+    if (role === "farm_manager") return farmManagerNavSections;
+    if (role === "veterinarian") {
+      return [
+        {
+          title: "Veterinary",
+          items: [
+            { label: "Vet Dashboard", href: "/app/veterinarian" },
+            { label: "Mortality", href: "/app/mortality" },
+            { label: "Health", href: "/app/health" },
+          ],
+        },
+      ];
+    }
+    if (role === "store_keeper") {
+      return [
+        {
+          title: "Store Operations",
+          items: [
+            { label: "Store Dashboard", href: "/app/store-keeper" },
+            { label: "Inventory", href: "/app/inventory" },
+          ],
+        },
+      ];
+    }
+    return ceoNavSections;
+  }, [role]);
   const footer = role === "farm_manager" ? "Assigned Branch Scope" : "Organization Scope";
+  const visibleNavSections = useMemo(
+    () => navSections.filter((section) => section.items.length > 0),
+    [navSections]
+  );
   const sectionIcons = useMemo<Record<string, LucideIcon>>(
     () => ({
       Executive: LineChart,
@@ -158,14 +154,6 @@ export function AppSidebar() {
     }),
     []
   );
-
-  useEffect(() => {
-    const defaults: Record<string, boolean> = {};
-    navSections.forEach((section) => {
-      defaults[section.title] = true;
-    });
-    setOpenSections(defaults);
-  }, [navSections]);
 
   return (
     <aside
@@ -210,16 +198,16 @@ export function AppSidebar() {
       </div>
 
       <nav className="flex-1 space-y-4 px-4 pb-6 text-sm">
-        {navSections.map((section) => {
-          const isOpen = openSections[section.title];
+        {visibleNavSections.map((section) => {
+          const isOpen = !closedSections[section.title];
           return (
             <div key={section.title}>
               <button
                 type="button"
                 onClick={() =>
-                  setOpenSections((prev) => ({
+                  setClosedSections((prev) => ({
                     ...prev,
-                    [section.title]: !prev[section.title],
+                    [section.title]: !isOpen,
                   }))
                 }
                 className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sand-100 transition hover:bg-forest-800"
@@ -262,9 +250,17 @@ export function AppSidebar() {
       </nav>
       <div className="mt-auto border-t border-forest-800 px-6 py-4">
         {!collapsed ? (
-          <div className="flex items-center justify-between text-xs text-sand-200">
-            <span>{footer}</span>
-            <SignOutButton />
+          <div className="space-y-3">
+            <Link
+              href="/app/settings"
+              className="flex w-full items-center justify-center rounded-xl border border-sand-200/30 px-3 py-2 text-xs text-sand-100 transition hover:bg-forest-800"
+            >
+              Settings
+            </Link>
+            <div className="flex items-center justify-between text-xs text-sand-200">
+              <span>{footer}</span>
+              <SignOutButton />
+            </div>
           </div>
         ) : (
           <SignOutButton iconOnly />

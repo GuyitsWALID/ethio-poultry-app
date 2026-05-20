@@ -24,7 +24,7 @@ type DailyRow = {
 };
 
 export default function DailyRecordsPage() {
-  const { scope, setScope, filteredFarms, filteredFlocks, filteredBatches, filteredHouses, batches } =
+  const { scope, setScope, filteredFlocks, filteredBatches, filteredHouses, batches } =
     useFarmScope();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rows, setRows] = useState<DailyRow[]>([]);
@@ -32,7 +32,12 @@ export default function DailyRecordsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
+  const [dateFilterMode, setDateFilterMode] = useState<"single" | "range">("single");
   const [filterDate, setFilterDate] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [currentRole, setCurrentRole] = useState<string | null>(null);
+  const canCreateRecord = currentRole === "farm_manager";
 
   const parseNumber = (value: FormDataEntryValue | null) => {
     if (value === null || value === "") return null;
@@ -72,8 +77,27 @@ export default function DailyRecordsPage() {
       .order("record_date", { ascending: false })
       .limit(200);
 
+    const scopedFlockIds = filteredFlocks
+      .filter((flock) => {
+        if (!scope.batchId) return true;
+        return filteredBatches.some((batch) => batch.id === scope.batchId && batch.flock_id === flock.id);
+      })
+      .map((flock) => flock.id);
+
     if (scope.flockId) query = query.eq("flock_id", scope.flockId);
-    if (filterDate) query = query.eq("record_date", filterDate);
+    else if (scopedFlockIds.length > 0) query = query.in("flock_id", scopedFlockIds);
+    else if (scope.branchId || scope.farmId || scope.houseId || scope.batchId) {
+      setRows([]);
+      setLoadingRows(false);
+      return;
+    }
+    if (dateFilterMode === "single" && filterDate) {
+      query = query.eq("record_date", filterDate);
+    }
+    if (dateFilterMode === "range") {
+      if (filterDateFrom) query = query.gte("record_date", filterDateFrom);
+      if (filterDateTo) query = query.lte("record_date", filterDateTo);
+    }
 
     const { data } = await query;
     const dailyRows = (data ?? []) as Array<Omit<DailyRow, "has_egg_record" | "has_weight_record" | "has_health_record" | "has_mortality_event">>;
@@ -140,8 +164,32 @@ export default function DailyRecordsPage() {
   };
 
   useEffect(() => {
+    const loadRole = async () => {
+      const response = await fetch("/api/me/context", { method: "GET" });
+      if (!response.ok) return;
+      const data = await response.json();
+      setCurrentRole(String(data?.role ?? ""));
+    };
+    void loadRole();
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRows();
-  }, [scope.flockId, filterDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    scope.branchId,
+    scope.farmId,
+    scope.houseId,
+    scope.flockId,
+    scope.batchId,
+    dateFilterMode,
+    filterDate,
+    filterDateFrom,
+    filterDateTo,
+    filteredFlocks,
+    filteredBatches,
+  ]);
 
   const flockLabelMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -154,6 +202,11 @@ export default function DailyRecordsPage() {
     setFormError(null);
     setFormSuccess(null);
     setIsSubmitting(true);
+    if (!canCreateRecord) {
+      setFormError("Only farm managers can create daily records.");
+      setIsSubmitting(false);
+      return;
+    }
 
     if (!scope.farmId || !scope.houseId || !scope.flockId) {
       setFormError("Select farm, house, and flock from scope filters first.");
@@ -356,50 +409,65 @@ export default function DailyRecordsPage() {
           <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Daily records</p>
           <h2 className="text-2xl font-semibold text-forest-900">Daily Operations Inputs</h2>
         </div>
-        <button
-          className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50"
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-        >
-          New record
-        </button>
+        {canCreateRecord ? (
+          <button
+            className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50"
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+          >
+            New record
+          </button>
+        ) : null}
       </div>
+      {!canCreateRecord ? (
+        <p className="text-sm text-forest-600">View mode: only farm managers can create daily records.</p>
+      ) : null}
 
       <section className="rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <label className="grid gap-1 text-xs text-forest-600">
-            Farm
+            Filter Type
             <select
               className={inputClass}
-              value={scope.farmId}
-              onChange={(e) => setScope((prev) => ({ ...prev, farmId: e.target.value, houseId: "", flockId: "", batchId: "" }))}
+              value={dateFilterMode}
+              onChange={(e) => setDateFilterMode(e.target.value as "single" | "range")}
             >
-              <option value="">All Farms</option>
-              {filteredFarms.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
+              <option value="single">Single day</option>
+              <option value="range">Date range</option>
             </select>
           </label>
+          {dateFilterMode === "single" ? (
+            <label className="grid gap-1 text-xs text-forest-600">
+              Date
+              <input className={inputClass} type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+            </label>
+          ) : null}
+          {dateFilterMode === "range" ? (
+            <label className="grid gap-1 text-xs text-forest-600">
+              From
+              <input className={inputClass} type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} />
+            </label>
+          ) : null}
+          {dateFilterMode === "range" ? (
+            <label className="grid gap-1 text-xs text-forest-600">
+              To
+              <input className={inputClass} type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} />
+            </label>
+          ) : null}
           <label className="grid gap-1 text-xs text-forest-600">
-            Flock
-            <select
-              className={inputClass}
-              value={scope.flockId}
-              onChange={(e) => setScope((prev) => ({ ...prev, flockId: e.target.value }))}
+            Quick Reset
+            <button
+              type="button"
+              className="h-11 rounded-xl border border-sand-200 px-3 text-sm text-forest-700"
+              onClick={() => {
+                setDateFilterMode("single");
+                setFilterDate("");
+                setFilterDateFrom("");
+                setFilterDateTo("");
+              }}
             >
-              <option value="">All Flocks</option>
-              {filteredFlocks.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.flock_code}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs text-forest-600">
-            Date
-            <input className={inputClass} type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
+              Clear date filter
+            </button>
           </label>
         </div>
       </section>
@@ -464,7 +532,7 @@ export default function DailyRecordsPage() {
         </div>
       </section>
 
-      {isModalOpen ? (
+      {isModalOpen && canCreateRecord ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
           <div className="h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between">

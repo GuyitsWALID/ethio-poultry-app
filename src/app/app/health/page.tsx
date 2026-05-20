@@ -170,20 +170,9 @@ export default function HealthPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSchedules();
   }, []);
-
-  const validateScopeForFlock = () => {
-    if (!scope.farmId || !scope.houseId || !scope.flockId) {
-      throw new Error("Select farm, house, and flock from scope filters first.");
-    }
-    if (!filteredHouses.some((h) => h.id === scope.houseId && h.farm_id === scope.farmId)) {
-      throw new Error("Selected house is not valid for selected farm.");
-    }
-    if (!filteredFlocks.some((f) => f.id === scope.flockId && f.house_id === scope.houseId)) {
-      throw new Error("Selected flock is not valid for selected house.");
-    }
-  };
 
   const submitVaccinationSchedule = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -365,12 +354,15 @@ export default function HealthPage() {
 
   const healthFilteredSchedules = useMemo(() => {
     return schedules.filter((item) => {
+      if (scope.farmId && item.farmId !== scope.farmId) return false;
+      if (scope.houseId && item.houseId !== scope.houseId) return false;
+      if (scope.flockId && item.flockId !== scope.flockId) return false;
       if (healthFarmId && item.farmId !== healthFarmId) return false;
       if (healthHouseId && item.houseId !== healthHouseId) return false;
       if (healthFlockId && item.flockId !== healthFlockId) return false;
       return true;
     });
-  }, [schedules, healthFarmId, healthHouseId, healthFlockId]);
+  }, [schedules, scope.farmId, scope.houseId, scope.flockId, healthFarmId, healthHouseId, healthFlockId]);
 
   const badgeClass = (status: ScheduleItem["status"]) => {
     if (status === "completed") return "bg-leaf-500/15 text-leaf-600 border border-leaf-500/30";

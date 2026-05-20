@@ -4,6 +4,7 @@ import { useFarmScope } from "@/components/farm-scope-context";
 
 export function FarmScopeFilters() {
   const {
+    role,
     isFarmManager,
     loading,
     scope,
@@ -15,7 +16,8 @@ export function FarmScopeFilters() {
     filteredBatches,
   } = useFarmScope();
 
-  if (!isFarmManager || loading) {
+  const showFilters = role === "ceo" || isFarmManager;
+  if (!showFilters || loading) {
     return null;
   }
 
@@ -23,7 +25,9 @@ export function FarmScopeFilters() {
 
   return (
     <div className="mb-4 rounded-2xl border border-sand-200 bg-white p-4">
-      <p className="text-xs uppercase tracking-[0.2em] text-forest-500">Branch Scope Filters</p>
+      <p className="text-xs uppercase tracking-[0.2em] text-forest-500">
+        {role === "ceo" ? "Executive Scope Filters" : "Branch Scope Filters"}
+      </p>
       <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <label className="grid gap-1 text-xs text-forest-600">
           Branch

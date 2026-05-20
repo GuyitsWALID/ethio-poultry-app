@@ -19,6 +19,7 @@ type Flock = { id: string; flock_code: string; farm_id: string; house_id: string
 type Batch = { id: string; batch_code: string; branch_id: string; farm_id: string; house_id: string; flock_id: string };
 
 type ScopeContextValue = {
+  role: string | null;
   isFarmManager: boolean;
   loading: boolean;
   scope: ScopeState;
@@ -38,6 +39,7 @@ const initialScope: ScopeState = { branchId: "", farmId: "", batchId: "", houseI
 const ScopeContext = createContext<ScopeContextValue | null>(null);
 
 export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
+  const [role, setRole] = useState<string | null>(null);
   const [isFarmManager, setIsFarmManager] = useState(false);
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState<ScopeState>(initialScope);
@@ -51,6 +53,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem("farm_manager_scope");
     if (saved) {
       try {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setScope(JSON.parse(saved) as ScopeState);
       } catch {
         setScope(initialScope);
@@ -82,6 +85,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      setRole(role);
       const isManager = role === "farm_manager";
       setIsFarmManager(isManager);
 
@@ -186,6 +190,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
   return (
     <ScopeContext.Provider
       value={{
+        role,
         isFarmManager,
         loading,
         scope,

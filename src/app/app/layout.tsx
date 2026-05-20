@@ -1,6 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { FarmScopeProvider } from "@/components/farm-scope-context";
 import { FarmScopeFilters } from "@/components/farm-scope-filters";
+import { HeaderAlertBell } from "@/components/header-alert-bell";
 import { SignOutButton } from "@/components/sign-out-button";
 
 export default function AppLayout({
@@ -25,6 +26,7 @@ export default function AppLayout({
                 </p>
               </div>
               <div className="flex items-center gap-3 text-sm text-forest-700">
+                <HeaderAlertBell />
                 <SignOutButton />
               </div>
             </header>
