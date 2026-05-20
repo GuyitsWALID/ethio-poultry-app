@@ -77,25 +77,48 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
         .from("profiles")
         .select("id, org_id, role")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (!profile || profile.role !== "farm_manager") {
+      if (!profile?.org_id) {
         setLoading(false);
         return;
       }
 
-      setIsFarmManager(true);
+      const isManager = profile.role === "farm_manager";
+      setIsFarmManager(isManager);
 
-      // Fetch branch access and farm access in parallel
+      // CEO/System users: full org scope
+      if (!isManager) {
+        const [{ data: branchRows }, { data: farmRows }, { data: houseRows }, { data: flockRows }, { data: batchRows }] =
+          await Promise.all([
+            supabase.from("branches").select("id, name").eq("org_id", profile.org_id).order("name"),
+            supabase.from("farms").select("id, name, branch_id").eq("org_id", profile.org_id).order("name"),
+            supabase.from("houses").select("id, name, farm_id").eq("org_id", profile.org_id).order("name"),
+            supabase
+              .from("flocks")
+              .select("id, flock_code, farm_id, house_id")
+              .eq("org_id", profile.org_id)
+              .order("flock_code"),
+            supabase
+              .from("batches")
+              .select("id, batch_code, farm_id, house_id, flock_id")
+              .eq("org_id", profile.org_id)
+              .order("placement_date", { ascending: false }),
+          ]);
+
+        setBranches((branchRows ?? []) as Branch[]);
+        setFarms((farmRows ?? []) as Farm[]);
+        setHouses((houseRows ?? []) as House[]);
+        setFlocks((flockRows ?? []) as Flock[]);
+        setBatches((batchRows ?? []) as Batch[]);
+        setLoading(false);
+        return;
+      }
+
+      // Farm manager: access-limited scope
       const [{ data: branchAccessRows }, { data: farmAccessRows }] = await Promise.all([
-        supabase
-          .from("user_branch_access")
-          .select("branch_id")
-          .eq("profile_id", profile.id),
-        supabase
-          .from("user_farm_access")
-          .select("farm_id")
-          .eq("profile_id", profile.id),
+        supabase.from("user_branch_access").select("branch_id").eq("profile_id", profile.id),
+        supabase.from("user_farm_access").select("farm_id").eq("profile_id", profile.id),
       ]);
 
       const allowedBranchIds = (branchAccessRows ?? []).map((row) => row.branch_id);
@@ -104,8 +127,10 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
       let farmsQuery = supabase.from("farms").select("id, name, branch_id").eq("org_id", profile.org_id);
 
       if (allowedBranchIds.length > 0 || allowedFarmIds.length > 0) {
-        // Filter farms that are either in an allowed branch OR explicitly allowed
-        farmsQuery = farmsQuery.or(`branch_id.in.(${allowedBranchIds.join(",")}) , id.in.(${allowedFarmIds.join(",")})`);
+        const orFilters: string[] = [];
+        if (allowedBranchIds.length > 0) orFilters.push(`branch_id.in.(${allowedBranchIds.join(",")})`);
+        if (allowedFarmIds.length > 0) orFilters.push(`id.in.(${allowedFarmIds.join(",")})`);
+        farmsQuery = farmsQuery.or(orFilters.join(","));
       }
 
       const { data: farmRows } = await farmsQuery.order("name");
@@ -148,8 +173,9 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
     if (scope.farmId) items = items.filter((b) => b.farm_id === scope.farmId);
     if (scope.houseId) items = items.filter((b) => b.house_id === scope.houseId);
     if (scope.flockId) items = items.filter((b) => b.flock_id === scope.flockId);
+    if (scope.batchId) items = items.filter((b) => b.id === scope.batchId);
     return items;
-  }, [batches, scope.farmId, scope.houseId, scope.flockId]);
+  }, [batches, scope.farmId, scope.houseId, scope.flockId, scope.batchId]);
 
   return (
     <ScopeContext.Provider

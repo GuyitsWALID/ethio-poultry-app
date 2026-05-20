@@ -5,6 +5,8 @@ import {
   Bird,
   Box,
   Briefcase,
+  ChevronLeft,
+  ChevronRight,
   Factory,
   LineChart,
   Shield,
@@ -13,8 +15,8 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { AppRole } from "@/lib/roles";
+import { normalizeRole } from "@/lib/roles";
 import { SignOutButton } from "@/components/sign-out-button";
-import { createClient } from "@/utils/supabase/client";
 
 type NavSection = {
   title: string;
@@ -103,23 +105,14 @@ export function AppSidebar() {
 
   useEffect(() => {
     const resolveRole = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) {
+      const response = await fetch("/api/me/context", { method: "GET" });
+      if (!response.ok) {
         setRole("ceo");
         return;
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      setRole((profile?.role as AppRole) ?? "ceo");
+      const data = await response.json();
+      setRole(normalizeRole(data?.role) as AppRole);
     };
 
     void resolveRole();
@@ -180,27 +173,39 @@ export function AppSidebar() {
         collapsed ? "w-20" : "w-64"
       } transition-all duration-300`}
     >
-      <div className="flex items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-3">
+      <div className={`px-6 pt-6 ${collapsed ? "pb-3" : "pb-4"}`}>
+        <div className={collapsed ? "flex items-center justify-center" : "flex items-center gap-3"}>
           {collapsed ? <Bird aria-hidden="true" className="h-6 w-6" /> : null}
           {!collapsed ? (
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-sand-200">
-                Ethiopoultry
+                Ethiopoultry MS
               </p>
-              <h1 className="mt-1 text-xl font-semibold font-[var(--font-display)]">
-                Management System
-              </h1>
+              
             </div>
           ) : null}
         </div>
+      </div>
+
+      <div className={`px-4 ${collapsed ? "pb-4" : "pb-3"}`}>
         <button
           type="button"
           onClick={() => setCollapsed((prev) => !prev)}
-          className="rounded-full border border-sand-200/30 px-2 py-1 text-xs text-sand-50"
+          className={`flex items-center rounded-full border border-sand-200/30 text-sand-50 transition hover:bg-forest-800 ${
+            collapsed
+              ? "mx-auto h-8 w-8 justify-center"
+              : "ml-auto h-8 gap-1 px-3"
+          }`}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? ">>" : "<<"}
+          {collapsed ? (
+            <ChevronRight aria-hidden="true" className="h-4 w-4" />
+          ) : (
+            <>
+              <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+              <span className="text-xs">Collapse</span>
+            </>
+          )}
         </button>
       </div>
 

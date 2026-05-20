@@ -33,59 +33,86 @@ export default function AdminOverview() {
     const loadKpis = async () => {
       setKpiLoading(true);
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      const contextResponse = await fetch("/api/me/context", { method: "GET" });
+      if (!contextResponse.ok) {
         setKpiLoading(false);
         return;
       }
 
-      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-      if (!profile?.org_id) {
+      const contextData = await contextResponse.json();
+      const orgId = contextData?.orgId as string | null;
+      if (!orgId) {
         setKpiLoading(false);
         return;
       }
 
-      const orgId = profile.org_id;
+      const scopedFarms = scope.branchId
+        ? filteredFarms.filter((f) => f.branch_id === scope.branchId)
+        : filteredFarms;
+      const scopedFarmIds = scopedFarms.map((f) => f.id);
+
+      const scopedFlocks = filteredFlocks.filter((flock) => {
+        if (scope.batchId) {
+          return filteredBatches.some((b) => b.id === scope.batchId && b.flock_id === flock.id);
+        }
+        return true;
+      });
+      const scopedFlockIds = scopedFlocks.map((f) => f.id);
+
+      const applyScope = <T extends { eq: Function; in: Function }>(query: T) => {
+        let next: any = query.eq("org_id", orgId);
+        if (scopedFarmIds.length > 0) next = next.in("farm_id", scopedFarmIds);
+        if (scope.flockId) next = next.eq("flock_id", scope.flockId);
+        else if (scope.batchId && scopedFlockIds.length > 0) next = next.in("flock_id", scopedFlockIds);
+        return next;
+      };
 
       const [{ data: latestDailyRow }, { data: latestEggRow }, { count: openAlertsCount }, { count: activeFarmsCount }] =
         await Promise.all([
-          supabase
+          applyScope(
+            supabase
             .from("daily_farm_records")
             .select("record_date")
-            .eq("org_id", orgId)
             .order("record_date", { ascending: false })
             .limit(1)
-            .maybeSingle(),
-          supabase
+            .maybeSingle()
+          ),
+          applyScope(
+            supabase
             .from("daily_egg_records")
             .select("record_date")
-            .eq("org_id", orgId)
             .order("record_date", { ascending: false })
             .limit(1)
-            .maybeSingle(),
-          supabase.from("alerts").select("id", { count: "exact", head: true }).eq("org_id", orgId).neq("status", "resolved"),
-          supabase.from("farms").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+            .maybeSingle()
+          ),
+          applyScope(
+            supabase
+              .from("alerts")
+              .select("id", { count: "exact", head: true })
+              .neq("status", "resolved")
+          ),
+          Promise.resolve({ count: scopedFarms.length }),
         ]);
 
       let liveBirdsTotal = 0;
       if (latestDailyRow?.record_date) {
-        const { data: liveRows } = await supabase
-          .from("daily_farm_records")
-          .select("live_count")
-          .eq("org_id", orgId)
-          .eq("record_date", latestDailyRow.record_date);
+        const { data: liveRows } = await applyScope(
+          supabase
+            .from("daily_farm_records")
+            .select("live_count")
+            .eq("record_date", latestDailyRow.record_date)
+        );
         liveBirdsTotal = (liveRows ?? []).reduce((acc, row) => acc + (row.live_count ?? 0), 0);
       }
 
       let eggOutputTotal = 0;
       if (latestEggRow?.record_date) {
-        const { data: eggRows } = await supabase
-          .from("daily_egg_records")
-          .select("total_eggs")
-          .eq("org_id", orgId)
-          .eq("record_date", latestEggRow.record_date);
+        const { data: eggRows } = await applyScope(
+          supabase
+            .from("daily_egg_records")
+            .select("total_eggs")
+            .eq("record_date", latestEggRow.record_date)
+        );
         eggOutputTotal = (eggRows ?? []).reduce((acc, row) => acc + (row.total_eggs ?? 0), 0);
       }
 
@@ -99,7 +126,7 @@ export default function AdminOverview() {
     };
 
     void loadKpis();
-  }, []);
+  }, [scope.branchId, scope.farmId, scope.batchId, scope.flockId, filteredFarms, filteredFlocks, filteredBatches]);
 
   const farmSummaryRows = useMemo<FarmSummaryRow[]>(() => {
     return filteredFarms.map((farm) => {
@@ -213,7 +240,12 @@ export default function AdminOverview() {
               onChange={(event) => setScope((prev) => ({ ...prev, flockId: event.target.value }))}
             >
               <option value="">All Flocks</option>
-              {filteredFlocks.map((flock) => (
+              {filteredFlocks
+                .filter((flock) => {
+                  if (!scope.batchId) return true;
+                  return filteredBatches.some((batch) => batch.id === scope.batchId && batch.flock_id === flock.id);
+                })
+                .map((flock) => (
                 <option key={flock.id} value={flock.id}>
                   {flock.flock_code}
                 </option>
@@ -274,7 +306,7 @@ export default function AdminOverview() {
           <h3 className="text-lg font-semibold text-forest-900">Scope status</h3>
           <div className="mt-4 space-y-3 text-sm text-forest-700">
             <p className="rounded-xl border border-sand-200 bg-sand-50 p-3">
-              Branches in scope: {branches.length}
+              Branches in scope: {scope.branchId ? 1 : branches.length}
             </p>
             <p className="rounded-xl border border-sand-200 bg-sand-50 p-3">
               Farms in scope: {filteredFarms.length}

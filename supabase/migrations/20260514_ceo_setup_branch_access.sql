@@ -1,6 +1,8 @@
 -- CEO Setup Command Center - Branch and Access Model
 
 -- Helper function to generate batch codes (B-YYYY-XXXX)
+create sequence if not exists public.batch_code_seq;
+
 create or replace function public.generate_batch_code()
 returns text
 language plpgsql
@@ -9,18 +11,8 @@ declare
   new_code text;
   seq_val integer;
 begin
-  -- Use a sequence for the numeric part
-  -- Note: In a real env, create a sequence first: create sequence batch_code_seq;
-  -- For this setup, we'll simulate or use a simpler counter if sequence isn't available.
-  -- But the standard approach is a sequence.
-
-  -- Simple implementation: prefix + year + random/seq
-  -- Since we can't easily create a sequence in this specific migration without knowing if it's allowed,
-  -- we will use a timestamp-based unique code or a simple count.
-  -- Better: use a dedicated sequence.
-
-  -- Let's use a a simpler logic for now: B-YEAR-RANDOM
-  new_code := 'B-' || to_char(current_date, 'YYYY') || '-' || upper(substring(md5(random()::text), 1, 4));
+  seq_val := nextval('public.batch_code_seq');
+  new_code := 'B-' || to_char(current_date, 'YYYY') || '-' || lpad((seq_val % 10000)::text, 4, '0');
   return new_code;
 end;
 $$;
@@ -75,11 +67,25 @@ using (
     where id = auth.uid()
     and role = 'ceo'
   )
+)
+with check (
+  exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+    and role = 'ceo'
+  )
 );
 
 create policy "CEOs have full access to user branch access"
 on public.user_branch_access for all
 using (
+  exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+    and role = 'ceo'
+  )
+)
+with check (
   exists (
     select 1 from public.profiles
     where id = auth.uid()
@@ -164,9 +170,9 @@ using (
   or
   exists (
     select 1 from public.user_farm_access
-    join public.farms on public.user_farm_access.farm_id = public.user_farm_access.farm_id
+    join public.farms on public.user_farm_access.farm_id = public.farms.id
     where public.user_farm_access.profile_id = auth.uid()
-    and public.flocks.farm_id = public.user_farm_access.farm_id
+    and public.flocks.farm_id = public.farms.id
   )
   or
   exists (

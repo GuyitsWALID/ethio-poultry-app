@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
-import { createClient } from "@/utils/supabase/client";
-import { Loader2, X, Plus } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { Loader2, X, Plus, Eye, EyeOff, Copy, RefreshCw, Check } from "lucide-react";
 
 interface SetupModalProps {
   isOpen: boolean;
@@ -12,7 +12,6 @@ interface SetupModalProps {
 
 interface FarmConfig {
   name: string;
-  location: string;
   houses: Array<{
     name: string;
     capacity: number;
@@ -22,10 +21,9 @@ interface FarmConfig {
 }
 
 interface SetupData {
-  orgId: string;
   branch: { name: string; location: string };
   intakeBatch: {
-    source: "internal" | "external";
+    source: "internal_transfer" | "external_purchase";
     supplier_name: string;
     purchase_date: string;
     placement_date: string;
@@ -39,6 +37,7 @@ interface SetupData {
   farms: FarmConfig[];
   manager: {
     email: string;
+    phone: string;
     fullName: string;
     password: string;
   };
@@ -47,7 +46,7 @@ interface SetupData {
 const initialData: Partial<SetupData> = {
   branch: { name: "", location: "" },
   intakeBatch: {
-    source: "external",
+    source: "external_purchase",
     supplier_name: "",
     purchase_date: "",
     placement_date: "",
@@ -61,6 +60,7 @@ const initialData: Partial<SetupData> = {
   farms: [],
   manager: {
     email: "",
+    phone: "",
     fullName: "",
     password: "",
   },
@@ -69,9 +69,33 @@ const initialData: Partial<SetupData> = {
 export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
+  const [showPassword, setShowPassword] = useState(false);
+  const [copiedPassword, setCopiedPassword] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const [formData, setFormData] = useState(initialData);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  const totalHouseCapacity = useMemo(
+    () =>
+      (formData.farms || []).reduce(
+        (farmAcc, farm) =>
+          farmAcc +
+          (farm.houses || []).reduce(
+            (houseAcc, house) => houseAcc + (Number(house.capacity) || 0),
+            0
+          ),
+        0
+      ),
+    [formData.farms]
+  );
+
+  const intakeTotalCount = Number(formData.intakeBatch?.total_count) || 0;
+  const capacityMatchesBatchTotal = intakeTotalCount > 0 && totalHouseCapacity === intakeTotalCount;
 
   const updateBranch = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, branch: { ...(prev.branch || {}), [field]: value } }));
@@ -84,7 +108,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
   const addFarm = () => {
     setFormData(prev => ({
       ...prev,
-      farms: [...(prev.farms || []), { name: "", location: "", houses: [] }]
+      farms: [...(prev.farms || []), { name: "", houses: [] }]
     }));
   };
 
@@ -105,49 +129,87 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
 
   const addHouseToFarm = (farmIndex: number) => {
     setFormData(prev => {
-      const updatedFarms = [...(prev.farms || [])];
-      updatedFarms[farmIndex].houses.push({ name: "", capacity: 0, flocks: [] });
-      return { ...prev, farms: updatedFarms };
+      const farms = (prev.farms || []).map((farm, index) =>
+        index === farmIndex
+          ? {
+              ...farm,
+              houses: [...(farm.houses || []), { name: "", capacity: 0, flocks: [] }],
+            }
+          : farm
+      );
+      return { ...prev, farms };
     });
   };
 
   const removeHouse = (farmIndex: number, houseIndex: number) => {
     setFormData(prev => {
-      const updatedFarms = [...(prev.farms || [])];
-      updatedFarms[farmIndex].houses = updatedFarms[farmIndex].houses.filter((_, i) => i !== houseIndex);
-      return { ...prev, farms: updatedFarms };
+      const farms = (prev.farms || []).map((farm, index) =>
+        index === farmIndex
+          ? {
+              ...farm,
+              houses: (farm.houses || []).filter((_, i) => i !== houseIndex),
+            }
+          : farm
+      );
+      return { ...prev, farms };
     });
   };
 
   const updateHouse = (farmIndex: number, houseIndex: number, field: string, value: any) => {
     setFormData(prev => {
-      const updatedFarms = [...(prev.farms || [])];
-      updatedFarms[farmIndex].houses[houseIndex] = { ...updatedFarms[farmIndex].houses[houseIndex], [field]: value };
-      return { ...prev, farms: updatedFarms };
+      const farms = (prev.farms || []).map((farm, index) => {
+        if (index !== farmIndex) return farm;
+        const houses = (farm.houses || []).map((house, i) =>
+          i === houseIndex ? { ...house, [field]: value } : house
+        );
+        return { ...farm, houses };
+      });
+      return { ...prev, farms };
     });
   };
 
   const addFlockToHouse = (farmIndex: number, houseIndex: number) => {
     setFormData(prev => {
-      const updatedFarms = [...(prev.farms || [])];
-      updatedFarms[farmIndex].houses[houseIndex].flocks.push({});
-      return { ...prev, farms: updatedFarms };
+      const farms = (prev.farms || []).map((farm, index) => {
+        if (index !== farmIndex) return farm;
+        const houses = (farm.houses || []).map((house, i) =>
+          i === houseIndex ? { ...house, flocks: [...(house.flocks || []), {}] } : house
+        );
+        return { ...farm, houses };
+      });
+      return { ...prev, farms };
     });
   };
 
   const removeFlock = (farmIndex: number, houseIndex: number, flockIndex: number) => {
     setFormData(prev => {
-      const updatedFarms = [...(prev.farms || [])];
-      updatedFarms[farmIndex].houses[houseIndex].flocks = updatedFarms[farmIndex].houses[houseIndex].flocks.filter((_, i) => i !== flockIndex);
-      return { ...prev, farms: updatedFarms };
+      const farms = (prev.farms || []).map((farm, index) => {
+        if (index !== farmIndex) return farm;
+        const houses = (farm.houses || []).map((house, i) =>
+          i === houseIndex
+            ? { ...house, flocks: (house.flocks || []).filter((_, j) => j !== flockIndex) }
+            : house
+        );
+        return { ...farm, houses };
+      });
+      return { ...prev, farms };
     });
   };
 
   const updateFlock = (farmIndex: number, houseIndex: number, flockIndex: number, field: string, value: any) => {
     setFormData(prev => {
-      const updatedFarms = [...(prev.farms || [])];
-      updatedFarms[farmIndex].houses[houseIndex].flocks[flockIndex] = { ...updatedFarms[farmIndex].houses[houseIndex].flocks[flockIndex], [field]: value };
-      return { ...prev, farms: updatedFarms };
+      const farms = (prev.farms || []).map((farm, index) => {
+        if (index !== farmIndex) return farm;
+        const houses = (farm.houses || []).map((house, i) => {
+          if (i !== houseIndex) return house;
+          const flocks = (house.flocks || []).map((flock, j) =>
+            j === flockIndex ? { ...flock, [field]: value } : flock
+          );
+          return { ...house, flocks };
+        });
+        return { ...farm, houses };
+      });
+      return { ...prev, farms };
     });
   };
 
@@ -155,19 +217,47 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
     setFormData(prev => ({ ...prev, manager: { ...(prev.manager || {}), [field]: value } }));
   };
 
+  const generatePassword = () => {
+    const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    const length = 14;
+    let nextPassword = "";
+    for (let i = 0; i < length; i += 1) {
+      nextPassword += charset[Math.floor(Math.random() * charset.length)];
+    }
+    updateManager("password", nextPassword);
+    setCopiedPassword(false);
+  };
+
+  const copyPassword = async () => {
+    const password = formData.manager?.password ?? "";
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      setCopiedPassword(true);
+      setTimeout(() => setCopiedPassword(false), 1500);
+    } catch {
+      setError("Failed to copy password. Please copy manually.");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    if (!capacityMatchesBatchTotal) {
+      setError(
+        `House capacity total (${totalHouseCapacity}) must equal batch total count (${intakeTotalCount}) before submission.`
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user?.id).single();
-
       const response = await fetch("/api/ceo/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, orgId: profile?.org_id || "" }),
+        body: JSON.stringify(formData),
       });
 
       const resData = await response.json();
@@ -182,11 +272,17 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl border border-sand-200">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl border border-sand-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         <form onSubmit={handleSubmit} className="p-8 space-y-8">
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold text-forest-900">Branch Setup Command Center</h2>
@@ -238,8 +334,8 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
                     value={formData.intakeBatch?.source}
                     onChange={(e) => updateIntake("source", e.target.value)}
                   >
-                    <option value="internal">Internal</option>
-                    <option value="external">External</option>
+                    <option value="internal_transfer">Internal Transfer</option>
+                    <option value="external_purchase">External Purchase</option>
                   </select>
                 </div>
                 <div className="space-y-2">
@@ -319,7 +415,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                       <div className="space-y-1">
                         <label className="text-xs text-forest-600">Farm Name</label>
                         <input
@@ -327,15 +423,6 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
                           className="w-full rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-forest-600"
                           value={farm.name}
                           onChange={(e) => updateFarm(farmIndex, "name", e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-forest-600">Location</label>
-                        <input
-                          required
-                          className="w-full rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-forest-600"
-                          value={farm.location}
-                          onChange={(e) => updateFarm(farmIndex, "location", e.target.value)}
                         />
                       </div>
                     </div>
@@ -422,6 +509,18 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
                         ))}
                       </div>
                     </div>
+                    <div className="rounded-lg border border-sand-200 bg-white px-4 py-3 text-xs">
+                      <p className="font-semibold text-forest-700">
+                        Capacity Check: Houses total = {totalHouseCapacity} | Batch total = {intakeTotalCount}
+                      </p>
+                      {!capacityMatchesBatchTotal ? (
+                        <p className="mt-1 text-red-600">
+                          Warning: house capacities must add up exactly to the batch total count before you can initialize.
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-forest-600">Looks good. Totals are aligned.</p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -430,7 +529,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
             {/* Manager Section */}
             <section className="space-y-4">
               <h3 className="text-lg font-semibold text-forest-800 border-b border-sand-200 pb-2">4. Farm Manager Credentials</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 max-w-xl">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-forest-700">Full Name</label>
                   <input
@@ -451,14 +550,54 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Password</label>
+                  <label className="text-sm font-medium text-forest-700">Phone</label>
                   <input
                     required
-                    type="password"
+                    type="tel"
                     className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.manager?.password}
-                    onChange={(e) => updateManager("password", e.target.value)}
+                    value={formData.manager?.phone ?? ""}
+                    onChange={(e) => updateManager("phone", e.target.value)}
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-forest-700">Password</label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        required
+                        type={showPassword ? "text" : "password"}
+                        className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 pr-11 outline-none focus:ring-2 focus:ring-forest-600"
+                        value={formData.manager?.password}
+                        onChange={(e) => updateManager("password", e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-forest-500 hover:bg-sand-100"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={generatePassword}
+                      className="inline-flex items-center justify-center rounded-lg border border-sand-200 bg-sand-50 p-2 text-forest-700 hover:bg-sand-100"
+                      aria-label="Generate password"
+                      title="Generate password"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={copyPassword}
+                      className="inline-flex items-center justify-center rounded-lg border border-sand-200 bg-sand-50 p-2 text-forest-700 hover:bg-sand-100"
+                      aria-label={copiedPassword ? "Password copied" : "Copy password"}
+                      title={copiedPassword ? "Copied" : "Copy password"}
+                    >
+                      {copiedPassword ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
@@ -474,7 +613,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !capacityMatchesBatchTotal}
               className="flex items-center gap-2 px-8 py-2 bg-forest-900 text-sand-50 rounded-lg font-medium hover:bg-forest-800 transition-colors disabled:opacity-50"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Initialize Branch Hierarchy"}
@@ -482,6 +621,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

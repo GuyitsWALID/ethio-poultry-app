@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { routeForRole } from "@/lib/roles";
+import { normalizeRole, routeForRole } from "@/lib/roles";
 import { createClient } from "@/utils/supabase/client";
 
 export default function SignInPage() {
@@ -37,13 +37,29 @@ export default function SignInPage() {
       data: { user },
     } = await supabase.auth.getUser();
 
+    if (!user) {
+      setError("Unable to resolve authenticated user. Please sign in again.");
+      setIsLoading(false);
+      return;
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
-      .eq("id", user?.id ?? "")
-      .single();
+      .eq("id", user.id)
+      .maybeSingle();
 
-    router.replace(routeForRole(profile?.role));
+    const resolvedRole = profile?.role ?? user.app_metadata?.role ?? user.user_metadata?.role;
+    const normalizedRole = normalizeRole(resolvedRole);
+
+    if (!resolvedRole) {
+      setError("Your account role could not be loaded. Please contact support before continuing.");
+      await supabase.auth.signOut();
+      setIsLoading(false);
+      return;
+    }
+
+    router.replace(routeForRole(normalizedRole));
   };
 
   return (
