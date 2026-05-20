@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
+import { createPortal } from "react-dom";
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import { createClient } from "@/utils/supabase/client";
@@ -11,7 +13,10 @@ type BatchRow = {
   placement_date: string;
   source: "internal_transfer" | "external_purchase";
   total_count: number;
-  flock_id: string;
+  flock_total: number;
+  total_chicks: number;
+  chicks_per_flock: number;
+  status: string;
 };
 
 export default function BatchesPage() {
@@ -20,6 +25,9 @@ export default function BatchesPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   const loadRows = async () => {
     const supabase = createClient();
@@ -31,7 +39,7 @@ export default function BatchesPage() {
 
     let q = supabase
       .from("batches")
-      .select("id, batch_code, placement_date, source, total_count, flock_id")
+      .select("id, batch_code, placement_date, source, total_count, status")
       .eq("org_id", profile.org_id)
       .order("placement_date", { ascending: false })
       .limit(50);
@@ -39,7 +47,141 @@ export default function BatchesPage() {
     if (scope.houseId) q = q.eq("house_id", scope.houseId);
     if (scope.flockId) q = q.eq("flock_id", scope.flockId);
     const { data } = await q;
-    setRows((data ?? []) as BatchRow[]);
+    const batchRows = (data ?? []) as Array<{
+      id: string;
+      batch_code: string;
+      placement_date: string;
+      source: "internal_transfer" | "external_purchase";
+      total_count: number;
+      status: string;
+    }>;
+
+    const batchCodes = Array.from(new Set(batchRows.map((row) => row.batch_code).filter(Boolean)));
+    const { data: intakeRows } = batchCodes.length
+      ? await supabase
+          .from("branch_intake_batches")
+          .select("id, batch_code")
+          .eq("org_id", profile.org_id)
+          .in("batch_code", batchCodes)
+      : { data: [] as Array<{ id: string; batch_code: string }> };
+
+    const intakeIdByBatchCode = new Map<string, string>();
+    (intakeRows ?? []).forEach((row) => {
+      intakeIdByBatchCode.set(row.batch_code, row.id);
+    });
+
+    const intakeIds = Array.from(new Set((intakeRows ?? []).map((row) => row.id)));
+    const { data: linkedFlocks } = intakeIds.length
+      ? await supabase
+          .from("flocks")
+          .select("intake_batch_id, current_count")
+          .eq("org_id", profile.org_id)
+          .in("intake_batch_id", intakeIds)
+      : { data: [] as Array<{ intake_batch_id: string | null; current_count: number | null }> };
+
+    const flockAgg = new Map<string, { flockTotal: number; chicksTotal: number }>();
+    (linkedFlocks ?? []).forEach((flock) => {
+      const intakeBatchId = flock.intake_batch_id;
+      if (!intakeBatchId) return;
+      const prev = flockAgg.get(intakeBatchId) ?? { flockTotal: 0, chicksTotal: 0 };
+      flockAgg.set(intakeBatchId, {
+        flockTotal: prev.flockTotal + 1,
+        chicksTotal: prev.chicksTotal + (flock.current_count ?? 0),
+      });
+    });
+
+    const mapped = batchRows.map((row) => {
+      const intakeBatchId = intakeIdByBatchCode.get(row.batch_code);
+      const agg = intakeBatchId ? flockAgg.get(intakeBatchId) : undefined;
+      const flockTotal = agg?.flockTotal ?? 0;
+      const chicksPerFlock = flockTotal > 0 ? Math.round((agg?.chicksTotal ?? 0) / flockTotal) : 0;
+      return {
+        ...row,
+        flock_total: flockTotal,
+        total_chicks: agg?.chicksTotal ?? 0,
+        chicks_per_flock: chicksPerFlock,
+      };
+    }) as BatchRow[];
+    setRows(mapped);
+  };
+
+  const onEditBatch = async (row: BatchRow) => {
+    const nextCode = window.prompt("Enter updated batch code:", row.batch_code)?.trim();
+    if (!nextCode || nextCode === row.batch_code) {
+      setMenuOpenId(null);
+      return;
+    }
+    setActionLoadingId(row.id);
+    setError(null);
+    setSuccess(null);
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from("batches")
+      .update({ batch_code: nextCode })
+      .eq("id", row.id);
+    if (updateError) {
+      setError(updateError.message);
+    } else {
+      setSuccess("Batch updated.");
+      await loadRows();
+    }
+    setActionLoadingId(null);
+    setMenuOpenId(null);
+  };
+
+  const onArchiveBatch = async (row: BatchRow) => {
+    if (row.status.toLowerCase() === "archived") {
+      setMenuOpenId(null);
+      return;
+    }
+    setActionLoadingId(row.id);
+    setError(null);
+    setSuccess(null);
+    const supabase = createClient();
+    const { error: archiveError } = await supabase
+      .from("batches")
+      .update({ status: "archived" })
+      .eq("id", row.id);
+    if (archiveError) {
+      setError(archiveError.message);
+    } else {
+      setSuccess("Batch archived.");
+      await loadRows();
+    }
+    setActionLoadingId(null);
+    setMenuOpenId(null);
+  };
+
+  const onDeleteBatch = async (row: BatchRow) => {
+    const ok = window.confirm(`Delete batch ${row.batch_code}? This cannot be undone.`);
+    if (!ok) {
+      setMenuOpenId(null);
+      return;
+    }
+    setActionLoadingId(row.id);
+    setError(null);
+    setSuccess(null);
+    const supabase = createClient();
+    const { error: deleteError } = await supabase.from("batches").delete().eq("id", row.id);
+    if (deleteError) {
+      setError(deleteError.message);
+    } else {
+      setSuccess("Batch deleted.");
+      await loadRows();
+    }
+    setActionLoadingId(null);
+    setMenuOpenId(null);
+  };
+
+  const toggleMenu = (rowId: string, button: HTMLButtonElement) => {
+    if (menuOpenId === rowId) {
+      setMenuOpenId(null);
+      setMenuPosition(null);
+      return;
+    }
+    const rect = button.getBoundingClientRect();
+    setMenuPosition({ top: rect.bottom + 6, left: rect.right - 128 });
+    setMenuOpenId(rowId);
   };
 
   useEffect(() => {
@@ -160,15 +302,17 @@ export default function BatchesPage() {
 
       <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-forest-900">Recent Batches</h3>
-        <div className="mt-3 overflow-x-auto">
+        <div className="mt-3">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-sand-200 text-left text-xs uppercase tracking-[0.1em] text-forest-600">
                 <th className="px-2 py-2">Batch</th>
                 <th className="px-2 py-2">Placement</th>
                 <th className="px-2 py-2">Source</th>
-                <th className="px-2 py-2">Total Count</th>
-                <th className="px-2 py-2">Flock ID</th>
+                <th className="px-2 py-2"># Flocks</th>
+                <th className="px-2 py-2">Total Chicks</th>
+                <th className="px-2 py-2">Chicks / Flock</th>
+                <th className="px-2 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -177,18 +321,70 @@ export default function BatchesPage() {
                   <td className="px-2 py-2 font-medium text-forest-900">{row.batch_code}</td>
                   <td className="px-2 py-2 text-forest-700">{row.placement_date}</td>
                   <td className="px-2 py-2 text-forest-700">{row.source}</td>
-                  <td className="px-2 py-2 text-forest-700">{row.total_count}</td>
-                  <td className="px-2 py-2 text-forest-700">{row.flock_id}</td>
+                  <td className="px-2 py-2 text-forest-700">{row.flock_total}</td>
+                  <td className="px-2 py-2 text-forest-700">{row.total_chicks}</td>
+                  <td className="px-2 py-2 text-forest-700">{row.chicks_per_flock}</td>
+                  <td className="px-2 py-2 text-right">
+                    <button
+                      type="button"
+                      className="rounded-md border border-sand-200 p-1.5 text-forest-700 hover:bg-sand-50"
+                      onClick={(e) => toggleMenu(row.id, e.currentTarget)}
+                      disabled={actionLoadingId === row.id}
+                      aria-label="Batch actions"
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-2 py-4 text-sm text-forest-600">No batches found for current scope.</td>
+                  <td colSpan={7} className="px-2 py-4 text-sm text-forest-600">No batches found for current scope.</td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
+        {menuOpenId && menuPosition
+          ? createPortal(
+              <div
+                className="fixed z-50 w-32 rounded-lg border border-sand-200 bg-white p-1 shadow-lg"
+                style={{ top: menuPosition.top, left: menuPosition.left }}
+              >
+                {(() => {
+                  const row = rows.find((r) => r.id === menuOpenId);
+                  if (!row) return null;
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        className="block w-full rounded px-2 py-1.5 text-left text-sm text-forest-800 hover:bg-sand-50"
+                        onClick={() => void onEditBatch(row)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="block w-full rounded px-2 py-1.5 text-left text-sm text-forest-800 hover:bg-sand-50 disabled:opacity-50"
+                        onClick={() => void onArchiveBatch(row)}
+                        disabled={row.status.toLowerCase() === "archived"}
+                      >
+                        Archive
+                      </button>
+                      <button
+                        type="button"
+                        className="block w-full rounded px-2 py-1.5 text-left text-sm text-red-600 hover:bg-red-50"
+                        onClick={() => void onDeleteBatch(row)}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>,
+              document.body
+            )
+          : null}
       </section>
     </div>
   );

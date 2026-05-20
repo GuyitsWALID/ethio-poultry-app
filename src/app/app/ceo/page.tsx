@@ -10,14 +10,6 @@ type Kpi = {
   value: string;
 };
 
-type FarmSummaryRow = {
-  farmId: string;
-  farmName: string;
-  housesCount: number;
-  flocksCount: number;
-  batchesCount: number;
-};
-
 export default function AdminOverview() {
   const { scope, setScope, branches, houses, flocks, batches, filteredFarms, filteredFlocks, filteredBatches } =
     useFarmScope();
@@ -28,6 +20,14 @@ export default function AdminOverview() {
     { label: "Active Farms", value: "-" },
   ]);
   const [kpiLoading, setKpiLoading] = useState(true);
+  const kpiScopeKey = `${scope.branchId}|${scope.farmId}|${scope.batchId}|${scope.flockId}|${filteredFarms.length}|${filteredFlocks.length}|${filteredBatches.length}`;
+  const liveBirdsValue = useMemo(
+    () => kpis.find((kpi) => kpi.label === "Live Birds")?.value ?? "0",
+    [kpis]
+  );
+  const activeBranchesCount = scope.branchId ? 1 : branches.length;
+  const activeFarmsCount = filteredFarms.length;
+  const activeFlocksCount = filteredFlocks.length;
 
   useEffect(() => {
     const loadKpis = async () => {
@@ -59,17 +59,16 @@ export default function AdminOverview() {
       });
       const scopedFlockIds = scopedFlocks.map((f) => f.id);
 
-      const applyScope = <T extends { eq: Function; in: Function }>(query: T) => {
+      const applyFlockScope = <T extends { eq: Function; in: Function }>(query: T) => {
         let next: any = query.eq("org_id", orgId);
-        if (scopedFarmIds.length > 0) next = next.in("farm_id", scopedFarmIds);
         if (scope.flockId) next = next.eq("flock_id", scope.flockId);
-        else if (scope.batchId && scopedFlockIds.length > 0) next = next.in("flock_id", scopedFlockIds);
+        else if (scopedFlockIds.length > 0) next = next.in("flock_id", scopedFlockIds);
         return next;
       };
 
       const [{ data: latestDailyRow }, { data: latestEggRow }, { count: openAlertsCount }, { count: activeFarmsCount }] =
         await Promise.all([
-          applyScope(
+          applyFlockScope(
             supabase
             .from("daily_farm_records")
             .select("record_date")
@@ -77,7 +76,7 @@ export default function AdminOverview() {
             .limit(1)
             .maybeSingle()
           ),
-          applyScope(
+          applyFlockScope(
             supabase
             .from("daily_egg_records")
             .select("record_date")
@@ -85,18 +84,13 @@ export default function AdminOverview() {
             .limit(1)
             .maybeSingle()
           ),
-          applyScope(
-            supabase
-              .from("alerts")
-              .select("id", { count: "exact", head: true })
-              .neq("status", "resolved")
-          ),
+          supabase.from("alerts").select("id", { count: "exact", head: true }).eq("org_id", orgId).neq("status", "resolved"),
           Promise.resolve({ count: scopedFarms.length }),
         ]);
 
       let liveBirdsTotal = 0;
       if (latestDailyRow?.record_date) {
-        const { data: liveRows } = await applyScope(
+        const { data: liveRows } = await applyFlockScope(
           supabase
             .from("daily_farm_records")
             .select("live_count")
@@ -107,7 +101,7 @@ export default function AdminOverview() {
 
       let eggOutputTotal = 0;
       if (latestEggRow?.record_date) {
-        const { data: eggRows } = await applyScope(
+        const { data: eggRows } = await applyFlockScope(
           supabase
             .from("daily_egg_records")
             .select("total_eggs")
@@ -126,22 +120,7 @@ export default function AdminOverview() {
     };
 
     void loadKpis();
-  }, [scope.branchId, scope.farmId, scope.batchId, scope.flockId, filteredFarms, filteredFlocks, filteredBatches]);
-
-  const farmSummaryRows = useMemo<FarmSummaryRow[]>(() => {
-    return filteredFarms.map((farm) => {
-      const housesCount = houses.filter((house) => house.farm_id === farm.id).length;
-      const flocksCount = flocks.filter((flock) => flock.farm_id === farm.id).length;
-      const batchesCount = batches.filter((batch) => batch.farm_id === farm.id).length;
-      return {
-        farmId: farm.id,
-        farmName: farm.name,
-        housesCount,
-        flocksCount,
-        batchesCount,
-      };
-    });
-  }, [batches, filteredFarms, flocks, houses]);
+  }, [kpiScopeKey]);
 
   return (
     <div className="space-y-6">
@@ -152,6 +131,29 @@ export default function AdminOverview() {
           Multi-farm visibility for profitability, production, and operational risk.
         </p>
       </div>
+
+      <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
+        <h3 className="text-base font-semibold text-forest-900">Overview Snapshot</h3>
+        <p className="mt-1 text-sm text-forest-600">Current scope summary before deep filtering.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <article className="rounded-2xl border border-sand-200 bg-sand-50/40 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-forest-500">Active Branches</p>
+            <p className="mt-2 text-3xl font-semibold text-forest-900">{activeBranchesCount}</p>
+          </article>
+          <article className="rounded-2xl border border-sand-200 bg-sand-50/40 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-forest-500">Active Farms</p>
+            <p className="mt-2 text-3xl font-semibold text-forest-900">{activeFarmsCount}</p>
+          </article>
+          <article className="rounded-2xl border border-sand-200 bg-sand-50/40 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-forest-500">Active Flocks</p>
+            <p className="mt-2 text-3xl font-semibold text-forest-900">{activeFlocksCount}</p>
+          </article>
+          <article className="rounded-2xl border border-sand-200 bg-sand-50/40 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-forest-500">Live Bird Count</p>
+            <p className="mt-2 text-3xl font-semibold text-forest-900">{kpiLoading ? "..." : liveBirdsValue}</p>
+          </article>
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -255,89 +257,7 @@ export default function AdminOverview() {
         </div>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((kpi) => (
-          <article key={kpi.label} className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
-            <p className="text-xs uppercase tracking-[0.2em] text-forest-500">{kpi.label}</p>
-            <p className="mt-3 text-3xl font-semibold text-forest-900">{kpiLoading ? "..." : kpi.value}</p>
-          </article>
-        ))}
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <section className="xl:col-span-2 rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-forest-900">Farm summary board</h3>
-          <p className="mt-1 text-sm text-forest-600">
-            Overview of farm structure and active entities.
-          </p>
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-sand-200 text-xs uppercase tracking-[0.15em] text-forest-500">
-                  <th className="px-2 py-2">Farm</th>
-                  <th className="px-2 py-2">Houses</th>
-                  <th className="px-2 py-2">Flocks</th>
-                  <th className="px-2 py-2">Batches</th>
-                </tr>
-              </thead>
-              <tbody>
-                {farmSummaryRows.length === 0 ? (
-                  <tr>
-                    <td className="px-2 py-3 text-forest-700" colSpan={4}>
-                      No farms available for the selected scope.
-                    </td>
-                  </tr>
-                ) : (
-                  farmSummaryRows.map((row) => (
-                    <tr key={row.farmId} className="border-b border-sand-100">
-                      <td className="px-2 py-3 font-medium text-forest-900">{row.farmName}</td>
-                      <td className="px-2 py-3 text-forest-700">{row.housesCount}</td>
-                      <td className="px-2 py-3 text-forest-700">{row.flocksCount}</td>
-                      <td className="px-2 py-3 text-forest-700">{row.batchesCount}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-forest-900">Scope status</h3>
-          <div className="mt-4 space-y-3 text-sm text-forest-700">
-            <p className="rounded-xl border border-sand-200 bg-sand-50 p-3">
-              Branches in scope: {scope.branchId ? 1 : branches.length}
-            </p>
-            <p className="rounded-xl border border-sand-200 bg-sand-50 p-3">
-              Farms in scope: {filteredFarms.length}
-            </p>
-            <p className="rounded-xl border border-sand-200 bg-sand-50 p-3">
-              Flocks in scope: {filteredFlocks.length}
-            </p>
-          </div>
-        </section>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-forest-900">Farm Operations Oversight</h3>
-          <p className="mt-2 text-sm text-forest-600">
-            Capacity utilization, daily records completion, and transfer status.
-          </p>
-        </section>
-        <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-forest-900">Veterinary Oversight</h3>
-          <p className="mt-2 text-sm text-forest-600">
-            Active clinical cases, vaccination execution, and biosecurity gaps.
-          </p>
-        </section>
-        <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-forest-900">Inventory Oversight</h3>
-          <p className="mt-2 text-sm text-forest-600">
-            Critical stock watchlist, procurement readiness, and warehouse flow.
-          </p>
-        </section>
-      </div>
+      
     </div>
   );
 }
