@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import { createClient } from "@/utils/supabase/client";
@@ -25,33 +25,20 @@ type FlockRow = {
 type IntakeBatchRef = { id: string; batch_code: string; source: string | null };
 
 export default function FlocksPage() {
-  const { scope, filteredFarms, filteredHouses, filteredFlocks, filteredBatches, farms, houses, role } = useFarmScope();
+  const { scope, loading: scopeLoading, filteredFlocks, filteredBatches, farms, houses } = useFarmScope();
   const [rows, setRows] = useState<FlockRow[]>([]);
   const [intakeBatches, setIntakeBatches] = useState<IntakeBatchRef[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Database["public"]["Enums"]["flock_status"]>("all");
   const [typeFilter, setTypeFilter] = useState<"all" | Database["public"]["Enums"]["flock_type"]>("all");
-  const [showModal, setShowModal] = useState(false);
-
-  const canCreate = role === "farm_manager";
-
-  const [formFarmId, setFormFarmId] = useState("");
-  const [formHouseId, setFormHouseId] = useState("");
-  const [formCode, setFormCode] = useState("");
-  const [formType, setFormType] = useState<Database["public"]["Enums"]["flock_type"]>("broiler");
-  const [formSource, setFormSource] = useState<Database["public"]["Enums"]["flock_source"]>("external_purchase");
-  const [formPlacementDate, setFormPlacementDate] = useState("");
-  const [formInitialCount, setFormInitialCount] = useState(0);
-  const [formCurrentCount, setFormCurrentCount] = useState(0);
-  const [formNotes, setFormNotes] = useState("");
 
   const farmNameMap = useMemo(() => new Map(farms.map((f) => [f.id, f.name])), [farms]);
   const houseNameMap = useMemo(() => new Map(houses.map((h) => [h.id, h.name])), [houses]);
 
   const loadData = async () => {
+    if (scopeLoading) return;
     setLoading(true);
     setError(null);
     const contextResponse = await fetch("/api/me/context", { method: "GET" });
@@ -72,12 +59,64 @@ export default function FlocksPage() {
 
     const supabase = createClient();
 
-    const scopedFlockIds = filteredFlocks
+    if (scope.batchId && filteredBatches.length === 0) {
+      // Scope context hasn't hydrated batch options yet; avoid rendering a misleading single-flock fallback.
+      setRows([]);
+      setIntakeBatches([]);
+      setLoading(false);
+      return;
+    }
+
+    const fallbackScopedFlockIds = filteredFlocks
       .filter((flock) => {
         if (!scope.batchId) return true;
         return filteredBatches.some((batch) => batch.id === scope.batchId && batch.flock_id === flock.id);
       })
       .map((flock) => flock.id);
+
+    let scopedFlockIds = fallbackScopedFlockIds;
+    if (scope.batchId) {
+      const selectedBatch = filteredBatches.find((batch) => batch.id === scope.batchId);
+      const selectedBatchCode = selectedBatch?.batch_code ?? null;
+      const expandedFlockIds = new Set<string>();
+
+      if (selectedBatchCode) {
+        const [{ data: sameCodeBatches }, { data: intakeBatchRows }] = await Promise.all([
+          supabase
+            .from("batches")
+            .select("flock_id")
+            .eq("org_id", orgId)
+            .eq("batch_code", selectedBatchCode),
+          // Supabase generated types in this repo don't yet include branch_intake_batches.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("branch_intake_batches")
+            .select("id")
+            .eq("org_id", orgId)
+            .eq("batch_code", selectedBatchCode),
+        ]);
+
+        (sameCodeBatches ?? []).forEach((row) => {
+          if (row.flock_id) expandedFlockIds.add(row.flock_id);
+        });
+
+        const intakeIds = (intakeBatchRows ?? []).map((row: { id: string }) => row.id);
+        if (intakeIds.length > 0) {
+          const { data: intakeLinkedFlocks } = await supabase
+            .from("flocks")
+            .select("id")
+            .eq("org_id", orgId)
+            .in("intake_batch_id", intakeIds);
+          (intakeLinkedFlocks ?? []).forEach((row) => {
+            if (row.id) expandedFlockIds.add(row.id);
+          });
+        }
+      }
+
+      if (expandedFlockIds.size > 0) {
+        scopedFlockIds = Array.from(expandedFlockIds);
+      }
+    }
 
     let flockQuery = supabase
       .from("flocks")
@@ -86,7 +125,9 @@ export default function FlocksPage() {
       .order("placement_date", { ascending: false })
       .limit(500);
 
-    if (scope.flockId) {
+    if (scope.batchId && scopedFlockIds.length > 0) {
+      flockQuery = flockQuery.in("id", scopedFlockIds);
+    } else if (scope.flockId) {
       flockQuery = flockQuery.eq("id", scope.flockId);
     } else if (scopedFlockIds.length > 0) {
       flockQuery = flockQuery.in("id", scopedFlockIds);
@@ -132,7 +173,7 @@ export default function FlocksPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope.branchId, scope.farmId, scope.houseId, scope.flockId, scope.batchId, filteredFlocks, filteredBatches]);
+  }, [scopeLoading, scope.branchId, scope.farmId, scope.houseId, scope.flockId, scope.batchId, filteredFlocks, filteredBatches]);
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -161,91 +202,17 @@ export default function FlocksPage() {
   const totalBirds = useMemo(() => filteredRows.reduce((sum, row) => sum + (row.current_count ?? 0), 0), [filteredRows]);
   const activeFlocks = useMemo(() => filteredRows.filter((row) => row.status === "active").length, [filteredRows]);
 
-  const resetForm = () => {
-    setFormFarmId("");
-    setFormHouseId("");
-    setFormCode("");
-    setFormType("broiler");
-    setFormSource("external_purchase");
-    setFormPlacementDate("");
-    setFormInitialCount(0);
-    setFormCurrentCount(0);
-    setFormNotes("");
-  };
-
-  const onCreateFlock = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!canCreate || saving) return;
-    if (!formFarmId || !formHouseId || !formCode.trim() || !formPlacementDate) {
-      setError("Farm, house, flock code, and placement date are required.");
-      return;
-    }
-
-    if (!filteredHouses.some((house) => house.id === formHouseId && house.farm_id === formFarmId)) {
-      setError("Selected house is not valid for selected farm.");
-      return;
-    }
-
-    const contextResponse = await fetch("/api/me/context", { method: "GET" });
-    if (!contextResponse.ok) {
-      setError("Unable to verify your organization context.");
-      return;
-    }
-    const context = await contextResponse.json();
-    const orgId = context?.orgId as string | null;
-    if (!orgId) {
-      setError("Organization context is missing.");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-
-    const supabase = createClient();
-    const { error: insertError } = await supabase.from("flocks").insert({
-      org_id: orgId,
-      farm_id: formFarmId,
-      house_id: formHouseId,
-      flock_code: formCode.trim(),
-      flock_type: formType,
-      source: formSource,
-      placement_date: formPlacementDate,
-      initial_count: formInitialCount,
-      current_count: formCurrentCount,
-      notes: formNotes.trim() || null,
-      status: "active",
-    });
-
-    if (insertError) {
-      setError(insertError.message);
-      setSaving(false);
-      return;
-    }
-
-    setSaving(false);
-    setShowModal(false);
-    resetForm();
-    await loadData();
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Flocks</p>
           <h2 className="text-2xl font-semibold text-forest-900">Flock registry</h2>
-          <p className="mt-2 text-sm text-forest-600">Track flock status, population, source, and linked intake batch.</p>
+          <p className="mt-2 text-sm text-forest-600">
+            Track flock status, population, source, and linked intake batch.
+            Flocks are created via farm/house expansion and batch workflows.
+          </p>
         </div>
-        {canCreate ? (
-          <button
-            className="inline-flex items-center gap-2 rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50"
-            type="button"
-            onClick={() => setShowModal(true)}
-          >
-            <Plus className="h-4 w-4" />
-            New flock
-          </button>
-        ) : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -368,145 +335,6 @@ export default function FlocksPage() {
 
         {error ? <p className="mt-4 text-sm text-ember-600">{error}</p> : null}
       </section>
-
-      {showModal && canCreate ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 p-4" onClick={() => setShowModal(false)}>
-          <div
-            className="w-full max-w-3xl rounded-2xl border border-sand-200 bg-white p-6 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3 className="text-xl font-semibold text-forest-900">Create New Flock</h3>
-            <form className="mt-5 grid gap-4 md:grid-cols-2" onSubmit={onCreateFlock}>
-              <label className="grid gap-1 text-sm text-forest-700">
-                Farm
-                <select
-                  className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                  value={formFarmId}
-                  onChange={(e) => {
-                    setFormFarmId(e.target.value);
-                    setFormHouseId("");
-                  }}
-                  required
-                >
-                  <option value="">Select farm</option>
-                  {filteredFarms.map((farm) => (
-                    <option key={farm.id} value={farm.id}>{farm.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm text-forest-700">
-                House
-                <select
-                  className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                  value={formHouseId}
-                  onChange={(e) => setFormHouseId(e.target.value)}
-                  required
-                >
-                  <option value="">Select house</option>
-                  {filteredHouses
-                    .filter((house) => !formFarmId || house.farm_id === formFarmId)
-                    .map((house) => (
-                      <option key={house.id} value={house.id}>{house.name}</option>
-                    ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm text-forest-700">
-                Flock code
-                <input
-                  className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                  value={formCode}
-                  onChange={(e) => setFormCode(e.target.value)}
-                  placeholder="FLK-0001"
-                  required
-                />
-              </label>
-              <label className="grid gap-1 text-sm text-forest-700">
-                Placement date
-                <input
-                  type="date"
-                  className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                  value={formPlacementDate}
-                  onChange={(e) => setFormPlacementDate(e.target.value)}
-                  required
-                />
-              </label>
-              <label className="grid gap-1 text-sm text-forest-700">
-                Flock type
-                <select
-                  className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                  value={formType}
-                  onChange={(e) => setFormType(e.target.value as Database["public"]["Enums"]["flock_type"])}
-                >
-                  <option value="broiler">Broiler</option>
-                  <option value="layer">Layer</option>
-                  <option value="rearing">Rearing</option>
-                  <option value="parent_stock">Parent Stock</option>
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm text-forest-700">
-                Source
-                <select
-                  className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                  value={formSource}
-                  onChange={(e) => setFormSource(e.target.value as Database["public"]["Enums"]["flock_source"])}
-                >
-                  <option value="external_purchase">External Purchase</option>
-                  <option value="internal_transfer">Internal Transfer</option>
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm text-forest-700">
-                Initial count
-                <input
-                  type="number"
-                  min={0}
-                  className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                  value={formInitialCount}
-                  onChange={(e) => setFormInitialCount(Number(e.target.value) || 0)}
-                />
-              </label>
-              <label className="grid gap-1 text-sm text-forest-700">
-                Current count
-                <input
-                  type="number"
-                  min={0}
-                  className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
-                  value={formCurrentCount}
-                  onChange={(e) => setFormCurrentCount(Number(e.target.value) || 0)}
-                />
-              </label>
-              <label className="grid gap-1 text-sm text-forest-700 md:col-span-2">
-                Notes
-                <textarea
-                  className="min-h-[90px] rounded-xl border border-sand-200 px-3 py-2 text-sm"
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                />
-              </label>
-
-              <div className="md:col-span-2 flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    resetForm();
-                  }}
-                  className="rounded-full border border-forest-900/20 px-5 py-2 text-sm text-forest-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-full bg-forest-900 px-5 py-2 text-sm text-sand-50 disabled:opacity-60"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Save flock
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -31,11 +31,23 @@ export async function GET() {
       .eq("id", user.id)
       .maybeSingle();
 
+    const getOrgName = async (orgId: string | null | undefined) => {
+      if (!orgId) return null;
+      const { data: org } = await supabaseAdmin
+        .from("organizations")
+        .select("name")
+        .eq("id", orgId)
+        .maybeSingle();
+      return org?.name ?? null;
+    };
+
     if (profile?.org_id) {
+      const orgName = await getOrgName(profile.org_id);
       return new Response(
         JSON.stringify({
           userId: user.id,
           orgId: profile.org_id,
+          orgName,
           role: normalizeRole(profile.role),
         }),
         { status: 200 }
@@ -52,16 +64,19 @@ export async function GET() {
       return new Response(JSON.stringify({ error: adminProfileError.message }), { status: 500 });
     }
 
+    const orgName = await getOrgName(adminProfile?.org_id);
     return new Response(
       JSON.stringify({
         userId: user.id,
         orgId: adminProfile?.org_id ?? null,
+        orgName,
         role: normalizeRole(adminProfile?.role),
       }),
       { status: 200 }
     );
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error?.message ?? "Unknown error" }), {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
     });
   }

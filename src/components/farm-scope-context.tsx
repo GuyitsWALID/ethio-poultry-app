@@ -36,6 +36,28 @@ type ScopeContextValue = {
 };
 
 const initialScope: ScopeState = { branchId: "", farmId: "", batchId: "", houseId: "", flockId: "" };
+const SCOPE_STORAGE_KEY = "app_scope_state_v1";
+
+function normalizeScope(scope: ScopeState, options: { branches: Branch[]; farms: Farm[]; houses: House[]; flocks: Flock[]; batches: Batch[] }): ScopeState {
+  const branchId = options.branches.some((b) => b.id === scope.branchId) ? scope.branchId : "";
+  const farmsInBranch = branchId ? options.farms.filter((f) => f.branch_id === branchId) : options.farms;
+  const farmId = farmsInBranch.some((f) => f.id === scope.farmId) ? scope.farmId : "";
+  const housesInScope = options.houses.filter((h) => (farmId ? h.farm_id === farmId : farmsInBranch.some((f) => f.id === h.farm_id)));
+  const houseId = housesInScope.some((h) => h.id === scope.houseId) ? scope.houseId : "";
+  const flocksInScope = options.flocks.filter(
+    (f) => (farmId ? f.farm_id === farmId : farmsInBranch.some((farm) => farm.id === f.farm_id)) && (!houseId || f.house_id === houseId)
+  );
+  const flockId = flocksInScope.some((f) => f.id === scope.flockId) ? scope.flockId : "";
+  const batchesInScope = options.batches.filter(
+    (b) =>
+      (!branchId || b.branch_id === branchId) &&
+      (!farmId || b.farm_id === farmId) &&
+      (!houseId || b.house_id === houseId) &&
+      (!flockId || b.flock_id === flockId)
+  );
+  const batchId = batchesInScope.some((b) => b.id === scope.batchId) ? scope.batchId : "";
+  return { branchId, farmId, houseId, flockId, batchId };
+}
 const ScopeContext = createContext<ScopeContextValue | null>(null);
 
 export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
@@ -50,7 +72,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
   const [batches, setBatches] = useState<Batch[]>([]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("farm_manager_scope");
+    const saved = localStorage.getItem(SCOPE_STORAGE_KEY);
     if (saved) {
       try {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -62,7 +84,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("farm_manager_scope", JSON.stringify(scope));
+    localStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify(scope));
   }, [scope]);
 
   useEffect(() => {
@@ -103,11 +125,17 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
         }
 
         const data = await response.json();
-        setBranches((data?.branches ?? []) as Branch[]);
-        setFarms((data?.farms ?? []) as Farm[]);
-        setHouses((data?.houses ?? []) as House[]);
-        setFlocks((data?.flocks ?? []) as Flock[]);
-        setBatches((data?.batches ?? []) as Batch[]);
+        const nextBranches = (data?.branches ?? []) as Branch[];
+        const nextFarms = (data?.farms ?? []) as Farm[];
+        const nextHouses = (data?.houses ?? []) as House[];
+        const nextFlocks = (data?.flocks ?? []) as Flock[];
+        const nextBatches = (data?.batches ?? []) as Batch[];
+        setBranches(nextBranches);
+        setFarms(nextFarms);
+        setHouses(nextHouses);
+        setFlocks(nextFlocks);
+        setBatches(nextBatches);
+        setScope((prev) => normalizeScope(prev, { branches: nextBranches, farms: nextFarms, houses: nextHouses, flocks: nextFlocks, batches: nextBatches }));
         setLoading(false);
         return;
       }
@@ -135,11 +163,16 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
       setFarms(effectiveFarms);
 
       const branchIds = Array.from(new Set(effectiveFarms.map((f) => f.branch_id)));
+      let nextBranches: Branch[] = [];
       if (branchIds.length) {
         const { data: branchRows } = await supabase.from("branches").select("id, name").in("id", branchIds).order("name");
-        setBranches((branchRows ?? []) as Branch[]);
+        nextBranches = (branchRows ?? []) as Branch[];
+        setBranches(nextBranches);
       }
 
+      let nextHouses: House[] = [];
+      let nextFlocks: Flock[] = [];
+      let nextBatches: Batch[] = [];
       if (effectiveFarms.length) {
         const farmIds = effectiveFarms.map((f) => f.id);
         const [{ data: houseRows }, { data: flockRows }, { data: batchRows }] = await Promise.all([
@@ -151,10 +184,22 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
             .in("farm_id", farmIds)
             .order("placement_date", { ascending: false }),
         ]);
-        setHouses((houseRows ?? []) as House[]);
-        setFlocks((flockRows ?? []) as Flock[]);
-        setBatches((batchRows ?? []) as Batch[]);
+        nextHouses = (houseRows ?? []) as House[];
+        nextFlocks = (flockRows ?? []) as Flock[];
+        nextBatches = (batchRows ?? []) as Batch[];
+        setHouses(nextHouses);
+        setFlocks(nextFlocks);
+        setBatches(nextBatches);
       }
+      setScope((prev) =>
+        normalizeScope(prev, {
+          branches: nextBranches,
+          farms: effectiveFarms,
+          houses: nextHouses,
+          flocks: nextFlocks,
+          batches: nextBatches,
+        })
+      );
 
       setLoading(false);
     };

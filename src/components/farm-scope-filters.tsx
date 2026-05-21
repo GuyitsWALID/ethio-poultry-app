@@ -5,7 +5,6 @@ import { useFarmScope } from "@/components/farm-scope-context";
 export function FarmScopeFilters() {
   const {
     role,
-    isFarmManager,
     loading,
     scope,
     setScope,
@@ -16,7 +15,7 @@ export function FarmScopeFilters() {
     filteredBatches,
   } = useFarmScope();
 
-  const showFilters = role === "ceo" || isFarmManager;
+  const showFilters = role === "ceo";
   if (!showFilters || loading) {
     return null;
   }

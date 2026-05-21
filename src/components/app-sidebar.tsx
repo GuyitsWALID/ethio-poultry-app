@@ -90,6 +90,7 @@ const farmManagerNavSections: NavSection[] = [
 
 export function AppSidebar() {
   const [role, setRole] = useState<AppRole>("ceo");
+  const [orgName, setOrgName] = useState("Organization");
   const [collapsed, setCollapsed] = useState(false);
   const [closedSections, setClosedSections] = useState<Record<string, boolean>>({});
 
@@ -103,6 +104,8 @@ export function AppSidebar() {
 
       const data = await response.json();
       setRole(normalizeRole(data?.role) as AppRole);
+      const nextOrgName = String(data?.orgName ?? "").trim();
+      if (nextOrgName) setOrgName(nextOrgName);
     };
 
     void resolveRole();
@@ -167,7 +170,7 @@ export function AppSidebar() {
           {!collapsed ? (
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-sand-200">
-                Ethiopoultry MS
+                {orgName}
               </p>
               
             </div>

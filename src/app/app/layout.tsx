@@ -2,6 +2,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { FarmScopeProvider } from "@/components/farm-scope-context";
 import { FarmScopeFilters } from "@/components/farm-scope-filters";
 import { HeaderAlertBell } from "@/components/header-alert-bell";
+import { HeaderOrgBrand } from "@/components/header-org-brand";
 import { SignOutButton } from "@/components/sign-out-button";
 
 export default function AppLayout({
@@ -21,9 +22,7 @@ export default function AppLayout({
                 <p className="text-xs uppercase tracking-[0.3em] text-forest-500">
                   Dashboard
                 </p>
-                <p className="text-lg font-semibold text-forest-900">
-                  Ethiopoultry Operations Hub
-                </p>
+                <HeaderOrgBrand />
               </div>
               <div className="flex items-center gap-3 text-sm text-forest-700">
                 <HeaderAlertBell />

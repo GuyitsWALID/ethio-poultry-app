@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import { createClient } from "@/utils/supabase/client";
@@ -12,9 +12,30 @@ type ScheduleItem = {
   farmId: string | null;
   houseId: string | null;
   flockId: string | null;
-  title: string;
+  scheduleReason: string | null;
   status: "scheduled" | "completed" | "missed" | "overdue";
   reason: string | null;
+};
+
+type EditScheduleState = {
+  open: boolean;
+  item: ScheduleItem | null;
+  farmId: string;
+  houseId: string;
+  flockId: string;
+  date: string;
+  cleanupType: string;
+  notes: string;
+  vaccineName: string;
+  dosage: string;
+  route: "water" | "injection" | "spray" | "eye_drop";
+};
+
+type ActionMenuState = {
+  open: boolean;
+  item: ScheduleItem | null;
+  top: number;
+  left: number;
 };
 
 export default function HealthPage() {
@@ -40,10 +61,38 @@ export default function HealthPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [actionMenu, setActionMenu] = useState<ActionMenuState>({
+    open: false,
+    item: null,
+    top: 0,
+    left: 0,
+  });
+  const [removeModal, setRemoveModal] = useState<{ open: boolean; item: ScheduleItem | null }>({
+    open: false,
+    item: null,
+  });
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const [editModal, setEditModal] = useState<EditScheduleState>({
+    open: false,
+    item: null,
+    farmId: "",
+    houseId: "",
+    flockId: "",
+    date: "",
+    cleanupType: "",
+    notes: "",
+    vaccineName: "",
+    dosage: "",
+    route: "water",
+  });
 
   const farmName = useMemo(() => filteredFarms.find((f) => f.id === healthFarmId)?.name ?? null, [filteredFarms, healthFarmId]);
   const houseName = useMemo(() => filteredHouses.find((h) => h.id === healthHouseId)?.name ?? null, [filteredHouses, healthHouseId]);
   const flockCode = useMemo(() => filteredFlocks.find((f) => f.id === healthFlockId)?.flock_code ?? null, [filteredFlocks, healthFlockId]);
+  const farmNameById = useMemo(() => new Map(filteredFarms.map((f) => [f.id, f.name])), [filteredFarms]);
+  const houseNameById = useMemo(() => new Map(filteredHouses.map((h) => [h.id, h.name])), [filteredHouses]);
+  const flockCodeById = useMemo(() => new Map(filteredFlocks.map((f) => [f.id, f.flock_code])), [filteredFlocks]);
+  const flockById = useMemo(() => new Map(filteredFlocks.map((f) => [f.id, f])), [filteredFlocks]);
   const batchCode = useMemo(
     () => batches.find((b) => b.id === scope.batchId)?.batch_code ?? null,
     [batches, scope.batchId]
@@ -52,6 +101,20 @@ export default function HealthPage() {
   const parseText = (value: FormDataEntryValue | null) => {
     const parsed = value?.toString().trim();
     return parsed && parsed.length > 0 ? parsed : null;
+  };
+  const parseCleanupReason = (value: string | null) => {
+    if (!value) return { cleanupType: "", notes: "" };
+    const [cleanupType, ...rest] = value.split("|").map((part) => part.trim());
+    return { cleanupType: cleanupType ?? "", notes: rest.join(" | ") };
+  };
+  const parseVaccinationReason = (value: string | null) => {
+    if (!value) return { vaccineName: "", dosage: "", route: "water" as const };
+    const parts = value.split("|").map((part) => part.trim());
+    const vaccineName = parts[0] ?? "";
+    const dosage = parts.find((part) => part.toLowerCase().startsWith("dosage:"))?.split(":")[1]?.trim() ?? "";
+    const routeText = parts.find((part) => part.toLowerCase().startsWith("route:"))?.split(":")[1]?.trim().toLowerCase() ?? "water";
+    const route = (["water", "injection", "spray", "eye_drop"].includes(routeText) ? routeText : "water") as EditScheduleState["route"];
+    return { vaccineName, dosage, route };
   };
 
   const loadSchedules = async () => {
@@ -133,7 +196,7 @@ export default function HealthPage() {
         farmId: target?.farmId ?? null,
         houseId: target?.houseId ?? null,
         flockId: target?.flockId ?? v.flock_id,
-        title: `Vaccination: ${v.vaccine_name} (${v.dosage}, ${v.route})`,
+        scheduleReason: `${v.vaccine_name}${v.dosage ? ` | Dosage: ${v.dosage}` : ""}${v.route ? ` | Route: ${v.route}` : ""}`,
         status:
           s?.status ??
           (new Date(v.event_date) < new Date(new Date().toISOString().slice(0, 10))
@@ -153,7 +216,7 @@ export default function HealthPage() {
         farmId: target?.farmId ?? c.farm_id,
         houseId: target?.houseId ?? null,
         flockId: target?.flockId ?? null,
-        title: c.notes?.startsWith("SCHEDULE|") ? c.notes.replace("SCHEDULE|", "") : "Farm cleanup",
+        scheduleReason: c.notes?.startsWith("SCHEDULE|") ? c.notes.replace("SCHEDULE|", "").trim() : "Farm cleanup",
         status:
           s?.status ??
           (c.completed_by
@@ -174,8 +237,32 @@ export default function HealthPage() {
     void loadSchedules();
   }, []);
 
+  useEffect(() => {
+    if (!actionMenu.open) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!actionMenuRef.current) return;
+      const target = event.target as Node;
+      if (!actionMenuRef.current.contains(target)) {
+        setActionMenu({ open: false, item: null, top: 0, left: 0 });
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActionMenu({ open: false, item: null, top: 0, left: 0 });
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [actionMenu.open]);
+
   const submitVaccinationSchedule = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     setError(null);
     setSuccess(null);
     setSaving(true);
@@ -199,7 +286,6 @@ export default function HealthPage() {
         .single();
       if (!profile?.org_id) throw new Error("Organization context not found.");
 
-      const formData = new FormData(event.currentTarget);
       const plannedDate = parseText(formData.get("planned_date"));
       const vaccineName = parseText(formData.get("vaccine_name"));
       const dosage = parseText(formData.get("dosage"));
@@ -237,7 +323,7 @@ export default function HealthPage() {
       }
 
       setShowVaccineModal(false);
-      event.currentTarget.reset();
+      form.reset();
       setSuccess("Vaccination schedule created.");
       await loadSchedules();
     } catch (e) {
@@ -249,6 +335,8 @@ export default function HealthPage() {
 
   const submitCleanupSchedule = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     setError(null);
     setSuccess(null);
     setSaving(true);
@@ -267,7 +355,6 @@ export default function HealthPage() {
         .single();
       if (!profile?.org_id) throw new Error("Organization context not found.");
 
-      const formData = new FormData(event.currentTarget);
       const date = parseText(formData.get("checklist_date"));
       const type = parseText(formData.get("cleanup_type"));
       if (!date || !type) throw new Error("Cleanup date and cleanup type are required.");
@@ -297,7 +384,7 @@ export default function HealthPage() {
       }
 
       setShowCleanupModal(false);
-      event.currentTarget.reset();
+      form.reset();
       setSuccess("Cleanup schedule created.");
       await loadSchedules();
     } catch (e) {
@@ -347,6 +434,168 @@ export default function HealthPage() {
       await loadSchedules();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update schedule status.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditModal = (item: ScheduleItem) => {
+    if (item.type === "cleanup") {
+      const parsed = parseCleanupReason(item.scheduleReason);
+      setEditModal({
+        open: true,
+        item,
+        farmId: item.farmId ?? "",
+        houseId: item.houseId ?? "",
+        flockId: item.flockId ?? "",
+        date: item.date,
+        cleanupType: parsed.cleanupType,
+        notes: parsed.notes,
+        vaccineName: "",
+        dosage: "",
+        route: "water",
+      });
+      return;
+    }
+    const parsed = parseVaccinationReason(item.scheduleReason);
+    setEditModal({
+      open: true,
+      item,
+      farmId: item.farmId ?? "",
+      houseId: item.houseId ?? "",
+      flockId: item.flockId ?? "",
+      date: item.date,
+      cleanupType: "",
+      notes: "",
+      vaccineName: parsed.vaccineName,
+      dosage: parsed.dosage,
+      route: parsed.route,
+    });
+  };
+
+  const deleteSchedule = async (item: ScheduleItem) => {
+    setError(null);
+    setSuccess(null);
+    setSaving(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Unable to verify your session.");
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+      if (!profile?.org_id) throw new Error("Organization context not found.");
+
+      if (item.type === "cleanup") {
+        const { error: delError } = await supabase.from("biosecurity_checks").delete().eq("id", item.id);
+        if (delError) throw new Error(delError.message);
+      } else {
+        const { error: delError } = await supabase.from("vaccination_events").delete().eq("id", item.id);
+        if (delError) throw new Error(delError.message);
+      }
+
+      const { error: deleteTargetError } = await supabase
+        .from("health_events")
+        .delete()
+        .eq("org_id", profile.org_id)
+        .like("description", `SCHEDULE_TARGET|${item.id}|%`);
+      if (deleteTargetError) throw new Error(deleteTargetError.message);
+      const { error: deleteStatusError } = await supabase
+        .from("health_events")
+        .delete()
+        .eq("org_id", profile.org_id)
+        .like("description", `SCHEDULE_STATUS|${item.id}|%`);
+      if (deleteStatusError) throw new Error(deleteStatusError.message);
+
+      setSuccess("Schedule removed.");
+      await loadSchedules();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove schedule.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveScheduleEdit = async () => {
+    if (!editModal.item) return;
+    setError(null);
+    setSuccess(null);
+    setSaving(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Unable to verify your session.");
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+      if (!profile?.org_id) throw new Error("Organization context not found.");
+
+      if (!editModal.date) throw new Error("Date is required.");
+      if (!editModal.farmId) throw new Error("Farm is required.");
+      if (editModal.item.type === "vaccination" && (!editModal.houseId || !editModal.flockId)) {
+        throw new Error("House and flock are required for vaccination.");
+      }
+
+      if (editModal.item.type === "cleanup") {
+        if (!editModal.cleanupType.trim()) throw new Error("Cleanup type is required.");
+        const scheduleNotes = `SCHEDULE|${editModal.cleanupType.trim()}${editModal.notes.trim() ? ` | ${editModal.notes.trim()}` : ""}`;
+        const { error: updateError } = await supabase
+          .from("biosecurity_checks")
+          .update({ checklist_date: editModal.date, notes: scheduleNotes, farm_id: editModal.farmId })
+          .eq("id", editModal.item.id);
+        if (updateError) throw new Error(updateError.message);
+      } else {
+        if (!editModal.vaccineName.trim() || !editModal.dosage.trim()) {
+          throw new Error("Vaccine name and dosage are required.");
+        }
+        const { error: updateError } = await supabase
+          .from("vaccination_events")
+          .update({
+            event_date: editModal.date,
+            flock_id: editModal.flockId,
+            vaccine_name: editModal.vaccineName.trim(),
+            dosage: editModal.dosage.trim(),
+            route: editModal.route,
+          })
+          .eq("id", editModal.item.id);
+        if (updateError) throw new Error(updateError.message);
+      }
+
+      const targetDescription = `SCHEDULE_TARGET|${editModal.item.id}|${editModal.farmId}|${editModal.houseId || ""}|${editModal.flockId || ""}`;
+      const { error: targetUpdateError } = await supabase
+        .from("health_events")
+        .update({
+          event_date: editModal.date,
+          description: targetDescription,
+          flock_id: editModal.flockId || null,
+        })
+        .eq("org_id", profile.org_id)
+        .like("description", `SCHEDULE_TARGET|${editModal.item.id}|%`);
+      if (targetUpdateError) throw new Error(targetUpdateError.message);
+      const { error: statusUpdateError } = await supabase
+        .from("health_events")
+        .update({ event_date: editModal.date, flock_id: editModal.flockId || null })
+        .eq("org_id", profile.org_id)
+        .like("description", `SCHEDULE_STATUS|${editModal.item.id}|%`);
+      if (statusUpdateError) throw new Error(statusUpdateError.message);
+
+      setEditModal({
+        open: false,
+        item: null,
+        farmId: "",
+        houseId: "",
+        flockId: "",
+        date: "",
+        cleanupType: "",
+        notes: "",
+        vaccineName: "",
+        dosage: "",
+        route: "water",
+      });
+      setSuccess("Schedule updated.");
+      await loadSchedules();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update schedule.");
     } finally {
       setSaving(false);
     }
@@ -468,7 +717,6 @@ export default function HealthPage() {
               <tr className="border-b border-sand-200 text-left text-xs uppercase tracking-[0.12em] text-forest-600">
                 <th className="px-2 py-2">Date</th>
                 <th className="px-2 py-2">Type</th>
-                <th className="px-2 py-2">Title</th>
                 <th className="px-2 py-2">Farm</th>
                 <th className="px-2 py-2">House</th>
                 <th className="px-2 py-2">Flock</th>
@@ -480,29 +728,32 @@ export default function HealthPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-2 py-4 text-forest-600">Loading schedules...</td>
+                  <td colSpan={8} className="px-2 py-4 text-forest-600">Loading schedules...</td>
                 </tr>
               ) : healthFilteredSchedules.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-2 py-4 text-forest-600">No schedules found.</td>
+                  <td colSpan={8} className="px-2 py-4 text-forest-600">No schedules found.</td>
                 </tr>
               ) : (
                 healthFilteredSchedules.map((item) => (
                   <tr key={`${item.type}-${item.id}`} className="border-b border-sand-100">
                     <td className="px-2 py-2">{item.date}</td>
                     <td className="px-2 py-2 capitalize">{item.type}</td>
-                    <td className="px-2 py-2">{item.title}</td>
-                    <td className="px-2 py-2">{item.farmId ?? "-"}</td>
-                    <td className="px-2 py-2">{item.houseId ?? "-"}</td>
-                    <td className="px-2 py-2">{item.flockId ?? "-"}</td>
+                    <td className="px-2 py-2">
+                      {item.farmId ? (farmNameById.get(item.farmId) ?? flockById.get(item.flockId ?? "")?.farm_id ?? item.farmId) : "-"}
+                    </td>
+                    <td className="px-2 py-2">
+                      {item.houseId ? (houseNameById.get(item.houseId) ?? flockById.get(item.flockId ?? "")?.house_id ?? item.houseId) : "-"}
+                    </td>
+                    <td className="px-2 py-2">{item.flockId ? (flockCodeById.get(item.flockId) ?? item.flockId) : "-"}</td>
                     <td className="px-2 py-2">
                       <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${badgeClass(item.status)}`}>
                         {item.status}
                       </span>
                     </td>
-                    <td className="px-2 py-2">{item.reason ?? "-"}</td>
+                    <td className="px-2 py-2">{item.reason ?? item.scheduleReason ?? "-"}</td>
                     <td className="px-2 py-2">
-                      <div className="flex gap-2">
+                      <div className="relative flex gap-2">
                         <button
                           type="button"
                           className="rounded-full border border-leaf-500/40 px-2 py-1 text-xs text-leaf-600 disabled:opacity-50"
@@ -511,14 +762,38 @@ export default function HealthPage() {
                         >
                           ✓
                         </button>
-                        <button
-                          type="button"
-                          className="rounded-full border border-ember-500/40 px-2 py-1 text-xs text-ember-600 disabled:opacity-50"
-                          disabled={saving || item.status === "missed"}
-                          onClick={() => setMissModal({ open: true, item })}
-                        >
-                          ✕
-                        </button>
+                        {item.status !== "completed" ? (
+                          <>
+                            <button
+                              type="button"
+                              className="rounded-full border border-ember-500/40 px-2 py-1 text-xs text-ember-600 disabled:opacity-50"
+                              disabled={saving || item.status === "missed"}
+                              onClick={() => setMissModal({ open: true, item })}
+                            >
+                              ✕
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-full border border-sand-300 px-2 py-1 text-xs text-forest-700"
+                              onClick={(e) => {
+                                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                const isSameItemOpen = actionMenu.open && actionMenu.item?.id === item.id;
+                                if (isSameItemOpen) {
+                                  setActionMenu({ open: false, item: null, top: 0, left: 0 });
+                                  return;
+                                }
+                                setActionMenu({
+                                  open: true,
+                                  item,
+                                  top: rect.bottom + 6,
+                                  left: rect.right - 140,
+                                });
+                              }}
+                            >
+                              ⋯
+                            </button>
+                          </>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -586,8 +861,18 @@ export default function HealthPage() {
               <input name="planned_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
               <input name="vaccine_name" placeholder="Vaccine name" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
               <input name="dosage" placeholder="Dosage" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-              <input name="route" placeholder="Route (water/injection/spray/eye_drop)" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-              <input name="expiry_date" type="date" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              <select
+                name="route"
+                required
+                defaultValue=""
+                className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+              >
+                <option value="" disabled>Select route</option>
+                <option value="water">Water</option>
+                <option value="injection">Injection</option>
+                <option value="spray">Spray</option>
+                <option value="eye_drop">Eye Drop</option>
+              </select>
               <button type="submit" disabled={saving} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
                 {saving ? "Saving..." : "Create Schedule"}
               </button>
@@ -704,6 +989,217 @@ export default function HealthPage() {
                 }}
               >
                 Mark Missed
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {actionMenu.open && actionMenu.item ? (
+        <div
+          ref={actionMenuRef}
+          className="fixed z-[70] min-w-36 rounded-xl border border-sand-200 bg-white p-1 shadow-lg"
+          style={{ top: actionMenu.top, left: Math.max(12, actionMenu.left) }}
+        >
+          <button
+            type="button"
+            className="block w-full rounded-lg px-3 py-2 text-left text-xs text-forest-700 hover:bg-sand-50"
+            onClick={() => {
+              const selected = actionMenu.item;
+              setActionMenu({ open: false, item: null, top: 0, left: 0 });
+              if (selected) openEditModal(selected);
+            }}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className="block w-full rounded-lg px-3 py-2 text-left text-xs text-ember-600 hover:bg-ember-50"
+            onClick={() => {
+              const selected = actionMenu.item;
+              setActionMenu({ open: false, item: null, top: 0, left: 0 });
+              setRemoveModal({ open: true, item: selected });
+            }}
+          >
+            Remove
+          </button>
+        </div>
+      ) : null}
+
+      {removeModal.open && removeModal.item ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-forest-900/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6">
+            <h4 className="text-lg font-semibold text-forest-900">Remove Schedule</h4>
+            <p className="mt-2 text-sm text-forest-700">
+              Are you sure you want to remove this {removeModal.item.type} schedule? This action cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
+                onClick={() => setRemoveModal({ open: false, item: null })}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-full bg-ember-500 px-4 py-2 text-sm text-white disabled:opacity-60"
+                disabled={saving}
+                onClick={async () => {
+                  if (!removeModal.item) return;
+                  const target = removeModal.item;
+                  setRemoveModal({ open: false, item: null });
+                  await deleteSchedule(target);
+                }}
+              >
+                {saving ? "Removing..." : "Remove"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editModal.open && editModal.item ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-semibold text-forest-900">Edit Schedule</h4>
+              <button
+                type="button"
+                className="text-sm text-forest-600"
+                onClick={() =>
+                  setEditModal({
+                    open: false,
+                    item: null,
+                    farmId: "",
+                    houseId: "",
+                    flockId: "",
+                    date: "",
+                    cleanupType: "",
+                    notes: "",
+                    vaccineName: "",
+                    dosage: "",
+                    route: "water",
+                  })
+                }
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <select
+                value={editModal.farmId}
+                onChange={(e) =>
+                  setEditModal((prev) => ({ ...prev, farmId: e.target.value, houseId: "", flockId: "" }))
+                }
+                className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+              >
+                <option value="">Select farm</option>
+                {filteredFarms.map((f) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+              <select
+                value={editModal.houseId}
+                onChange={(e) => setEditModal((prev) => ({ ...prev, houseId: e.target.value, flockId: "" }))}
+                className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+              >
+                <option value="">Select house {editModal.item.type === "cleanup" ? "(optional)" : ""}</option>
+                {filteredHouses
+                  .filter((h) => !editModal.farmId || h.farm_id === editModal.farmId)
+                  .map((h) => (
+                    <option key={h.id} value={h.id}>{h.name}</option>
+                  ))}
+              </select>
+              <select
+                value={editModal.flockId}
+                onChange={(e) => setEditModal((prev) => ({ ...prev, flockId: e.target.value }))}
+                className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+              >
+                <option value="">Select flock {editModal.item.type === "cleanup" ? "(optional)" : ""}</option>
+                {filteredFlocks
+                  .filter((f) => (!editModal.farmId || f.farm_id === editModal.farmId) && (!editModal.houseId || f.house_id === editModal.houseId))
+                  .map((f) => (
+                    <option key={f.id} value={f.id}>{f.flock_code}</option>
+                  ))}
+              </select>
+              <input
+                type="date"
+                value={editModal.date}
+                onChange={(e) => setEditModal((prev) => ({ ...prev, date: e.target.value }))}
+                className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+              />
+              {editModal.item.type === "cleanup" ? (
+                <>
+                  <input
+                    value={editModal.cleanupType}
+                    onChange={(e) => setEditModal((prev) => ({ ...prev, cleanupType: e.target.value }))}
+                    placeholder="Cleanup type"
+                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                  />
+                  <textarea
+                    value={editModal.notes}
+                    onChange={(e) => setEditModal((prev) => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Notes"
+                    className="min-h-[90px] rounded-xl border border-sand-200 px-3 py-2 text-sm"
+                  />
+                </>
+              ) : (
+                <>
+                  <input
+                    value={editModal.vaccineName}
+                    onChange={(e) => setEditModal((prev) => ({ ...prev, vaccineName: e.target.value }))}
+                    placeholder="Vaccine name"
+                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                  />
+                  <input
+                    value={editModal.dosage}
+                    onChange={(e) => setEditModal((prev) => ({ ...prev, dosage: e.target.value }))}
+                    placeholder="Dosage"
+                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                  />
+                  <select
+                    value={editModal.route}
+                    onChange={(e) => setEditModal((prev) => ({ ...prev, route: e.target.value as EditScheduleState["route"] }))}
+                    className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                  >
+                    <option value="water">Water</option>
+                    <option value="injection">Injection</option>
+                    <option value="spray">Spray</option>
+                    <option value="eye_drop">Eye Drop</option>
+                  </select>
+                </>
+              )}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
+                onClick={() =>
+                  setEditModal({
+                    open: false,
+                    item: null,
+                    farmId: "",
+                    houseId: "",
+                    flockId: "",
+                    date: "",
+                    cleanupType: "",
+                    notes: "",
+                    vaccineName: "",
+                    dosage: "",
+                    route: "water",
+                  })
+                }
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60"
+                disabled={saving}
+                onClick={saveScheduleEdit}
+              >
+                {saving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
