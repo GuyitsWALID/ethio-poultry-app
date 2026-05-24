@@ -12,7 +12,7 @@ const roleRouteMap: Record<AppRole, string> = {
 };
 
 const aliasMap: Record<string, AppRole> = {
-  manager: "ceo",
+  manager: "farm_manager",
   ceo: "ceo",
   super_admin: "super_admin",
   system_admin: "system_admin",
