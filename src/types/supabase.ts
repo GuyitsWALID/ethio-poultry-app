@@ -626,60 +626,93 @@ export type Database = {
       }
       daily_farm_records: {
         Row: {
+          broken_eggs: number | null
           created_at: string
           culls: number | null
           deaths: number | null
           deaths_cause: string | null
+          feed_given_kg: number | null
+          feed_leftover_kg: number | null
           feed_consumed_kg: number | null
           feed_type: string | null
+          flock_age_days: number | null
+          flock_age_weeks: number | null
           flock_id: string
           humidity_pct: number | null
           id: string
           live_count: number | null
+          medication_vitamins: string | null
+          mortality_percentage: number | null
+          normal_eggs: number | null
           org_id: string
+          production_percentage: number | null
           record_date: string
           recorded_by: string | null
           synced: boolean
           temperature_c: number | null
+          total_eggs: number | null
           updated_at: string
+          vaccination_status: string | null
           water_liters: number | null
         }
         Insert: {
+          broken_eggs?: number | null
           created_at?: string
           culls?: number | null
           deaths?: number | null
           deaths_cause?: string | null
+          feed_given_kg?: number | null
+          feed_leftover_kg?: number | null
           feed_consumed_kg?: number | null
           feed_type?: string | null
+          flock_age_days?: number | null
+          flock_age_weeks?: number | null
           flock_id: string
           humidity_pct?: number | null
           id?: string
           live_count?: number | null
+          medication_vitamins?: string | null
+          mortality_percentage?: number | null
+          normal_eggs?: number | null
           org_id: string
+          production_percentage?: number | null
           record_date: string
           recorded_by?: string | null
           synced?: boolean
           temperature_c?: number | null
+          total_eggs?: number | null
           updated_at?: string
+          vaccination_status?: string | null
           water_liters?: number | null
         }
         Update: {
+          broken_eggs?: number | null
           created_at?: string
           culls?: number | null
           deaths?: number | null
           deaths_cause?: string | null
+          feed_given_kg?: number | null
+          feed_leftover_kg?: number | null
           feed_consumed_kg?: number | null
           feed_type?: string | null
+          flock_age_days?: number | null
+          flock_age_weeks?: number | null
           flock_id?: string
           humidity_pct?: number | null
           id?: string
           live_count?: number | null
+          medication_vitamins?: string | null
+          mortality_percentage?: number | null
+          normal_eggs?: number | null
           org_id?: string
+          production_percentage?: number | null
           record_date?: string
           recorded_by?: string | null
           synced?: boolean
           temperature_c?: number | null
+          total_eggs?: number | null
           updated_at?: string
+          vaccination_status?: string | null
           water_liters?: number | null
         }
         Relationships: [
@@ -699,6 +732,150 @@ export type Database = {
           },
           {
             foreignKeyName: "daily_farm_records_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feeding_schedules: {
+        Row: {
+          batch_id: string
+          created_at: string
+          created_by: string | null
+          feed_type: string
+          id: string
+          notes: string | null
+          org_id: string
+          planned_feed_kg: number
+          schedule_date: string
+          target_grams_per_bird: number | null
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          created_by?: string | null
+          feed_type: string
+          id?: string
+          notes?: string | null
+          org_id: string
+          planned_feed_kg: number
+          schedule_date: string
+          target_grams_per_bird?: number | null
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          created_by?: string | null
+          feed_type?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          planned_feed_kg?: number
+          schedule_date?: string
+          target_grams_per_bird?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feeding_schedules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_schedules_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_schedules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feeding_session_records: {
+        Row: {
+          actual_feed_kg: number | null
+          batch_id: string
+          created_at: string
+          feeders_count: number
+          flock_id: string
+          id: string
+          notes: string | null
+          org_id: string
+          planned_feed_kg: number
+          record_date: string
+          recorded_by: string | null
+          session_name: string
+          session_time: string | null
+          updated_at: string
+        }
+        Insert: {
+          actual_feed_kg?: number | null
+          batch_id: string
+          created_at?: string
+          feeders_count: number
+          flock_id: string
+          id?: string
+          notes?: string | null
+          org_id: string
+          planned_feed_kg: number
+          record_date: string
+          recorded_by?: string | null
+          session_name: string
+          session_time?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actual_feed_kg?: number | null
+          batch_id?: string
+          created_at?: string
+          feeders_count?: number
+          flock_id?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          planned_feed_kg?: number
+          record_date?: string
+          recorded_by?: string | null
+          session_name?: string
+          session_time?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feeding_session_records_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_session_records_flock_id_fkey"
+            columns: ["flock_id"]
+            isOneToOne: false
+            referencedRelation: "flocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_session_records_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_session_records_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
