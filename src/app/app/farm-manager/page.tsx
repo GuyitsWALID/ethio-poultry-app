@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { FarmKpiDashboard } from "@/components/farm-kpi-dashboard";
 import { useFarmScope } from "@/components/farm-scope-context";
 import { createClient } from "@/utils/supabase/client";
 
@@ -20,27 +21,15 @@ type ScheduleStatus = {
   flock_code: string | null;
 };
 
-type OperationsCard = {
-  label: string;
-  value: string;
-  note: string;
-};
-
 export default function FarmManagerDashboardPage() {
-  const { scope, setScope, filteredFarms, filteredHouses, filteredFlocks, filteredBatches } = useFarmScope();
-  const [operationsCards, setOperationsCards] = useState<OperationsCard[]>([
-    { label: "Active Farms", value: "-", note: "Current farm scope" },
-    { label: "Active Houses", value: "-", note: "Houses with active flocks" },
-    { label: "Active Flocks", value: "-", note: "Status = active" },
-    { label: "Total Daily Live Count", value: "-", note: "Latest recorded date" },
-  ]);
+  const { scope, filteredFlocks, filteredBatches } = useFarmScope();
   const [scheduleRows, setScheduleRows] = useState<ScheduleStatus[]>([]);
   const [loadingSchedules, setLoadingSchedules] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
   const [missModal, setMissModal] = useState<{ open: boolean; row: ScheduleStatus | null }>({ open: false, row: null });
   const [missReason, setMissReason] = useState("");
 
-  const scopeKey = `${scope.farmId}|${scope.houseId}|${scope.flockId}|${scope.batchId}|${filteredFarms.length}|${filteredHouses.length}|${filteredFlocks.length}|${filteredBatches.length}`;
+  const scopeKey = `${scope.farmId}|${scope.houseId}|${scope.flockId}|${scope.batchId}|${filteredFlocks.length}|${filteredBatches.length}`;
   const badgeClass = (status: ScheduleStatus["status"]) => {
     if (status === "completed") return "bg-leaf-500/15 text-leaf-600 border border-leaf-500/30";
     if (status === "missed") return "bg-ember-500/15 text-ember-600 border border-ember-500/30";
@@ -106,45 +95,6 @@ export default function FarmManagerDashboardPage() {
           return filteredBatches.some((batch) => batch.id === scope.batchId && batch.flock_id === flock.id);
         })
         .map((flock) => flock.id);
-
-      const [farmsCountRes, activeFlocksRes] = await Promise.all([
-        scope.farmId
-          ? Promise.resolve({ count: filteredFarms.length })
-          : supabase.from("farms").select("id", { count: "exact", head: true }).eq("org_id", orgId),
-        scope.flockId
-          ? supabase.from("flocks").select("id, house_id, current_count").eq("org_id", orgId).eq("status", "active").eq("id", scope.flockId)
-          : scopedFlockIds.length > 0
-            ? supabase.from("flocks").select("id, house_id, current_count").eq("org_id", orgId).eq("status", "active").in("id", scopedFlockIds)
-            : scope.farmId || scope.houseId || scope.batchId
-              ? Promise.resolve({ data: [] as Array<{ id: string; house_id: string | null; current_count: number }> })
-              : supabase.from("flocks").select("id, house_id, current_count").eq("org_id", orgId).eq("status", "active"),
-      ]);
-
-      const activeFlocks = activeFlocksRes.data ?? [];
-      const activeHousesCount = new Set(activeFlocks.map((row) => row.house_id).filter(Boolean)).size;
-      const totalLiveCount = activeFlocks.reduce((acc, row) => acc + (row.current_count ?? 0), 0);
-      setOperationsCards([
-        {
-          label: "Active Farms",
-          value: (farmsCountRes.count ?? filteredFarms.length ?? 0).toLocaleString(),
-          note: "Current farm scope",
-        },
-        {
-          label: "Active Houses",
-          value: activeHousesCount.toLocaleString(),
-          note: "Houses with active flocks",
-        },
-        {
-          label: "Active Flocks",
-          value: activeFlocks.length.toLocaleString(),
-          note: "Status = active",
-        },
-        {
-          label: "Total Daily Live Count",
-          value: totalLiveCount.toLocaleString(),
-          note: "Current active flock setup count",
-        },
-      ]);
 
       let vaccineQuery = supabase
         .from("vaccination_events")
@@ -302,98 +252,7 @@ export default function FarmManagerDashboardPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-forest-900">Operations Scope</h3>
-            <p className="text-sm text-forest-600">Filter by farm, batch, house, and flock within your assigned branch.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setScope((prev) => ({ ...prev, farmId: "", batchId: "", houseId: "", flockId: "" }))}
-            className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
-          >
-            Reset filters
-          </button>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <label className="grid gap-1 text-xs text-forest-600">
-            Farm
-            <select
-              className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
-              value={scope.farmId}
-              onChange={(e) =>
-                setScope((prev) => ({
-                  ...prev,
-                  farmId: e.target.value,
-                  batchId: "",
-                  houseId: "",
-                  flockId: "",
-                }))
-              }
-            >
-              <option value="">All Farms</option>
-              {filteredFarms.map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs text-forest-600">
-            Batch
-            <select
-              className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
-              value={scope.batchId}
-              onChange={(e) => setScope((prev) => ({ ...prev, batchId: e.target.value, flockId: "" }))}
-            >
-              <option value="">All Batches</option>
-              {filteredBatches.map((b) => (
-                <option key={b.id} value={b.id}>{b.batch_code}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs text-forest-600">
-            House
-            <select
-              className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
-              value={scope.houseId}
-              onChange={(e) => setScope((prev) => ({ ...prev, houseId: e.target.value, flockId: "" }))}
-            >
-              <option value="">All Houses</option>
-              {filteredHouses.map((h) => (
-                <option key={h.id} value={h.id}>{h.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs text-forest-600">
-            Flock
-            <select
-              className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
-              value={scope.flockId}
-              onChange={(e) => setScope((prev) => ({ ...prev, flockId: e.target.value }))}
-            >
-              <option value="">All Flocks</option>
-              {filteredFlocks
-                .filter((f) => {
-                  if (!scope.batchId) return true;
-                  return filteredBatches.some((b) => b.id === scope.batchId && b.flock_id === f.id);
-                })
-                .map((f) => (
-                  <option key={f.id} value={f.id}>{f.flock_code}</option>
-                ))}
-            </select>
-          </label>
-        </div>
-      </section>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {operationsCards.map((card) => (
-          <article key={card.label} className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
-            <p className="text-xs uppercase tracking-[0.2em] text-forest-500">{card.label}</p>
-            <p className="mt-3 text-3xl font-semibold text-forest-900">{card.value}</p>
-            <p className="mt-2 text-xs text-forest-600">{card.note}</p>
-          </article>
-        ))}
-      </div>
+      <FarmKpiDashboard mode="operations" />
 
       <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-forest-900">Schedule Compliance</h3>
