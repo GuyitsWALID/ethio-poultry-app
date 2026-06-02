@@ -11,7 +11,7 @@ type Kpi = {
 };
 
 export default function AdminOverview() {
-  const { scope, setScope, branches, houses, flocks, batches, filteredFarms, filteredFlocks, filteredBatches } =
+  const { scope, setScope, branches, filteredFarms, filteredFlocks, filteredBatches } =
     useFarmScope();
   const [kpis, setKpis] = useState<Kpi[]>([
     { label: "Live Birds", value: "-" },
@@ -49,8 +49,6 @@ export default function AdminOverview() {
       const scopedFarms = scope.branchId
         ? filteredFarms.filter((f) => f.branch_id === scope.branchId)
         : filteredFarms;
-      const scopedFarmIds = scopedFarms.map((f) => f.id);
-
       const scopedFlocks = filteredFlocks.filter((flock) => {
         if (scope.batchId) {
           return filteredBatches.some((b) => b.id === scope.batchId && b.flock_id === flock.id);
@@ -59,54 +57,32 @@ export default function AdminOverview() {
       });
       const scopedFlockIds = scopedFlocks.map((f) => f.id);
 
-      const applyFlockScope = <T extends { eq: Function; in: Function }>(query: T) => {
-        let next: any = query.eq("org_id", orgId);
-        if (scope.flockId) next = next.eq("flock_id", scope.flockId);
-        else if (scopedFlockIds.length > 0) next = next.in("flock_id", scopedFlockIds);
-        return next;
-      };
+      let latestEggQuery = supabase
+        .from("daily_egg_records")
+        .select("record_date")
+        .eq("org_id", orgId);
+      if (scope.flockId) latestEggQuery = latestEggQuery.eq("flock_id", scope.flockId);
+      else if (scopedFlockIds.length > 0) latestEggQuery = latestEggQuery.in("flock_id", scopedFlockIds);
 
-      const [{ data: latestDailyRow }, { data: latestEggRow }, { count: openAlertsCount }, { count: activeFarmsCount }] =
+      const [{ data: latestEggRow }, { count: openAlertsCount }, { count: activeFarmsCount }] =
         await Promise.all([
-          applyFlockScope(
-            supabase
-            .from("daily_farm_records")
-            .select("record_date")
-            .order("record_date", { ascending: false })
-            .limit(1)
-            .maybeSingle()
-          ),
-          applyFlockScope(
-            supabase
-            .from("daily_egg_records")
-            .select("record_date")
-            .order("record_date", { ascending: false })
-            .limit(1)
-            .maybeSingle()
-          ),
+          latestEggQuery.order("record_date", { ascending: false }).limit(1).maybeSingle(),
           supabase.from("alerts").select("id", { count: "exact", head: true }).eq("org_id", orgId).neq("status", "resolved"),
           Promise.resolve({ count: scopedFarms.length }),
         ]);
 
-      let liveBirdsTotal = 0;
-      if (latestDailyRow?.record_date) {
-        const { data: liveRows } = await applyFlockScope(
-          supabase
-            .from("daily_farm_records")
-            .select("live_count")
-            .eq("record_date", latestDailyRow.record_date)
-        );
-        liveBirdsTotal = (liveRows ?? []).reduce((acc, row) => acc + (row.live_count ?? 0), 0);
-      }
+      const liveBirdsTotal = scopedFlocks.reduce((acc, flock) => acc + (flock.current_count ?? 0), 0);
 
       let eggOutputTotal = 0;
       if (latestEggRow?.record_date) {
-        const { data: eggRows } = await applyFlockScope(
-          supabase
-            .from("daily_egg_records")
-            .select("total_eggs")
-            .eq("record_date", latestEggRow.record_date)
-        );
+        let eggRowsQuery = supabase
+          .from("daily_egg_records")
+          .select("total_eggs")
+          .eq("org_id", orgId)
+          .eq("record_date", latestEggRow.record_date);
+        if (scope.flockId) eggRowsQuery = eggRowsQuery.eq("flock_id", scope.flockId);
+        else if (scopedFlockIds.length > 0) eggRowsQuery = eggRowsQuery.in("flock_id", scopedFlockIds);
+        const { data: eggRows } = await eggRowsQuery;
         eggOutputTotal = (eggRows ?? []).reduce((acc, row) => acc + (row.total_eggs ?? 0), 0);
       }
 

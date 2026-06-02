@@ -19,7 +19,6 @@ type MortalityEvent = {
 type DailyRecord = {
   flock_id: string;
   record_date: string;
-  live_count: number | null;
 };
 
 const fmt = (value: number) => value.toLocaleString();
@@ -33,6 +32,12 @@ export default function MortalityPage() {
   const flockToFarm = useMemo(() => {
     const map = new Map<string, string>();
     filteredFlocks.forEach((flock) => map.set(flock.id, flock.farm_id));
+    return map;
+  }, [filteredFlocks]);
+
+  const flockPopulation = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredFlocks.forEach((flock) => map.set(flock.id, flock.current_count ?? 0));
     return map;
   }, [filteredFlocks]);
 
@@ -92,7 +97,7 @@ export default function MortalityPage() {
 
       let dailyQuery = supabase
         .from("daily_farm_records")
-        .select("flock_id, record_date, live_count")
+        .select("flock_id, record_date")
         .eq("org_id", profile.org_id)
         .order("record_date", { ascending: false })
         .limit(2400);
@@ -174,12 +179,12 @@ export default function MortalityPage() {
   const populationByDate = useMemo(() => {
     const map = new Map<string, number>();
     dailyRecords.forEach((row) => {
-      map.set(row.record_date, (map.get(row.record_date) ?? 0) + (row.live_count ?? 0));
+      map.set(row.record_date, (map.get(row.record_date) ?? 0) + (flockPopulation.get(row.flock_id) ?? 0));
     });
     return Array.from(map.entries())
       .map(([date, live]) => ({ date, live }))
       .sort((a, b) => (a.date < b.date ? -1 : 1));
-  }, [dailyRecords]);
+  }, [dailyRecords, flockPopulation]);
 
   const mortalityRateTrend = useMemo(() => {
     const popMap = new Map(populationByDate.map((item) => [item.date, item.live]));

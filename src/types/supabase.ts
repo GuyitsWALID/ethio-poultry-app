@@ -628,19 +628,16 @@ export type Database = {
         Row: {
           broken_eggs: number | null
           created_at: string
-          culls: number | null
           deaths: number | null
           deaths_cause: string | null
-          feed_given_kg: number | null
-          feed_leftover_kg: number | null
-          feed_consumed_kg: number | null
-          feed_type: string | null
+          feed_intake_grams: number | null
+          feed_intake_quantity: number | null
+          feed_leftover_grams: number | null
+          feed_type: Database["public"]["Enums"]["feed_type"] | null
           flock_age_days: number | null
           flock_age_weeks: number | null
           flock_id: string
-          humidity_pct: number | null
           id: string
-          live_count: number | null
           medication_vitamins: string | null
           mortality_percentage: number | null
           normal_eggs: number | null
@@ -649,28 +646,23 @@ export type Database = {
           record_date: string
           recorded_by: string | null
           synced: boolean
-          temperature_c: number | null
           total_eggs: number | null
           updated_at: string
           vaccination_status: string | null
-          water_liters: number | null
         }
         Insert: {
           broken_eggs?: number | null
           created_at?: string
-          culls?: number | null
           deaths?: number | null
           deaths_cause?: string | null
-          feed_given_kg?: number | null
-          feed_leftover_kg?: number | null
-          feed_consumed_kg?: number | null
-          feed_type?: string | null
+          feed_intake_grams?: number | null
+          feed_intake_quantity?: number | null
+          feed_leftover_grams?: number | null
+          feed_type?: Database["public"]["Enums"]["feed_type"] | null
           flock_age_days?: number | null
           flock_age_weeks?: number | null
           flock_id: string
-          humidity_pct?: number | null
           id?: string
-          live_count?: number | null
           medication_vitamins?: string | null
           mortality_percentage?: number | null
           normal_eggs?: number | null
@@ -679,28 +671,23 @@ export type Database = {
           record_date: string
           recorded_by?: string | null
           synced?: boolean
-          temperature_c?: number | null
           total_eggs?: number | null
           updated_at?: string
           vaccination_status?: string | null
-          water_liters?: number | null
         }
         Update: {
           broken_eggs?: number | null
           created_at?: string
-          culls?: number | null
           deaths?: number | null
           deaths_cause?: string | null
-          feed_given_kg?: number | null
-          feed_leftover_kg?: number | null
-          feed_consumed_kg?: number | null
-          feed_type?: string | null
+          feed_intake_grams?: number | null
+          feed_intake_quantity?: number | null
+          feed_leftover_grams?: number | null
+          feed_type?: Database["public"]["Enums"]["feed_type"] | null
           flock_age_days?: number | null
           flock_age_weeks?: number | null
           flock_id?: string
-          humidity_pct?: number | null
           id?: string
-          live_count?: number | null
           medication_vitamins?: string | null
           mortality_percentage?: number | null
           normal_eggs?: number | null
@@ -709,11 +696,9 @@ export type Database = {
           record_date?: string
           recorded_by?: string | null
           synced?: boolean
-          temperature_c?: number | null
           total_eggs?: number | null
           updated_at?: string
           vaccination_status?: string | null
-          water_liters?: number | null
         }
         Relationships: [
           {
@@ -2686,6 +2671,12 @@ export type Database = {
         | "health"
       alert_priority: "info" | "low" | "medium" | "high" | "emergency"
       alert_status: "open" | "acknowledged" | "resolved"
+      feed_type:
+        | "starter_feed"
+        | "grower_pullet_feed"
+        | "layer_feed"
+        | "broiler_feed"
+        | "medicated_feed"
       flock_source: "internal_transfer" | "external_purchase"
       flock_status: "active" | "transferred" | "sold" | "culled" | "quarantined"
       flock_type: "layer" | "rearing" | "parent_stock" | "broiler"

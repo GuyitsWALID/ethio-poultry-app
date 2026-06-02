@@ -17,9 +17,8 @@ type FeedingScheduleRow = {
 type DailyFeedRow = {
   record_date: string;
   flock_id: string;
-  live_count: number | null;
   feed_type: string | null;
-  feed_consumed_kg: number | null;
+  feed_intake_grams: number | null;
 };
 
 type SessionRow = {
@@ -108,7 +107,7 @@ export default function FeedingSchedulerPage() {
     if (flockIds.length > 0 && dates.length > 0) {
       const { data } = await supabase
         .from("daily_farm_records")
-        .select("record_date, flock_id, live_count, feed_type, feed_consumed_kg")
+        .select("record_date, flock_id, feed_type, feed_intake_grams")
         .eq("org_id", profile.org_id)
         .in("flock_id", flockIds)
         .in("record_date", dates);
@@ -121,7 +120,7 @@ export default function FeedingSchedulerPage() {
     schedules.map((s) => {
       const flockId = batchFlockMap.get(s.batch_id) ?? "";
       const actual = actualMap.get(`${flockId}::${s.schedule_date}`);
-      const actualKg = actual?.feed_consumed_kg ?? null;
+      const actualKg = actual?.feed_intake_grams === null || actual?.feed_intake_grams === undefined ? null : actual.feed_intake_grams / 1000;
       const varianceKg = actualKg === null ? null : Number((actualKg - s.planned_feed_kg).toFixed(2));
       const tol = Number((s.planned_feed_kg * 0.05).toFixed(2));
       const status = actualKg === null ? "Missing actual" : varianceKg! < -tol ? "Under target" : varianceKg! > tol ? "Over target" : "On track";
@@ -131,7 +130,7 @@ export default function FeedingSchedulerPage() {
         actual_feed_type: actual?.feed_type ?? null,
         actual_kg: actualKg,
         variance_kg: varianceKg,
-        actual_g_per_bird: actualKg !== null && actual?.live_count && actual.live_count > 0 ? Number(((actualKg * 1000) / actual.live_count).toFixed(2)) : null,
+        actual_g_per_bird: actual?.feed_intake_grams ?? null,
         status,
       };
     });

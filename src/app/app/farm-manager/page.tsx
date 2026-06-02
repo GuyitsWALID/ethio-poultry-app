@@ -107,92 +107,22 @@ export default function FarmManagerDashboardPage() {
         })
         .map((flock) => flock.id);
 
-      const [farmsCountRes, activeFlocksRes, latestDailyRes] = await Promise.all([
+      const [farmsCountRes, activeFlocksRes] = await Promise.all([
         scope.farmId
           ? Promise.resolve({ count: filteredFarms.length })
           : supabase.from("farms").select("id", { count: "exact", head: true }).eq("org_id", orgId),
         scope.flockId
-          ? supabase.from("flocks").select("id, house_id").eq("org_id", orgId).eq("status", "active").eq("id", scope.flockId)
+          ? supabase.from("flocks").select("id, house_id, current_count").eq("org_id", orgId).eq("status", "active").eq("id", scope.flockId)
           : scopedFlockIds.length > 0
-            ? supabase.from("flocks").select("id, house_id").eq("org_id", orgId).eq("status", "active").in("id", scopedFlockIds)
+            ? supabase.from("flocks").select("id, house_id, current_count").eq("org_id", orgId).eq("status", "active").in("id", scopedFlockIds)
             : scope.farmId || scope.houseId || scope.batchId
-              ? Promise.resolve({ data: [] as Array<{ id: string; house_id: string | null }> })
-              : supabase.from("flocks").select("id, house_id").eq("org_id", orgId).eq("status", "active"),
-        supabase
-          .from("daily_farm_records")
-          .select("record_date")
-          .eq("org_id", orgId)
-          .order("record_date", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
+              ? Promise.resolve({ data: [] as Array<{ id: string; house_id: string | null; current_count: number }> })
+              : supabase.from("flocks").select("id, house_id, current_count").eq("org_id", orgId).eq("status", "active"),
       ]);
-
-      let totalLiveCount = 0;
-      if (latestDailyRes.data?.record_date) {
-        const latestDate = latestDailyRes.data.record_date;
-        const { data: datesRows } = await supabase
-          .from("daily_farm_records")
-          .select("record_date")
-          .eq("org_id", orgId)
-          .lt("record_date", latestDate)
-          .order("record_date", { ascending: false })
-          .limit(1);
-
-        const previousDate = datesRows?.[0]?.record_date ?? null;
-
-        let todayQuery = supabase
-          .from("daily_farm_records")
-          .select("flock_id, deaths, culls")
-          .eq("org_id", orgId)
-          .eq("record_date", latestDate);
-        let previousQuery = previousDate
-          ? supabase
-              .from("daily_farm_records")
-              .select("flock_id, live_count")
-              .eq("org_id", orgId)
-              .eq("record_date", previousDate)
-          : Promise.resolve({ data: [] as Array<{ flock_id: string; live_count: number | null }> });
-
-        if (scope.flockId) {
-          todayQuery = todayQuery.eq("flock_id", scope.flockId);
-          previousQuery = previousDate
-            ? supabase
-                .from("daily_farm_records")
-                .select("flock_id, live_count")
-                .eq("org_id", orgId)
-                .eq("record_date", previousDate)
-                .eq("flock_id", scope.flockId)
-            : previousQuery;
-        } else if (scopedFlockIds.length > 0) {
-          todayQuery = todayQuery.in("flock_id", scopedFlockIds);
-          previousQuery = previousDate
-            ? supabase
-                .from("daily_farm_records")
-                .select("flock_id, live_count")
-                .eq("org_id", orgId)
-                .eq("record_date", previousDate)
-                .in("flock_id", scopedFlockIds)
-            : previousQuery;
-        }
-
-        const [{ data: todayRows }, { data: previousRows }] = await Promise.all([todayQuery, previousQuery]);
-
-        const previousLiveByFlock = new Map<string, number>();
-        (previousRows ?? []).forEach((r) => previousLiveByFlock.set(r.flock_id, r.live_count ?? 0));
-
-        totalLiveCount = (todayRows ?? []).reduce((acc, r) => {
-          const prevLive = previousLiveByFlock.get(r.flock_id) ?? 0;
-          const losses = (r.deaths ?? 0) + (r.culls ?? 0);
-          return acc + Math.max(0, prevLive - losses);
-        }, 0);
-      }
-
-      const latestDateLabel = latestDailyRes.data?.record_date
-        ? `Derived from yesterday minus losses on ${latestDailyRes.data.record_date}`
-        : "No daily records yet";
 
       const activeFlocks = activeFlocksRes.data ?? [];
       const activeHousesCount = new Set(activeFlocks.map((row) => row.house_id).filter(Boolean)).size;
+      const totalLiveCount = activeFlocks.reduce((acc, row) => acc + (row.current_count ?? 0), 0);
       setOperationsCards([
         {
           label: "Active Farms",
@@ -212,7 +142,7 @@ export default function FarmManagerDashboardPage() {
         {
           label: "Total Daily Live Count",
           value: totalLiveCount.toLocaleString(),
-          note: latestDateLabel,
+          note: "Current active flock setup count",
         },
       ]);
 

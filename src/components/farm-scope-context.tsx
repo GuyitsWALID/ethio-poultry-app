@@ -15,7 +15,7 @@ type ScopeState = {
 type Branch = { id: string; name: string };
 type Farm = { id: string; name: string; branch_id: string };
 type House = { id: string; name: string; farm_id: string };
-type Flock = { id: string; flock_code: string; farm_id: string; house_id: string };
+type Flock = { id: string; flock_code: string; farm_id: string; house_id: string; initial_count: number; current_count: number };
 type Batch = { id: string; batch_code: string; branch_id: string; farm_id: string; house_id: string; flock_id: string };
 
 type ScopeContextValue = {
@@ -177,7 +177,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
         const farmIds = effectiveFarms.map((f) => f.id);
         const [{ data: houseRows }, { data: flockRows }, { data: batchRows }] = await Promise.all([
           supabase.from("houses").select("id, name, farm_id").in("farm_id", farmIds).order("name"),
-          supabase.from("flocks").select("id, flock_code, farm_id, house_id").in("farm_id", farmIds).order("flock_code"),
+          supabase.from("flocks").select("id, flock_code, farm_id, house_id, initial_count, current_count").in("farm_id", farmIds).order("flock_code"),
           supabase
             .from("batches")
             .select("id, batch_code, branch_id, farm_id, house_id, flock_id")

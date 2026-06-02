@@ -25,7 +25,7 @@ type FeedScheduleRow = {
   flock_id: string;
   record_date: string;
   feed_type: string | null;
-  feed_consumed_kg: number | null;
+  feed_intake_grams: number | null;
 };
 
 type InventoryCategory = Database["public"]["Enums"]["inventory_category"];
@@ -83,9 +83,9 @@ export default function InventoryPage() {
       .limit(1000);
     let feedQuery = supabase
       .from("daily_farm_records")
-      .select("flock_id, record_date, feed_type, feed_consumed_kg")
+      .select("flock_id, record_date, feed_type, feed_intake_grams")
       .eq("org_id", nextOrgId)
-      .not("feed_consumed_kg", "is", null)
+      .not("feed_intake_grams", "is", null)
       .order("record_date", { ascending: false })
       .limit(200);
     if (scope.flockId) {
@@ -144,7 +144,7 @@ export default function InventoryPage() {
         days: new Set<string>(),
         latestFeedType: row.feed_type,
       };
-      current.totalKg += row.feed_consumed_kg ?? 0;
+      current.totalKg += (row.feed_intake_grams ?? 0) / 1000;
       current.days.add(row.record_date);
       if (!current.latestFeedType && row.feed_type) current.latestFeedType = row.feed_type;
       byFlock.set(row.flock_id, current);
