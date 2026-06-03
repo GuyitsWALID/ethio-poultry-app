@@ -19,6 +19,9 @@ type StockLedgerRow = {
   item_id: string;
   quantity: number;
   transaction_type: "receipt" | "issue" | "transfer_out" | "transfer_in" | "adjustment" | "return";
+  unit_cost: number;
+  transaction_date: string;
+  flock_id: string | null;
 };
 
 type FeedScheduleRow = {
@@ -26,9 +29,17 @@ type FeedScheduleRow = {
   record_date: string;
   feed_type: string | null;
   feed_intake_grams: number | null;
+  total_eggs: number | null;
 };
 
 type InventoryCategory = Database["public"]["Enums"]["inventory_category"];
+type StockTxnType = Database["public"]["Enums"]["stock_txn_type"];
+
+type WarehouseRow = {
+  id: string;
+  name: string;
+  type: string;
+};
 
 export default function InventoryPage() {
   const { scope, filteredFlocks, filteredBatches } = useFarmScope();
@@ -37,16 +48,26 @@ export default function InventoryPage() {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [ledger, setLedger] = useState<StockLedgerRow[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const [feedRows, setFeedRows] = useState<FeedScheduleRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isCeoLimitedEdit, setIsCeoLimitedEdit] = useState(false);
+  const [currentRole, setCurrentRole] = useState("");
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState<InventoryCategory>("feed");
   const [unit, setUnit] = useState("kg");
   const [reorderLevel, setReorderLevel] = useState(0);
   const [unitCost, setUnitCost] = useState(0);
+  const [txnItemId, setTxnItemId] = useState("");
+  const [txnWarehouseId, setTxnWarehouseId] = useState("");
+  const [txnType, setTxnType] = useState<StockTxnType>("receipt");
+  const [txnQuantity, setTxnQuantity] = useState(0);
+  const [txnUnitCost, setTxnUnitCost] = useState(0);
+  const [txnFlockId, setTxnFlockId] = useState("");
+  const [txnReference, setTxnReference] = useState("");
+  const canManageStock = currentRole === "store_keeper" || currentRole === "farm_manager" || currentRole === "ceo";
 
   const loadData = async () => {
     setLoading(true);
@@ -58,10 +79,13 @@ export default function InventoryPage() {
     const context = await contextResponse.json();
     const nextOrgId = context?.orgId as string | null;
     setOrgId(nextOrgId);
-    setIsCeoLimitedEdit(context?.role === "ceo");
+    const role = String(context?.role ?? "");
+    setCurrentRole(role);
+    setIsCeoLimitedEdit(role === "ceo");
     if (!nextOrgId) {
       setItems([]);
       setLedger([]);
+      setWarehouses([]);
       setFeedRows([]);
       setLoading(false);
       return;
@@ -77,13 +101,13 @@ export default function InventoryPage() {
 
     let ledgerQuery = supabase
       .from("stock_ledger")
-      .select("item_id, quantity, transaction_type")
+      .select("item_id, quantity, transaction_type, unit_cost, transaction_date, flock_id")
       .eq("org_id", nextOrgId)
       .order("transaction_date", { ascending: false })
       .limit(1000);
     let feedQuery = supabase
       .from("daily_farm_records")
-      .select("flock_id, record_date, feed_type, feed_intake_grams")
+      .select("flock_id, record_date, feed_type, feed_intake_grams, total_eggs")
       .eq("org_id", nextOrgId)
       .not("feed_intake_grams", "is", null)
       .order("record_date", { ascending: false })
@@ -97,12 +121,13 @@ export default function InventoryPage() {
     } else if (scope.branchId || scope.farmId || scope.houseId || scope.batchId) {
       setItems([]);
       setLedger([]);
+      setWarehouses([]);
       setFeedRows([]);
       setLoading(false);
       return;
     }
 
-    const [itemsRes, ledgerRes, feedRes] = await Promise.all([
+    const [itemsRes, ledgerRes, feedRes, warehousesRes] = await Promise.all([
       supabase
         .from("inventory_items")
         .select("id, name, category, unit, reorder_level, unit_cost")
@@ -110,11 +135,19 @@ export default function InventoryPage() {
         .order("name"),
       ledgerQuery,
       feedQuery,
+      supabase
+        .from("warehouses")
+        .select("id, name, type")
+        .eq("org_id", nextOrgId)
+        .order("name"),
     ]);
 
     setItems((itemsRes.data ?? []) as InventoryItem[]);
     setLedger((ledgerRes.data ?? []) as StockLedgerRow[]);
     setFeedRows((feedRes.data ?? []) as FeedScheduleRow[]);
+    const warehouseRows = (warehousesRes.data ?? []) as WarehouseRow[];
+    setWarehouses(warehouseRows);
+    if (!txnWarehouseId && warehouseRows[0]) setTxnWarehouseId(warehouseRows[0].id);
     setLoading(false);
   };
 
@@ -158,6 +191,18 @@ export default function InventoryPage() {
       .slice(0, 40);
   }, [feedRows]);
 
+  const itemNameMap = useMemo(() => new Map(items.map((item) => [item.id, item.name])), [items]);
+  const flockLabelMap = useMemo(() => new Map(filteredFlocks.map((flock) => [flock.id, flock.flock_code])), [filteredFlocks]);
+  const feedItems = useMemo(() => items.filter((item) => item.category === "feed"), [items]);
+  const avgFeedUnitCost = useMemo(() => {
+    const costs = feedItems.map((item) => item.unit_cost ?? 0).filter((cost) => cost > 0);
+    if (costs.length === 0) return 0;
+    return costs.reduce((sum, cost) => sum + cost, 0) / costs.length;
+  }, [feedItems]);
+  const totalFeedKg = feedRows.reduce((sum, row) => sum + (row.feed_intake_grams ?? 0) / 1000, 0);
+  const totalEggs = feedRows.reduce((sum, row) => sum + (row.total_eggs ?? 0), 0);
+  const feedCostPerEgg = totalEggs > 0 && avgFeedUnitCost > 0 ? (totalFeedKg * avgFeedUnitCost) / totalEggs : null;
+
   const onAddItem = async (event: React.FormEvent) => {
     event.preventDefault();
     if (saving) return;
@@ -192,6 +237,46 @@ export default function InventoryPage() {
     await loadData();
   };
 
+  const onAddLedgerEntry = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (saving || !orgId || !canManageStock) return;
+    if (!txnItemId || !txnWarehouseId || txnQuantity <= 0) {
+      setError("Select item, warehouse, transaction type, and positive quantity.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error: insertError } = await supabase.from("stock_ledger").insert({
+      org_id: orgId,
+      item_id: txnItemId,
+      warehouse_id: txnWarehouseId,
+      transaction_type: txnType,
+      quantity: txnQuantity,
+      unit_cost: txnUnitCost || items.find((item) => item.id === txnItemId)?.unit_cost || 0,
+      flock_id: txnFlockId || null,
+      reference_doc: txnReference.trim() || null,
+      recorded_by: user?.id ?? null,
+    });
+
+    if (insertError) {
+      setError(insertError.message);
+      setSaving(false);
+      return;
+    }
+
+    setSuccess("Stock ledger entry saved.");
+    setTxnQuantity(0);
+    setTxnUnitCost(0);
+    setTxnReference("");
+    setSaving(false);
+    await loadData();
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -221,10 +306,10 @@ export default function InventoryPage() {
             <option value="feed">Feed</option>
             <option value="medicine">Medicine</option>
             <option value="vaccine">Vaccine</option>
+            <option value="vitamin">Vitamin</option>
             <option value="equipment">Equipment</option>
-            <option value="cleaning_supply">Cleaning Supply</option>
+            <option value="spare_parts">Spare Parts</option>
             <option value="packaging">Packaging</option>
-            <option value="other">Other</option>
           </select>
           <input
             className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
@@ -260,6 +345,73 @@ export default function InventoryPage() {
       </section>
 
       <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-forest-900">Record Stock Movement</h3>
+            <p className="mt-1 text-sm text-forest-600">Receipts, issues, returns, transfers, and adjustments feed stock and cost visibility.</p>
+          </div>
+          {!canManageStock ? <p className="text-sm text-forest-600">View mode: stock movements require store, manager, or CEO role.</p> : null}
+        </div>
+        <form className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-4" onSubmit={onAddLedgerEntry}>
+          <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={txnItemId} onChange={(e) => {
+            const item = items.find((candidate) => candidate.id === e.target.value);
+            setTxnItemId(e.target.value);
+            setTxnUnitCost(item?.unit_cost ?? 0);
+          }} required>
+            <option value="">Select item</option>
+            {items.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+          <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={txnWarehouseId} onChange={(e) => setTxnWarehouseId(e.target.value)} required>
+            <option value="">Select warehouse</option>
+            {warehouses.map((warehouse) => (
+              <option key={warehouse.id} value={warehouse.id}>{warehouse.name} ({warehouse.type})</option>
+            ))}
+          </select>
+          <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={txnType} onChange={(e) => setTxnType(e.target.value as StockTxnType)}>
+            <option value="receipt">Receipt</option>
+            <option value="issue">Issue</option>
+            <option value="return">Return</option>
+            <option value="transfer_in">Transfer In</option>
+            <option value="transfer_out">Transfer Out</option>
+            <option value="adjustment">Adjustment</option>
+          </select>
+          <input type="number" min={0.01} step="0.01" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" placeholder="Quantity" value={txnQuantity || ""} onChange={(e) => setTxnQuantity(Number(e.target.value) || 0)} required />
+          <input type="number" min={0} step="0.01" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" placeholder="Unit cost" value={txnUnitCost || ""} onChange={(e) => setTxnUnitCost(Number(e.target.value) || 0)} />
+          <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={txnFlockId} onChange={(e) => setTxnFlockId(e.target.value)}>
+            <option value="">No flock allocation</option>
+            {filteredFlocks.map((flock) => (
+              <option key={flock.id} value={flock.id}>{flock.flock_code}</option>
+            ))}
+          </select>
+          <input className="h-11 rounded-xl border border-sand-200 px-3 text-sm" placeholder="Reference document" value={txnReference} onChange={(e) => setTxnReference(e.target.value)} />
+          <button className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60" type="submit" disabled={saving || !canManageStock}>
+            {saving ? "Saving..." : "Save Movement"}
+          </button>
+        </form>
+        {warehouses.length === 0 ? <p className="mt-3 text-sm text-ember-600">Create at least one warehouse before recording stock movement.</p> : null}
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <article className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.2em] text-forest-500">Observed Feed</p>
+          <p className="mt-2 text-3xl font-semibold text-forest-900">{totalFeedKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg</p>
+          <p className="mt-1 text-xs text-forest-600">From daily feed intake in selected scope.</p>
+        </article>
+        <article className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.2em] text-forest-500">Feed Cost / Egg</p>
+          <p className="mt-2 text-3xl font-semibold text-forest-900">{feedCostPerEgg === null ? "Pending" : feedCostPerEgg.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+          <p className="mt-1 text-xs text-forest-600">Uses average feed item cost until exact feed-issue matching is available.</p>
+        </article>
+        <article className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.2em] text-forest-500">Eggs in Scope</p>
+          <p className="mt-2 text-3xl font-semibold text-forest-900">{totalEggs.toLocaleString()}</p>
+          <p className="mt-1 text-xs text-forest-600">Used as feed-cost denominator.</p>
+        </article>
+      </div>
+
+      <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-forest-900">Available Stock</h3>
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-sm">
@@ -270,18 +422,19 @@ export default function InventoryPage() {
                 <th className="px-2 py-2">Unit</th>
                 <th className="px-2 py-2">Available</th>
                 <th className="px-2 py-2">Reorder Level</th>
+                <th className="px-2 py-2">Unit Cost</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="px-2 py-4 text-forest-600" colSpan={5}>
+                  <td className="px-2 py-4 text-forest-600" colSpan={6}>
                     Loading inventory...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td className="px-2 py-4 text-forest-600" colSpan={5}>
+                  <td className="px-2 py-4 text-forest-600" colSpan={6}>
                     No inventory items yet.
                   </td>
                 </tr>
@@ -295,10 +448,43 @@ export default function InventoryPage() {
                       <td className="px-2 py-2 text-forest-700">{item.unit}</td>
                       <td className="px-2 py-2 text-forest-700">{available}</td>
                       <td className="px-2 py-2 text-forest-700">{item.reorder_level ?? 0}</td>
+                      <td className="px-2 py-2 text-forest-700">{item.unit_cost ?? 0}</td>
                     </tr>
                   );
                 })
               )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-semibold text-forest-900">Recent Stock Ledger</h3>
+        <div className="mt-3 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-sand-200 text-left text-xs uppercase tracking-[0.1em] text-forest-600">
+                <th className="px-2 py-2">Date</th>
+                <th className="px-2 py-2">Item</th>
+                <th className="px-2 py-2">Type</th>
+                <th className="px-2 py-2">Quantity</th>
+                <th className="px-2 py-2">Unit Cost</th>
+                <th className="px-2 py-2">Flock</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ledger.length === 0 ? (
+                <tr><td className="px-2 py-4 text-forest-600" colSpan={6}>No stock movements yet.</td></tr>
+              ) : ledger.slice(0, 20).map((entry, index) => (
+                <tr key={`${entry.item_id}-${entry.transaction_date}-${index}`} className="border-b border-sand-100">
+                  <td className="px-2 py-2 text-forest-700">{entry.transaction_date}</td>
+                  <td className="px-2 py-2 font-medium text-forest-900">{itemNameMap.get(entry.item_id) ?? entry.item_id}</td>
+                  <td className="px-2 py-2 text-forest-700">{entry.transaction_type}</td>
+                  <td className="px-2 py-2 text-forest-700">{entry.quantity}</td>
+                  <td className="px-2 py-2 text-forest-700">{entry.unit_cost}</td>
+                  <td className="px-2 py-2 text-forest-700">{entry.flock_id ? flockLabelMap.get(entry.flock_id) ?? entry.flock_id : "-"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

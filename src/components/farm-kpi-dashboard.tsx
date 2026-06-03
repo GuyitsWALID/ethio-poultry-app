@@ -37,6 +37,11 @@ type KpiResponse = {
     feed: { grams: number; kg: number; quantity: number; leftoverGrams: number };
     lowStockCount: number;
     upcomingVaccinations: number;
+    feedCostPerEgg: number | null;
+    costPerBird: number | null;
+    costInputsAvailable: boolean;
+    profitPerFlock: number | null;
+    profitBlockedReason: string;
   };
   operational: {
     feedPerBirdGrams: number;
@@ -90,6 +95,11 @@ const emptyResponse: KpiResponse = {
     feed: { grams: 0, kg: 0, quantity: 0, leftoverGrams: 0 },
     lowStockCount: 0,
     upcomingVaccinations: 0,
+    feedCostPerEgg: null,
+    costPerBird: null,
+    costInputsAvailable: false,
+    profitPerFlock: null,
+    profitBlockedReason: "Sales data collection not yet defined",
   },
   operational: { feedPerBirdGrams: 0, feedLeftoverGrams: 0, dailyDeaths: 0, latestFlockAges: [] },
   charts: { trends: [], flockComparison: [], eggQuality: [], mortalityCauses: [], feedTypes: [] },
@@ -452,6 +462,12 @@ export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: Dashboard
     { label: "Production Rate", value: formatNumber(data.general.productionRate, "%"), note: "Egg output against live birds", href: "/app/analytics" },
     { label: "Eggs Produced", value: formatNumber(data.general.eggs.total), note: "Selected period output", href: "/app/analytics" },
     { label: "Low Stock Alerts", value: formatNumber(data.general.lowStockCount), note: "Inventory needing attention", href: "/app/inventory" },
+    {
+      label: "Feed Cost / Egg",
+      value: data.general.feedCostPerEgg === null ? "Pending" : formatNumber(data.general.feedCostPerEgg),
+      note: data.general.costInputsAvailable ? "Feed usage cost signal" : "Needs feed item costs",
+      href: "/app/inventory",
+    },
   ];
 
   const operationsCards = [
@@ -461,6 +477,12 @@ export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: Dashboard
     { label: "Broken Eggs", value: formatNumber(data.general.eggs.broken), note: "Quality and handling signal", href: "/app/analytics" },
     { label: "Active Houses", value: formatNumber(data.general.activeHouses), note: "Houses with live flocks", href: "/app/farms" },
     { label: "Upcoming Vaccines", value: formatNumber(data.general.upcomingVaccinations), note: "Next 14 days", href: "/app/health" },
+    {
+      label: "Cost / Bird",
+      value: data.general.costPerBird === null ? "Pending" : formatNumber(data.general.costPerBird),
+      note: "Intake + feed cost view",
+      href: "/app/inventory",
+    },
   ];
 
   const cards = mode === "management" ? managementCards : operationsCards;
@@ -525,8 +547,13 @@ export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: Dashboard
             <PieBreakdown title="Feed Type Usage" rows={data.charts.feedTypes} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <KpiCard label="Feed Cost / Egg" value="Not available" note="Requires feed cost allocation from inventory usage." href="/app/inventory" />
-            <KpiCard label="Profit / Flock" value="Not available" note="Requires sales revenue and flock-level cost allocation." href="/app/sales" />
+            <KpiCard
+              label="Feed Cost / Egg"
+              value={data.general.feedCostPerEgg === null ? "Pending" : formatNumber(data.general.feedCostPerEgg)}
+              note={data.general.costInputsAvailable ? "Calculated from feed cost and egg output." : "Add feed item costs and feed usage."}
+              href="/app/inventory"
+            />
+            <KpiCard label="Profit / Flock" value="Deferred" note={data.general.profitBlockedReason} href="/app/reports" />
           </div>
           <ActionAlerts alerts={data.alerts} />
           <RecentRecords rows={data.recentRecords} />

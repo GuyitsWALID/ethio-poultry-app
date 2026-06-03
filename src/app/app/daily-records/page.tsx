@@ -75,6 +75,7 @@ export default function DailyRecordsPage() {
   const [currentRole, setCurrentRole] = useState<string | null>(null);
   const [formTotalEggs, setFormTotalEggs] = useState("");
   const [formDeaths, setFormDeaths] = useState("");
+  const [editingRow, setEditingRow] = useState<DailyRow | null>(null);
   const canCreateRecord = currentRole === "farm_manager";
 
   const parseNumber = (value: FormDataEntryValue | null) => {
@@ -188,15 +189,13 @@ export default function DailyRecordsPage() {
       ? Number(((Number(formDeaths) / currentLiveBirds) * 100).toFixed(2))
       : "";
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = event.currentTarget;
+  const saveDailyRecord = async (form: HTMLFormElement, rowId?: string) => {
     setFormError(null);
     setFormSuccess(null);
     setIsSubmitting(true);
 
     if (!canCreateRecord) {
-      setFormError("Only farm managers can create daily records.");
+      setFormError("Only farm managers can change daily records.");
       setIsSubmitting(false);
       return;
     }
@@ -274,7 +273,7 @@ export default function DailyRecordsPage() {
     const mortalityPercentage =
       currentBirds > 0 ? Number(((deaths / currentBirds) * 100).toFixed(2)) : null;
 
-    const { error: dailyError } = await supabase.from("daily_farm_records").insert({
+    const payload = {
       org_id: profile.org_id,
       flock_id: scope.flockId,
       record_date: recordDate,
@@ -294,20 +293,53 @@ export default function DailyRecordsPage() {
       vaccination_status: parseText(formData.get("vaccination_status")),
       medication_vitamins: parseText(formData.get("medication_vitamins")),
       recorded_by: user.id,
-    });
+    };
+
+    const { error: dailyError } = rowId
+      ? await supabase.from("daily_farm_records").update(payload).eq("id", rowId)
+      : await supabase.from("daily_farm_records").insert(payload);
 
     if (dailyError) {
-      setFormError(dailyError.message);
+      setFormError(
+        dailyError.code === "23505"
+          ? "This flock already has a daily record for that date. Edit the existing row instead."
+          : dailyError.message
+      );
       setIsSubmitting(false);
       return;
     }
 
-    setFormSuccess("Daily record saved successfully.");
+    setFormSuccess(rowId ? "Daily record updated successfully." : "Daily record saved successfully.");
     form.reset();
     setFormTotalEggs("");
     setFormDeaths("");
+    setEditingRow(null);
     setIsSubmitting(false);
     setIsModalOpen(false);
+    await loadRows();
+  };
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await saveDailyRecord(event.currentTarget);
+  };
+
+  const handleEditSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingRow) return;
+    await saveDailyRecord(event.currentTarget, editingRow.id);
+  };
+
+  const deleteRecord = async (row: DailyRow) => {
+    if (!canCreateRecord || !window.confirm(`Delete daily record for ${row.record_date}?`)) return;
+    setFormError(null);
+    const supabase = createClient();
+    const { error } = await supabase.from("daily_farm_records").delete().eq("id", row.id);
+    if (error) {
+      setFormError(error.message);
+      return;
+    }
+    setFormSuccess("Daily record deleted successfully.");
     await loadRows();
   };
 
@@ -476,6 +508,7 @@ export default function DailyRecordsPage() {
                     <th className={spreadsheetHeaderClass} colSpan={3}>Mortality Rate</th>
                     <th className={spreadsheetHeaderClass} rowSpan={2}>Vaccination Status</th>
                     <th className={spreadsheetHeaderClass} rowSpan={2}>Treatment / Vitamins</th>
+                    {canCreateRecord ? <th className={spreadsheetHeaderClass} rowSpan={2}>Actions</th> : null}
                   </tr>
                   <tr>
                     <th className={spreadsheetHeaderClass}>Weeks</th>
@@ -494,11 +527,11 @@ export default function DailyRecordsPage() {
                 <tbody>
                   {loadingRows ? (
                     <tr>
-                      <td className="px-3 py-4 text-forest-600" colSpan={16}>Loading records...</td>
+                      <td className="px-3 py-4 text-forest-600" colSpan={canCreateRecord ? 17 : 16}>Loading records...</td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-4 text-forest-600" colSpan={16}>No records found for selected filters.</td>
+                      <td className="px-3 py-4 text-forest-600" colSpan={canCreateRecord ? 17 : 16}>No records found for selected filters.</td>
                     </tr>
                   ) : (
                     rows.map((row) => (
@@ -519,6 +552,38 @@ export default function DailyRecordsPage() {
                         <td className="text-forest-700">{row.deaths_cause ?? "-"}</td>
                         <td className="text-forest-700">{row.vaccination_status ?? "-"}</td>
                         <td className="text-forest-700">{row.medication_vitamins ?? "-"}</td>
+                        {canCreateRecord ? (
+                          <td className="text-forest-700">
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                className="rounded-full border border-forest-900/20 px-3 py-1 text-xs"
+                                onClick={() => {
+                                  const flock = filteredFlocks.find((item) => item.id === row.flock_id);
+                                  if (flock) {
+                                    setScope((prev) => ({
+                                      ...prev,
+                                      farmId: flock.farm_id,
+                                      houseId: flock.house_id,
+                                      flockId: flock.id,
+                                      batchId: "",
+                                    }));
+                                  }
+                                  setEditingRow(row);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-full border border-ember-500/30 px-3 py-1 text-xs text-ember-600"
+                                onClick={() => void deleteRecord(row)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     ))
                   )}
@@ -738,6 +803,127 @@ export default function DailyRecordsPage() {
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? "Saving..." : "Save Daily Record"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {editingRow && canCreateRecord ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
+          <div className="h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-forest-900">Edit Daily Record</h3>
+                <p className="text-sm text-forest-600">Correct the canonical record for this flock and date.</p>
+              </div>
+              <button className="text-sm text-forest-600" type="button" onClick={() => setEditingRow(null)}>
+                Close
+              </button>
+            </div>
+
+            <form className="mt-6 grid gap-6" onSubmit={handleEditSubmit}>
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Record Date
+                  <input name="record_date" type="date" required defaultValue={editingRow.record_date} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Age Weeks
+                  <input name="flock_age_weeks" type="number" min={0} defaultValue={editingRow.flock_age_weeks ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Age Days
+                  <input name="flock_age_days" type="number" min={0} defaultValue={editingRow.flock_age_days ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Flock
+                  <input
+                    readOnly
+                    value={filteredFlocks.find((flock) => flock.id === editingRow.flock_id)?.flock_code ?? editingRow.flock_id}
+                    className={`${inputClass} bg-sand-50 text-forest-600`}
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Intake (grams)
+                  <input name="feed_intake_grams" type="number" min={0} step="0.01" defaultValue={editingRow.feed_intake_grams ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Intake Quantity
+                  <input name="feed_intake_quantity" type="number" min={0} step="0.01" defaultValue={editingRow.feed_intake_quantity ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Leftover
+                  <input name="feed_leftover_grams" type="number" min={0} step="0.01" defaultValue={editingRow.feed_leftover_grams ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Type
+                  <select name="feed_type" defaultValue={editingRow.feed_type ?? ""} className={inputClass}>
+                    <option value="">Select feed type</option>
+                    {feedTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Normal Eggs
+                  <input name="normal_eggs" type="number" min={0} defaultValue={editingRow.normal_eggs ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Broken Eggs
+                  <input name="broken_eggs" type="number" min={0} defaultValue={editingRow.broken_eggs ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Total Eggs
+                  <input name="total_eggs" type="number" min={0} defaultValue={editingRow.total_eggs ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Number of Deaths
+                  <input name="deaths" type="number" min={0} defaultValue={editingRow.deaths ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Cause of Death
+                  <input name="deaths_cause" type="text" defaultValue={editingRow.deaths_cause ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Vaccination Status
+                  <input name="vaccination_status" type="text" defaultValue={editingRow.vaccination_status ?? ""} className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700 md:col-span-2">
+                  Treatment/Vitamins
+                  <input name="medication_vitamins" type="text" defaultValue={editingRow.medication_vitamins ?? ""} className={inputClass} />
+                </label>
+              </div>
+
+              {formError ? (
+                <p className="rounded-xl border border-ember-500/40 bg-ember-500/10 px-4 py-3 text-sm text-ember-500">
+                  {formError}
+                </p>
+              ) : null}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingRow(null)}
+                  className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-full bg-forest-900 px-5 py-2 text-sm text-sand-50 disabled:opacity-60"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Saving..." : "Update Daily Record"}
                 </button>
               </div>
             </form>

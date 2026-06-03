@@ -19,10 +19,23 @@ const supabaseAdmin = createClient(
 type FlockRow = Database["public"]["Tables"]["flocks"]["Row"];
 type FarmRow = Pick<Database["public"]["Tables"]["farms"]["Row"], "id" | "name" | "branch_id">;
 type HouseRow = Pick<Database["public"]["Tables"]["houses"]["Row"], "id" | "name" | "farm_id">;
-type BatchRow = Pick<Database["public"]["Tables"]["batches"]["Row"], "id" | "batch_code" | "branch_id" | "farm_id" | "house_id" | "flock_id">;
+type BatchRow = Pick<
+  Database["public"]["Tables"]["batches"]["Row"],
+  | "id"
+  | "batch_code"
+  | "branch_id"
+  | "farm_id"
+  | "house_id"
+  | "flock_id"
+  | "total_count"
+  | "purchase_cost_per_bird"
+  | "transport_cost"
+  | "other_cost"
+  | "total_batch_cost"
+>;
 type DailyRow = Database["public"]["Tables"]["daily_farm_records"]["Row"];
-type InventoryItem = Pick<Database["public"]["Tables"]["inventory_items"]["Row"], "id" | "name" | "reorder_level">;
-type StockLedgerRow = Pick<Database["public"]["Tables"]["stock_ledger"]["Row"], "item_id" | "quantity" | "transaction_type">;
+type InventoryItem = Pick<Database["public"]["Tables"]["inventory_items"]["Row"], "id" | "name" | "reorder_level" | "category" | "unit_cost">;
+type StockLedgerRow = Pick<Database["public"]["Tables"]["stock_ledger"]["Row"], "item_id" | "quantity" | "transaction_type" | "unit_cost" | "flock_id">;
 
 const feedTypeLabels: Record<string, string> = {
   starter_feed: "Starter Feed",
@@ -110,7 +123,7 @@ export async function GET(request: NextRequest) {
         .eq("org_id", orgId),
       supabaseAdmin
         .from("batches")
-        .select("id, batch_code, branch_id, farm_id, house_id, flock_id")
+        .select("id, batch_code, branch_id, farm_id, house_id, flock_id, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
         .eq("org_id", orgId),
       role === "farm_manager"
         ? supabaseAdmin.from("user_branch_access").select("branch_id").eq("profile_id", user.id)
@@ -118,8 +131,8 @@ export async function GET(request: NextRequest) {
       role === "farm_manager"
         ? supabaseAdmin.from("user_farm_access").select("farm_id").eq("profile_id", user.id)
         : Promise.resolve({ data: [] as Array<{ farm_id: string }> }),
-      supabaseAdmin.from("inventory_items").select("id, name, reorder_level").eq("org_id", orgId).limit(500),
-      supabaseAdmin.from("stock_ledger").select("item_id, quantity, transaction_type").eq("org_id", orgId).limit(5000),
+      supabaseAdmin.from("inventory_items").select("id, name, reorder_level, category, unit_cost").eq("org_id", orgId).limit(500),
+      supabaseAdmin.from("stock_ledger").select("item_id, quantity, transaction_type, unit_cost, flock_id").eq("org_id", orgId).limit(5000),
       supabaseAdmin
         .from("vaccination_events")
         .select("id, event_date, flock_id")
@@ -186,6 +199,33 @@ export async function GET(request: NextRequest) {
     const feedKg = round(feedGrams / 1000);
     const mortalityRate = pct(deaths, liveBirds + deaths);
     const productionRate = pct(totalEggs, liveBirds);
+    const feedItems = ((inventoryRes.data ?? []) as InventoryItem[]).filter((item) => item.category === "feed");
+    const feedItemIds = new Set(feedItems.map((item) => item.id));
+    const avgFeedUnitCostValues = feedItems.map((item) => item.unit_cost ?? 0).filter((cost) => cost > 0);
+    const avgFeedUnitCost =
+      avgFeedUnitCostValues.length > 0
+        ? avgFeedUnitCostValues.reduce((sum, cost) => sum + cost, 0) / avgFeedUnitCostValues.length
+        : 0;
+    const issuedFeedCost = ((stockRes.data ?? []) as StockLedgerRow[]).reduce((sum, row) => {
+      if (!feedItemIds.has(row.item_id)) return sum;
+      if (row.transaction_type !== "issue" && row.transaction_type !== "transfer_out") return sum;
+      if (row.flock_id && !scopedFlockIds.includes(row.flock_id)) return sum;
+      return sum + row.quantity * row.unit_cost;
+    }, 0);
+    const estimatedFeedCost = feedKg * avgFeedUnitCost;
+    const feedCost = issuedFeedCost > 0 ? issuedFeedCost : estimatedFeedCost;
+    const feedCostPerEgg = totalEggs > 0 && feedCost > 0 ? round(feedCost / totalEggs) : null;
+    const scopedBatchCosts = batches
+      .filter((batch) => scopedFlockIds.includes(batch.flock_id))
+      .reduce((sum, batch) => {
+        const fallback =
+          (batch.purchase_cost_per_bird ?? 0) * (batch.total_count ?? 0) +
+          (batch.transport_cost ?? 0) +
+          (batch.other_cost ?? 0);
+        return sum + (batch.total_batch_cost ?? fallback);
+      }, 0);
+    const costPerBird = liveBirds > 0 && scopedBatchCosts + feedCost > 0 ? round((scopedBatchCosts + feedCost) / liveBirds) : null;
+    const costInputsAvailable = feedCost > 0 || scopedBatchCosts > 0;
 
     const stockByItem = new Map<string, number>();
     ((stockRes.data ?? []) as StockLedgerRow[]).forEach((row) => {
@@ -324,8 +364,11 @@ export async function GET(request: NextRequest) {
           feed: { grams: feedGrams, kg: feedKg, quantity: feedQuantity, leftoverGrams: feedLeftoverGrams },
           lowStockCount: lowStockItems.length,
           upcomingVaccinations: (vaccinationsRes.data ?? []).filter((event) => scopedFlockIds.includes(event.flock_id)).length,
-          feedCostPerEgg: null,
+          feedCostPerEgg,
+          costPerBird,
+          costInputsAvailable,
           profitPerFlock: null,
+          profitBlockedReason: "Sales data collection not yet defined",
         },
         operational: {
           feedPerBirdGrams: liveBirds > 0 ? round(feedGrams / liveBirds) : 0,
@@ -355,8 +398,7 @@ export async function GET(request: NextRequest) {
         recentRecords,
         alerts,
         placeholders: [
-          { label: "Feed Cost Per Egg", value: null, note: "Needs feed costing from inventory usage." },
-          { label: "Profit Per Flock", value: null, note: "Needs sales and full cost allocation." },
+          { label: "Profit Per Flock", value: null, note: "Sales data collection not yet defined." },
         ],
       }),
       { status: 200 }
