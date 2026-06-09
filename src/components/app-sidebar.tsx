@@ -1,15 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
-  Bird,
+  Activity,
   Box,
+  Boxes,
   Briefcase,
-  ChevronLeft,
+  Building2,
+  ChartNoAxesCombined,
+  ChevronDown,
   ChevronRight,
-  Factory,
+  ClipboardList,
+  Egg,
+  HeartPulse,
+  LayoutDashboard,
   LineChart,
-  Shield,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Package,
+  Stethoscope,
+  Warehouse,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -21,6 +32,33 @@ import { SignOutButton } from "@/components/sign-out-button";
 type NavSection = {
   title: string;
   items: Array<{ label: string; href: string }>;
+};
+
+const itemIcons: Record<string, LucideIcon> = {
+  "Command Center": LayoutDashboard,
+  "Branch Network": Building2,
+  Analytics: ChartNoAxesCombined,
+  Reports: ClipboardList,
+  Accounting: Briefcase,
+  "Farm Network": Warehouse,
+  "Flock Portfolio": Egg,
+  Batches: Boxes,
+  "Daily Records": ClipboardList,
+  "Feeding Scheduler": Package,
+  Mortality: Activity,
+  Sensors: LineChart,
+  Health: HeartPulse,
+  Inventory: Box,
+  Sales: Briefcase,
+  "Manager Dashboard": LayoutDashboard,
+  "Farm Monitoring": Warehouse,
+  "Flock & Batch Tracking": Egg,
+  "Operations Analytics": ChartNoAxesCombined,
+  "Branch Reports": ClipboardList,
+  "Health Log": Stethoscope,
+  "Inventory Log": Package,
+  "Vet Dashboard": Stethoscope,
+  "Store Dashboard": Package,
 };
 
 const ceoNavSections: NavSection[] = [
@@ -91,6 +129,7 @@ const farmManagerNavSections: NavSection[] = [
 ];
 
 export function AppSidebar() {
+  const pathname = usePathname();
   const [role, setRole] = useState<AppRole>("ceo");
   const [orgName, setOrgName] = useState("Organization");
   const [collapsed, setCollapsed] = useState(false);
@@ -145,20 +184,12 @@ export function AppSidebar() {
     () => navSections.filter((section) => section.items.length > 0),
     [navSections]
   );
-  const sectionIcons = useMemo<Record<string, LucideIcon>>(
-    () => ({
-      Executive: LineChart,
-      "Operations Oversight": Factory,
-      "Health & Supply Oversight": Shield,
-      Organization: Briefcase,
-      "Farm Operations": Bird,
-      "Branch Analytics": LineChart,
-      "Support Functions": Briefcase,
-      Veterinary: Shield,
-      "Store Operations": Box,
-    }),
-    []
+  const collapsedItems = useMemo(
+    () => visibleNavSections.flatMap((section) => section.items),
+    [visibleNavSections]
   );
+  const isActive = (href: string) =>
+    pathname === href || (href !== "/app" && pathname.startsWith(`${href}/`));
 
   return (
     <aside
@@ -166,94 +197,122 @@ export function AppSidebar() {
         collapsed ? "w-20" : "w-64"
       } transition-all duration-300`}
     >
-      <div className={`px-6 pt-6 ${collapsed ? "pb-3" : "pb-4"}`}>
-        <div className={collapsed ? "flex items-center justify-center" : "flex items-center gap-3"}>
-          {collapsed ? <Bird aria-hidden="true" className="h-6 w-6" /> : null}
+      <div
+        className={`border-b border-sand-200/10 ${
+          collapsed
+            ? "flex flex-col items-center gap-3 px-3 py-4"
+            : "flex items-center justify-between gap-3 px-4 py-4"
+        }`}
+      >
+        <Link
+          href="/app"
+          className={`flex items-center rounded-xl text-sand-50 transition hover:bg-forest-800 ${
+            collapsed ? "h-10 w-10 justify-center" : "min-w-0 flex-1 gap-3 px-2 py-2"
+          }`}
+          aria-label="Dashboard"
+          title={collapsed ? "Dashboard" : undefined}
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sand-50 text-forest-900">
+            <Egg aria-hidden="true" className="h-5 w-5" />
+          </span>
           {!collapsed ? (
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-sand-200">
+            <span className="min-w-0">
+              <span className="block truncate text-xs uppercase tracking-[0.3em] text-sand-200">
                 {orgName}
-              </p>
-              
-            </div>
+              </span>
+              <span className="block text-sm font-semibold">Poultry Farms</span>
+            </span>
           ) : null}
-        </div>
-      </div>
-
-      <div className={`px-4 ${collapsed ? "pb-4" : "pb-3"}`}>
+        </Link>
         <button
           type="button"
           onClick={() => setCollapsed((prev) => !prev)}
-          className={`flex items-center rounded-full border border-sand-200/30 text-sand-50 transition hover:bg-forest-800 ${
-            collapsed
-              ? "mx-auto h-8 w-8 justify-center"
-              : "ml-auto h-8 gap-1 px-3"
-          }`}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sand-200/20 text-sand-100 transition hover:border-sand-200/40 hover:bg-forest-800"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
-            <ChevronRight aria-hidden="true" className="h-4 w-4" />
+            <PanelLeftOpen aria-hidden="true" className="h-5 w-5" />
           ) : (
-            <>
-              <ChevronLeft aria-hidden="true" className="h-4 w-4" />
-              <span className="text-xs">Collapse</span>
-            </>
+            <PanelLeftClose aria-hidden="true" className="h-5 w-5" />
           )}
         </button>
       </div>
 
-      <nav className="flex-1 space-y-4 px-4 pb-6 text-sm">
-        {visibleNavSections.map((section) => {
-          const isOpen = !closedSections[section.title];
-          return (
-            <div key={section.title}>
-              <button
-                type="button"
-                onClick={() =>
-                  setClosedSections((prev) => ({
-                    ...prev,
-                    [section.title]: !isOpen,
-                  }))
-                }
-                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sand-100 transition hover:bg-forest-800"
-              >
-                <span className="flex items-center gap-2">
-                  {collapsed ? (() => {
-                    const Icon = sectionIcons[section.title];
-                    return Icon ? (
-                      <span className="flex h-5 w-5 items-center justify-center">
-                        <Icon aria-hidden="true" className="h-5 w-5" />
-                      </span>
-                    ) : null;
-                  })() : null}
-                  {!collapsed ? (
+      <nav className={`${collapsed ? "space-y-2 px-3" : "space-y-5 px-4"} flex-1 overflow-y-auto py-5 text-sm`}>
+        {collapsed
+          ? collapsedItems.map((item) => {
+              const Icon = itemIcons[item.label] ?? ChevronRight;
+              const active = isActive(item.href);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
+                    active
+                      ? "bg-sand-50 text-forest-900"
+                      : "text-sand-100 hover:bg-forest-800 hover:text-white"
+                  }`}
+                  aria-label={item.label}
+                  title={item.label}
+                >
+                  <Icon aria-hidden="true" className="h-5 w-5" />
+                </Link>
+              );
+            })
+          : visibleNavSections.map((section) => {
+              const isOpen = !closedSections[section.title];
+              return (
+                <div key={section.title}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setClosedSections((prev) => ({
+                        ...prev,
+                        [section.title]: !isOpen,
+                      }))
+                    }
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sand-100 transition hover:bg-forest-800"
+                    aria-expanded={isOpen}
+                  >
                     <span className="text-xs uppercase tracking-[0.25em]">
                       {section.title}
                     </span>
+                    {isOpen ? (
+                      <ChevronDown aria-hidden="true" className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight aria-hidden="true" className="h-4 w-4" />
+                    )}
+                  </button>
+                  {isOpen ? (
+                    <div className="mt-2 space-y-1">
+                      {section.items.map((item) => {
+                        const Icon = itemIcons[item.label] ?? ChevronRight;
+                        const active = isActive(item.href);
+
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 transition ${
+                              active
+                                ? "bg-sand-50 text-forest-900"
+                                : "text-sand-100 hover:bg-forest-800 hover:text-white"
+                            }`}
+                          >
+                            <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+                            <span>{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
                   ) : null}
-                </span>
-                {!collapsed ? (
-                  <span aria-hidden="true">{isOpen ? "−" : "+"}</span>
-                ) : null}
-              </button>
-              {isOpen && !collapsed ? (
-                <div className="mt-2 space-y-1">
-                  {section.items.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sand-100 transition hover:bg-forest-800"
-                    >
-                      <span>{item.label}</span>
-                    </Link>
-                  ))}
                 </div>
-              ) : null}
-            </div>
-          );
-        })}
+              );
+            })}
       </nav>
-      <div className="mt-auto border-t border-forest-800 px-6 py-4">
+      <div className={`mt-auto border-t border-sand-200/10 ${collapsed ? "px-3 py-4" : "px-6 py-4"}`}>
         {!collapsed ? (
           <div className="space-y-3">
             <Link
