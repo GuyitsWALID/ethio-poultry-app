@@ -19,18 +19,21 @@ type FeedingScheduleRow = {
 
 type ScheduleVarianceRow = FeedingScheduleRow & {
   flock_id: string;
-  actual_feed_type: string | null;
   actual_kg: number | null;
+  planned_session_kg: number;
+  session_count: number;
+  missing_session_actuals: number;
   variance_kg: number | null;
   actual_g_per_bird: number | null;
   status: "Missing actual" | "Under target" | "Over target" | "On track";
 };
 
-type DailyFeedRow = {
+type SessionSummaryRow = {
   record_date: string;
+  batch_id: string;
   flock_id: string;
-  feed_type: string | null;
-  feed_intake_grams: number | null;
+  planned_feed_kg: number;
+  actual_feed_kg: number | null;
 };
 
 const feedTypeOptions: Array<{ value: FeedType; label: string }> = [
@@ -123,38 +126,67 @@ export default function FeedingSchedulerPage() {
     const { data: scheduleData } = await scheduleQuery;
     const schedules = (scheduleData ?? []) as FeedingScheduleRow[];
 
-    const flockIds = Array.from(new Set(schedules.map((s) => batchFlockMap.get(s.batch_id)).filter(Boolean))) as string[];
     const dates = Array.from(new Set(schedules.map((s) => s.schedule_date)));
+    const batchIds = Array.from(new Set(schedules.map((s) => s.batch_id)));
 
-    let actualRows: DailyFeedRow[] = [];
-    if (flockIds.length > 0 && dates.length > 0) {
+    let actualRows: SessionSummaryRow[] = [];
+    if (batchIds.length > 0 && dates.length > 0) {
       const { data } = await supabase
-        .from("daily_farm_records")
-        .select("record_date, flock_id, feed_type, feed_intake_grams")
+        .from("feeding_session_records")
+        .select("record_date, batch_id, flock_id, planned_feed_kg, actual_feed_kg")
         .eq("org_id", profile.org_id)
-        .in("flock_id", flockIds)
+        .in("batch_id", batchIds)
         .in("record_date", dates);
-      actualRows = (data ?? []) as DailyFeedRow[];
+      actualRows = (data ?? []) as SessionSummaryRow[];
     }
 
-    const actualMap = new Map<string, DailyFeedRow>();
-    actualRows.forEach((row) => actualMap.set(`${row.flock_id}::${row.record_date}`, row));
+    const actualMap = new Map<
+      string,
+      { actualKg: number; plannedSessionKg: number; sessionCount: number; missingActuals: number; flockId: string }
+    >();
+    actualRows.forEach((row) => {
+      const key = `${row.batch_id}::${row.record_date}`;
+      const current = actualMap.get(key) ?? {
+        actualKg: 0,
+        plannedSessionKg: 0,
+        sessionCount: 0,
+        missingActuals: 0,
+        flockId: row.flock_id,
+      };
+      current.plannedSessionKg += row.planned_feed_kg ?? 0;
+      current.sessionCount += 1;
+      current.flockId = row.flock_id;
+      if (row.actual_feed_kg === null || row.actual_feed_kg === undefined) {
+        current.missingActuals += 1;
+      } else {
+        current.actualKg += row.actual_feed_kg;
+      }
+      actualMap.set(key, current);
+    });
 
     const nextScheduleRows = schedules.map((s) => {
       const flockId = batchFlockMap.get(s.batch_id) ?? "";
-      const actual = actualMap.get(`${flockId}::${s.schedule_date}`);
-      const actualKg = actual?.feed_intake_grams === null || actual?.feed_intake_grams === undefined ? null : actual.feed_intake_grams / 1000;
+      const actual = actualMap.get(`${s.batch_id}::${s.schedule_date}`);
+      const actualKg = !actual || actual.sessionCount === 0 || actual.missingActuals > 0 ? null : actual.actualKg;
       const varianceKg = actualKg === null ? null : Number((actualKg - s.planned_feed_kg).toFixed(2));
       const tol = Number((s.planned_feed_kg * 0.05).toFixed(2));
       const status: ScheduleVarianceRow["status"] =
         actualKg === null ? "Missing actual" : varianceKg! < -tol ? "Under target" : varianceKg! > tol ? "Over target" : "On track";
       return {
         ...s,
-        flock_id: flockId,
-        actual_feed_type: actual?.feed_type ?? null,
+        flock_id: actual?.flockId ?? flockId,
         actual_kg: actualKg,
+        planned_session_kg: Number((actual?.plannedSessionKg ?? 0).toFixed(2)),
+        session_count: actual?.sessionCount ?? 0,
+        missing_session_actuals: actual?.missingActuals ?? 0,
         variance_kg: varianceKg,
-        actual_g_per_bird: actual?.feed_intake_grams ?? null,
+        actual_g_per_bird:
+          actualKg === null || !actual?.flockId
+            ? null
+            : (() => {
+                const liveBirds = filteredFlocks.find((flock) => flock.id === actual.flockId)?.current_count ?? 0;
+                return liveBirds > 0 ? Number(((actualKg * 1000) / liveBirds).toFixed(2)) : null;
+              })(),
         status,
       };
     });
@@ -174,7 +206,7 @@ export default function FeedingSchedulerPage() {
     setSessionRows((sessionData ?? []) as SessionRow[]);
 
     setLoadingRows(false);
-  }, [batchFlockMap, scopedBatchIds, scope.batchId, scope.flockId]);
+  }, [batchFlockMap, filteredFlocks, scopedBatchIds, scope.batchId, scope.flockId]);
 
   useEffect(() => { void (async () => { const r = await fetch("/api/me/context"); if (r.ok) setCurrentRole(String((await r.json())?.role ?? "")); })(); }, []);
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -319,32 +351,57 @@ export default function FeedingSchedulerPage() {
                 <th>Flock</th>
                 <th>Planned Type</th>
                 <th>Planned Kg</th>
+                <th>Session Plan Kg</th>
                 <th>Actual Kg</th>
+                <th>Actual g/bird</th>
                 <th>Variance Kg</th>
+                <th>Sessions</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {loadingRows ? (
-                <tr><td colSpan={8} className="px-4 py-4 text-forest-600">Loading feed plans...</td></tr>
+                <tr><td colSpan={11} className="px-4 py-4 text-forest-600">Loading feed plans...</td></tr>
               ) : scheduleRows.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-4 text-forest-600">No feed schedules found for the selected scope.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-4 text-forest-600">No feed schedules found for the selected scope.</td></tr>
               ) : (
                 scheduleRows.map((row) => (
-                  <tr key={row.id} className="border-b border-sand-100 [&>td]:whitespace-nowrap [&>td]:px-4 [&>td]:py-3">
+                  <tr
+                    key={row.id}
+                    className={`border-b border-sand-100 [&>td]:whitespace-nowrap [&>td]:px-4 [&>td]:py-3 ${
+                      row.status === "Missing actual"
+                        ? "bg-amber-500/10"
+                        : row.status === "Under target"
+                          ? "bg-ember-500/10"
+                          : row.status === "Over target"
+                            ? "bg-sky-500/10"
+                            : ""
+                    }`}
+                  >
                     <td>{row.schedule_date}</td>
                     <td>{batchLabelMap.get(row.batch_id) ?? row.batch_id}</td>
                     <td>{flockLabelMap.get(row.flock_id) ?? row.flock_id}</td>
                     <td>{feedTypeLabels.get(row.feed_type as FeedType) ?? row.feed_type}</td>
                     <td>{row.planned_feed_kg.toFixed(2)}</td>
+                    <td>{row.planned_session_kg > 0 ? row.planned_session_kg.toFixed(2) : "-"}</td>
                     <td>{row.actual_kg === null ? "-" : row.actual_kg.toFixed(2)}</td>
+                    <td>{row.actual_g_per_bird === null ? "-" : row.actual_g_per_bird.toFixed(2)}</td>
                     <td>{row.variance_kg === null ? "-" : row.variance_kg.toFixed(2)}</td>
+                    <td>
+                      {row.session_count === 0
+                        ? "No sessions"
+                        : row.missing_session_actuals > 0
+                          ? `${row.session_count} (${row.missing_session_actuals} missing)`
+                          : row.session_count}
+                    </td>
                     <td>
                       <span className={`rounded-full px-2 py-1 text-xs ${
                         row.status === "On track"
                           ? "bg-leaf-500/10 text-leaf-700"
-                          : row.status === "Missing actual"
-                            ? "bg-amber-500/10 text-amber-700"
+                        : row.status === "Missing actual"
+                          ? "bg-amber-500/10 text-amber-700"
+                          : row.status === "Over target"
+                            ? "bg-sky-500/10 text-sky-700"
                             : "bg-ember-500/10 text-ember-700"
                       }`}>
                         {row.status}

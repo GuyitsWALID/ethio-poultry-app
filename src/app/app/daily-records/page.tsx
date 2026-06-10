@@ -295,21 +295,37 @@ export default function DailyRecordsPage() {
       recorded_by: user.id,
     };
 
-    const { error: dailyError } = rowId
-      ? await supabase.from("daily_farm_records").update(payload).eq("id", rowId)
-      : await supabase.from("daily_farm_records").insert(payload);
+    const { data: savedRecord, error: dailyError } = rowId
+      ? await supabase
+          .from("daily_farm_records")
+          .update(payload)
+          .eq("id", rowId)
+          .eq("org_id", profile.org_id)
+          .select("id")
+          .single()
+      : await supabase
+          .from("daily_farm_records")
+          .upsert(payload, { onConflict: "org_id,flock_id,record_date" })
+          .select("id")
+          .single();
 
     if (dailyError) {
       setFormError(
         dailyError.code === "23505"
-          ? "This flock already has a daily record for that date. Edit the existing row instead."
+          ? "This flock already has a daily record for that date. Open that row and edit it."
           : dailyError.message
       );
       setIsSubmitting(false);
       return;
     }
 
-    setFormSuccess(rowId ? "Daily record updated successfully." : "Daily record saved successfully.");
+    setFormSuccess(
+      rowId
+        ? "Daily record updated successfully."
+        : savedRecord?.id
+          ? "Daily record saved as the canonical flock/day entry."
+          : "Daily record saved successfully."
+    );
     form.reset();
     setFormTotalEggs("");
     setFormDeaths("");
