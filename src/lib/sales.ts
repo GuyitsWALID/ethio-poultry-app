@@ -53,10 +53,10 @@ export type DailySalesRecord = {
 
 type FarmRow = Pick<Database["public"]["Tables"]["farms"]["Row"], "id" | "branch_id" | "org_id">;
 type HouseRow = Pick<Database["public"]["Tables"]["houses"]["Row"], "id" | "farm_id" | "branch_id" | "org_id">;
-type FlockRow = Pick<Database["public"]["Tables"]["flocks"]["Row"], "id" | "farm_id" | "house_id" | "org_id">;
+type FlockRow = Pick<Database["public"]["Tables"]["flocks"]["Row"], "id" | "farm_id" | "house_id" | "org_id" | "batch_id">;
 type BatchRow = Pick<
   Database["public"]["Tables"]["batches"]["Row"],
-  "id" | "branch_id" | "farm_id" | "house_id" | "flock_id" | "org_id"
+  "id" | "branch_id" | "farm_id" | "house_id" | "org_id"
 >;
 
 export function json(data: unknown, status = 200) {
@@ -122,33 +122,33 @@ export async function resolveSaleScope(
   let branchId = input.branch_id || null;
   let farmId = input.farm_id || null;
   let houseId = input.house_id || null;
-  let flockId = input.flock_id || null;
+  const flockId = input.flock_id || null;
   const batchId = input.batch_id || null;
 
   if (batchId) {
     const { data } = await supabaseAdmin
       .from("batches")
-      .select("id, branch_id, farm_id, house_id, flock_id, org_id")
+      .select("id, branch_id, farm_id, house_id, org_id")
       .eq("id", batchId)
       .eq("org_id", ctx.orgId)
       .maybeSingle();
     if (!data) return { error: "Batch is not available in this organization." };
     const batch = data as BatchRow;
     branchId = batch.branch_id;
-    farmId = batch.farm_id;
-    houseId = batch.house_id;
-    flockId = batch.flock_id;
+    farmId = farmId ?? batch.farm_id;
+    houseId = houseId ?? batch.house_id;
   }
 
   if (flockId) {
     const { data } = await supabaseAdmin
       .from("flocks")
-      .select("id, farm_id, house_id, org_id")
+      .select("id, farm_id, house_id, org_id, batch_id")
       .eq("id", flockId)
       .eq("org_id", ctx.orgId)
       .maybeSingle();
     if (!data) return { error: "Flock is not available in this organization." };
     const flock = data as FlockRow;
+    if (batchId && flock.batch_id !== batchId) return { error: "Flock is not linked to the selected batch." };
     farmId = flock.farm_id;
     houseId = flock.house_id;
   }

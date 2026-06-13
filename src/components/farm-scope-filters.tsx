@@ -121,7 +121,7 @@ export function FarmScopeFilters() {
             {filteredFlocks
               .filter((f) => {
                 if (!scope.batchId) return true;
-                return filteredBatches.some((b) => b.id === scope.batchId && b.flock_id === f.id);
+                return f.batch_id === scope.batchId;
               })
               .map((f) => (
                 <option key={f.id} value={f.id}>

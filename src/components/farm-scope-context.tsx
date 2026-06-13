@@ -15,8 +15,8 @@ type ScopeState = {
 type Branch = { id: string; name: string };
 type Farm = { id: string; name: string; branch_id: string };
 type House = { id: string; name: string; farm_id: string };
-type Flock = { id: string; flock_code: string; farm_id: string; house_id: string; initial_count: number; current_count: number };
-type Batch = { id: string; batch_code: string; branch_id: string; farm_id: string; house_id: string; flock_id: string };
+type Flock = { id: string; flock_code: string; farm_id: string; house_id: string; batch_id: string | null; initial_count: number; current_count: number };
+type Batch = { id: string; batch_code: string; branch_id: string; farm_id: string; house_id: string };
 
 type ScopeContextValue = {
   role: string | null;
@@ -48,12 +48,13 @@ function normalizeScope(scope: ScopeState, options: { branches: Branch[]; farms:
     (f) => (farmId ? f.farm_id === farmId : farmsInBranch.some((farm) => farm.id === f.farm_id)) && (!houseId || f.house_id === houseId)
   );
   const flockId = flocksInScope.some((f) => f.id === scope.flockId) ? scope.flockId : "";
+  const scopedFlockBatchIds = new Set(flocksInScope.map((f) => f.batch_id).filter((id): id is string => Boolean(id)));
   const batchesInScope = options.batches.filter(
     (b) =>
       (!branchId || b.branch_id === branchId) &&
-      (!farmId || b.farm_id === farmId) &&
-      (!houseId || b.house_id === houseId) &&
-      (!flockId || b.flock_id === flockId)
+      (!farmId || scopedFlockBatchIds.has(b.id)) &&
+      (!houseId || scopedFlockBatchIds.has(b.id)) &&
+      (!flockId || options.flocks.some((f) => f.id === flockId && f.batch_id === b.id))
   );
   const batchId = batchesInScope.some((b) => b.id === scope.batchId) ? scope.batchId : "";
   return { branchId, farmId, houseId, flockId, batchId };
@@ -177,10 +178,10 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
         const farmIds = effectiveFarms.map((f) => f.id);
         const [{ data: houseRows }, { data: flockRows }, { data: batchRows }] = await Promise.all([
           supabase.from("houses").select("id, name, farm_id").in("farm_id", farmIds).order("name"),
-          supabase.from("flocks").select("id, flock_code, farm_id, house_id, initial_count, current_count").in("farm_id", farmIds).order("flock_code"),
+          supabase.from("flocks").select("id, flock_code, farm_id, house_id, batch_id, initial_count, current_count").in("farm_id", farmIds).order("flock_code"),
           supabase
             .from("batches")
-            .select("id, batch_code, branch_id, farm_id, house_id, flock_id")
+            .select("id, batch_code, branch_id, farm_id, house_id")
             .in("farm_id", farmIds)
             .order("placement_date", { ascending: false }),
         ]);
@@ -225,12 +226,12 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
   const filteredBatches = useMemo(() => {
     let items = batches;
     if (scope.branchId) items = items.filter((b) => b.branch_id === scope.branchId);
-    if (scope.farmId) items = items.filter((b) => b.farm_id === scope.farmId);
-    if (scope.houseId) items = items.filter((b) => b.house_id === scope.houseId);
-    if (scope.flockId) items = items.filter((b) => b.flock_id === scope.flockId);
+    const scopedBatchIds = new Set(filteredFlocks.map((f) => f.batch_id).filter((id): id is string => Boolean(id)));
+    if (scope.farmId || scope.houseId) items = items.filter((b) => scopedBatchIds.has(b.id));
+    if (scope.flockId) items = items.filter((b) => flocks.some((f) => f.id === scope.flockId && f.batch_id === b.id));
     if (scope.batchId) items = items.filter((b) => b.id === scope.batchId);
     return items;
-  }, [batches, scope.branchId, scope.farmId, scope.houseId, scope.flockId, scope.batchId]);
+  }, [batches, filteredFlocks, flocks, scope.branchId, scope.farmId, scope.houseId, scope.flockId, scope.batchId]);
 
   return (
     <ScopeContext.Provider

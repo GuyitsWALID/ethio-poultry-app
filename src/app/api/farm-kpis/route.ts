@@ -26,7 +26,6 @@ type BatchRow = Pick<
   | "branch_id"
   | "farm_id"
   | "house_id"
-  | "flock_id"
   | "total_count"
   | "purchase_cost_per_bird"
   | "transport_cost"
@@ -119,11 +118,11 @@ export async function GET(request: NextRequest) {
       supabaseAdmin.from("houses").select("id, name, farm_id").eq("org_id", orgId),
       supabaseAdmin
         .from("flocks")
-        .select("id, flock_code, flock_type, farm_id, house_id, initial_count, current_count, status, placement_date, org_id, source, breed_id, age_at_placement_days, purchase_cost_per_bird, notes, created_at, updated_at")
+        .select("id, flock_code, flock_type, farm_id, house_id, batch_id, initial_count, current_count, status, placement_date, org_id, source, breed_id, age_at_placement_days, purchase_cost_per_bird, notes, created_at, updated_at")
         .eq("org_id", orgId),
       supabaseAdmin
         .from("batches")
-        .select("id, batch_code, branch_id, farm_id, house_id, flock_id, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
+        .select("id, batch_code, branch_id, farm_id, house_id, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
         .eq("org_id", orgId),
       role === "farm_manager"
         ? supabaseAdmin.from("user_branch_access").select("branch_id").eq("profile_id", user.id)
@@ -148,8 +147,6 @@ export async function GET(request: NextRequest) {
     const allowedFarmIds = new Set((farmAccessRes.data ?? []).map((row) => row.farm_id));
     const farmById = new Map(farms.map((farm) => [farm.id, farm]));
     const houseById = new Map(houses.map((house) => [house.id, house]));
-    const batchById = new Map(batches.map((batch) => [batch.id, batch]));
-
     let scopedFlocks = ((flocksRes.data ?? []) as FlockRow[]).filter((flock) => {
       const farm = farmById.get(flock.farm_id);
       if (!farm) return false;
@@ -160,10 +157,7 @@ export async function GET(request: NextRequest) {
       if (farmId && flock.farm_id !== farmId) return false;
       if (houseId && flock.house_id !== houseId) return false;
       if (flockId && flock.id !== flockId) return false;
-      if (batchId) {
-        const batch = batchById.get(batchId);
-        if (!batch || batch.flock_id !== flock.id) return false;
-      }
+      if (batchId && flock.batch_id !== batchId) return false;
       return true;
     });
 
@@ -216,7 +210,7 @@ export async function GET(request: NextRequest) {
     const feedCost = issuedFeedCost > 0 ? issuedFeedCost : estimatedFeedCost;
     const feedCostPerEgg = totalEggs > 0 && feedCost > 0 ? round(feedCost / totalEggs) : null;
     const scopedBatchCosts = batches
-      .filter((batch) => scopedFlockIds.includes(batch.flock_id))
+      .filter((batch) => scopedFlocks.some((flock) => flock.batch_id === batch.id))
       .reduce((sum, batch) => {
         const fallback =
           (batch.purchase_cost_per_bird ?? 0) * (batch.total_count ?? 0) +

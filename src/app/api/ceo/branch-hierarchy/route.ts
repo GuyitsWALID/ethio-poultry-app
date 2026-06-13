@@ -43,10 +43,10 @@ export async function GET() {
       supabaseAdmin.from("branches").select("id, name, location, org_id").eq("org_id", orgId).order("name"),
       supabaseAdmin.from("farms").select("id, name, branch_id, org_id").eq("org_id", orgId).order("name"),
       supabaseAdmin.from("houses").select("id, name, farm_id, branch_id, org_id").eq("org_id", orgId).order("name"),
-      supabaseAdmin.from("flocks").select("id, flock_code, house_id, farm_id, org_id").eq("org_id", orgId).order("flock_code"),
+      supabaseAdmin.from("flocks").select("id, flock_code, batch_id, house_id, farm_id, org_id").eq("org_id", orgId).order("flock_code"),
       supabaseAdmin
         .from("batches")
-        .select("id, batch_code, status, flock_id, house_id, farm_id, branch_id, org_id")
+        .select("id, batch_code, status, house_id, farm_id, branch_id, org_id")
         .eq("org_id", orgId)
         .order("batch_code"),
     ]);
@@ -78,15 +78,12 @@ export async function GET() {
       housesByFarm.set(house.farm_id, [...(housesByFarm.get(house.farm_id) ?? []), house]);
     });
 
-    const flocksByHouse = new Map<string, Array<{ id: string; flock_code: string }>>();
+    const flocksByHouse = new Map<string, Array<{ id: string; flock_code: string; batch_id: string | null }>>();
     flocks.forEach((flock) => {
       flocksByHouse.set(flock.house_id, [...(flocksByHouse.get(flock.house_id) ?? []), flock]);
     });
 
-    const batchesByFlock = new Map<string, Array<{ id: string; batch_code: string; status: string | null }>>();
-    batches.forEach((batch) => {
-      batchesByFlock.set(batch.flock_id, [...(batchesByFlock.get(batch.flock_id) ?? []), batch]);
-    });
+    const batchById = new Map(batches.map((batch) => [batch.id, batch]));
 
     const rows: Array<{
       key: string;
@@ -148,8 +145,8 @@ export async function GET() {
           }
 
           houseFlocks.forEach((flock) => {
-            const flockBatches = batchesByFlock.get(flock.id) ?? [];
-            if (flockBatches.length === 0) {
+            const flockBatch = flock.batch_id ? batchById.get(flock.batch_id) : null;
+            if (!flockBatch) {
               rows.push({
                 key: `flock-${flock.id}`,
                 branchName: branch.name,
@@ -163,17 +160,15 @@ export async function GET() {
               return;
             }
 
-            flockBatches.forEach((batch) => {
-              rows.push({
-                key: `batch-${batch.id}`,
-                branchName: branch.name,
-                branchLocation: branch.location ?? "-",
-                farmName: farm.name,
-                houseName: house.name,
-                flockCode: flock.flock_code,
-                batchCode: batch.batch_code,
-                batchStatus: batch.status ?? "unknown",
-              });
+            rows.push({
+              key: `batch-${flockBatch.id}-${flock.id}`,
+              branchName: branch.name,
+              branchLocation: branch.location ?? "-",
+              farmName: farm.name,
+              houseName: house.name,
+              flockCode: flock.flock_code,
+              batchCode: flockBatch.batch_code,
+              batchStatus: flockBatch.status ?? "unknown",
             });
           });
         });
@@ -181,8 +176,9 @@ export async function GET() {
     });
 
     return new Response(JSON.stringify({ rows }), { status: 200 });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error?.message ?? "Unknown error" }), {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
     });
   }

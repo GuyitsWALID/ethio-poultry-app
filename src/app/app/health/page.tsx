@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
@@ -7,11 +9,14 @@ import { createClient } from "@/utils/supabase/client";
 
 type ScheduleItem = {
   id: string;
-  type: "vaccination" | "cleanup";
+  type: "vaccination" | "cleanup" | "weight";
   date: string;
   farmId: string | null;
   houseId: string | null;
   flockId: string | null;
+  batchId?: string | null;
+  dueWeekNumber?: number | null;
+  weightRecordId?: string | null;
   scheduleReason: string | null;
   status: "scheduled" | "completed" | "missed" | "overdue";
   reason: string | null;
@@ -49,8 +54,17 @@ export default function HealthPage() {
   const [cleanFarmId, setCleanFarmId] = useState("");
   const [cleanHouseId, setCleanHouseId] = useState("");
   const [cleanFlockId, setCleanFlockId] = useState("");
+  const [weightFarmId, setWeightFarmId] = useState("");
+  const [weightHouseId, setWeightHouseId] = useState("");
+  const [weightFlockId, setWeightFlockId] = useState("");
+  const [weightBatchId, setWeightBatchId] = useState("");
   const [showVaccineModal, setShowVaccineModal] = useState(false);
   const [showCleanupModal, setShowCleanupModal] = useState(false);
+  const [showWeightModal, setShowWeightModal] = useState(false);
+  const [recordWeightModal, setRecordWeightModal] = useState<{ open: boolean; item: ScheduleItem | null }>({
+    open: false,
+    item: null,
+  });
   const [missModal, setMissModal] = useState<{ open: boolean; item: ScheduleItem | null }>({
     open: false,
     item: null,
@@ -140,7 +154,8 @@ export default function HealthPage() {
       return;
     }
 
-    const [{ data: vaccineEvents }, { data: cleanupRows }, { data: healthRows }] = await Promise.all([
+    const db = supabase as any;
+    const [{ data: vaccineEvents }, { data: cleanupRows }, { data: healthRows }, { data: weightTasks }] = await Promise.all([
       supabase
         .from("vaccination_events")
         .select("id, event_date, flock_id, vaccine_name, dosage, route, batch_number")
@@ -158,6 +173,12 @@ export default function HealthPage() {
         .select("id, event_date, description, diagnosis, treatment, flock_id")
         .eq("org_id", profile.org_id)
         .order("event_date", { ascending: false })
+        .limit(200),
+      db
+        .from("batch_weight_check_tasks")
+        .select("id, batch_id, flock_id, due_week_number, due_date, status, weight_record_id")
+        .eq("org_id", profile.org_id)
+        .order("due_date", { ascending: false })
         .limit(200),
     ]);
 
@@ -228,13 +249,45 @@ export default function HealthPage() {
       };
     });
 
-    setSchedules([...vaccineSchedules, ...cleanupSchedules].sort((a, b) => (a.date < b.date ? 1 : -1)));
+    const weightSchedules: ScheduleItem[] = ((weightTasks ?? []) as Array<{
+      id: string;
+      batch_id: string;
+      flock_id: string;
+      due_week_number: number;
+      due_date: string;
+      status: "scheduled" | "completed" | "missed";
+      weight_record_id: string | null;
+    }>).map((task) => {
+      const flock = flockById.get(task.flock_id);
+      return {
+        id: task.id,
+        type: "weight",
+        date: task.due_date,
+        farmId: flock?.farm_id ?? null,
+        houseId: flock?.house_id ?? null,
+        flockId: task.flock_id,
+        batchId: task.batch_id,
+        dueWeekNumber: task.due_week_number,
+        weightRecordId: task.weight_record_id,
+        scheduleReason: `Week ${task.due_week_number} sample body weight`,
+        status:
+          task.status === "completed" || task.status === "missed"
+            ? task.status
+            : new Date(task.due_date) < new Date(new Date().toISOString().slice(0, 10))
+              ? "overdue"
+              : "scheduled",
+        reason: task.weight_record_id ? "Weight sample recorded" : null,
+      };
+    });
+
+    setSchedules([...vaccineSchedules, ...cleanupSchedules, ...weightSchedules].sort((a, b) => (a.date < b.date ? 1 : -1)));
     setLoading(false);
   };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSchedules();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -394,6 +447,114 @@ export default function HealthPage() {
     }
   };
 
+  const submitWeightSchedule = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    setError(null);
+    setSuccess(null);
+    setSaving(true);
+    try {
+      const selectedFlockId = weightFlockId || scope.flockId;
+      const selectedBatchId =
+        weightBatchId ||
+        scope.batchId ||
+        filteredFlocks.find((flock) => flock.id === selectedFlockId)?.batch_id ||
+        "";
+      if (!selectedFlockId || !selectedBatchId) throw new Error("Select flock and batch for weight schedule.");
+
+      const dueDate = parseText(formData.get("due_date"));
+      const dueWeekNumber = Number(formData.get("due_week_number"));
+      if (!dueDate || !Number.isFinite(dueWeekNumber) || dueWeekNumber < 0) {
+        throw new Error("Due date and chick age week are required.");
+      }
+
+      const supabase = createClient();
+      const db = supabase as any;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Unable to verify your session.");
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+      if (!profile?.org_id) throw new Error("Organization context not found.");
+
+      const { error: insertError } = await db.from("batch_weight_check_tasks").upsert({
+        org_id: profile.org_id,
+        batch_id: selectedBatchId,
+        flock_id: selectedFlockId,
+        template_row_id: null,
+        due_week_number: dueWeekNumber,
+        due_date: dueDate,
+        status: "scheduled",
+        created_by: user.id,
+      }, { onConflict: "org_id,batch_id,flock_id,due_week_number" });
+      if (insertError) throw new Error(insertError.message);
+
+      setShowWeightModal(false);
+      form.reset();
+      setSuccess("Weight check scheduled.");
+      await loadSchedules();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to schedule weight check.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveWeightRecord = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!recordWeightModal.item?.flockId) return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    setError(null);
+    setSuccess(null);
+    setSaving(true);
+    try {
+      const supabase = createClient();
+      const db = supabase as any;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Unable to verify your session.");
+      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
+      if (!profile?.org_id) throw new Error("Organization context not found.");
+
+      const averageWeight = Number(formData.get("average_weight_g"));
+      if (!Number.isFinite(averageWeight) || averageWeight <= 0) throw new Error("Average weight is required.");
+
+      const payload = {
+        org_id: profile.org_id,
+        flock_id: recordWeightModal.item.flockId,
+        record_date: parseText(formData.get("record_date")) ?? recordWeightModal.item.date,
+        sample_count: Number(formData.get("sample_count")) || null,
+        average_weight_g: averageWeight,
+        min_weight_g: Number(formData.get("min_weight_g")) || null,
+        max_weight_g: Number(formData.get("max_weight_g")) || null,
+        uniformity_pct: Number(formData.get("uniformity_pct")) || null,
+      };
+
+      const { data: weightRow, error: weightError } = recordWeightModal.item.weightRecordId
+        ? await supabase.from("weight_records").update(payload).eq("id", recordWeightModal.item.weightRecordId).select("id").single()
+        : await supabase.from("weight_records").insert(payload).select("id").single();
+      if (weightError || !weightRow?.id) throw new Error(weightError?.message ?? "Failed to save weight record.");
+
+      const { error: taskError } = await db
+        .from("batch_weight_check_tasks")
+        .update({ status: "completed", weight_record_id: weightRow.id })
+        .eq("id", recordWeightModal.item.id);
+      if (taskError) throw new Error(taskError.message);
+
+      setRecordWeightModal({ open: false, item: null });
+      form.reset();
+      setSuccess("Weight sample recorded.");
+      await loadSchedules();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to record weight sample.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const markSchedule = async (item: ScheduleItem, status: "completed" | "missed", reason?: string) => {
     setError(null);
     setSuccess(null);
@@ -410,6 +571,23 @@ export default function HealthPage() {
         .eq("id", user.id)
         .single();
       if (!profile?.org_id) throw new Error("Organization context not found.");
+
+      if (item.type === "weight") {
+        const db = supabase as any;
+        if (status === "completed") {
+          setRecordWeightModal({ open: true, item });
+          setSaving(false);
+          return;
+        }
+        const { error: taskError } = await db
+          .from("batch_weight_check_tasks")
+          .update({ status: "missed" })
+          .eq("id", item.id);
+        if (taskError) throw new Error(taskError.message);
+        setSuccess("Weight check marked as missed.");
+        await loadSchedules();
+        return;
+      }
 
       if (item.type === "cleanup" && status === "completed") {
         const { error: upd } = await supabase
@@ -440,6 +618,10 @@ export default function HealthPage() {
   };
 
   const openEditModal = (item: ScheduleItem) => {
+    if (item.type === "weight") {
+      setActionMenu({ open: false, item: null, top: 0, left: 0 });
+      return;
+    }
     if (item.type === "cleanup") {
       const parsed = parseCleanupReason(item.scheduleReason);
       setEditModal({
@@ -485,6 +667,15 @@ export default function HealthPage() {
       if (!user) throw new Error("Unable to verify your session.");
       const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
       if (!profile?.org_id) throw new Error("Organization context not found.");
+
+      if (item.type === "weight") {
+        const db = supabase as any;
+        const { error: delError } = await db.from("batch_weight_check_tasks").delete().eq("id", item.id);
+        if (delError) throw new Error(delError.message);
+        setSuccess("Weight check removed.");
+        await loadSchedules();
+        return;
+      }
 
       if (item.type === "cleanup") {
         const { error: delError } = await supabase.from("biosecurity_checks").delete().eq("id", item.id);
@@ -634,6 +825,13 @@ export default function HealthPage() {
           <button
             type="button"
             className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
+            onClick={() => setShowWeightModal(true)}
+          >
+            Schedule weight check
+          </button>
+          <button
+            type="button"
+            className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
             onClick={() => setShowCleanupModal(true)}
           >
             Schedule cleanup
@@ -757,10 +955,10 @@ export default function HealthPage() {
                         <button
                           type="button"
                           className="rounded-full border border-leaf-500/40 px-2 py-1 text-xs text-leaf-600 disabled:opacity-50"
-                          disabled={saving || item.status === "completed"}
+                          disabled={saving || (item.status === "completed" && item.type !== "weight")}
                           onClick={() => void markSchedule(item, "completed")}
                         >
-                          ✓
+                          {item.type === "weight" ? "Record" : "✓"}
                         </button>
                         {item.status !== "completed" ? (
                           <>
@@ -803,6 +1001,89 @@ export default function HealthPage() {
           </table>
         </div>
       </section>
+
+      {showWeightModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6">
+            <div className="flex items-center justify-between">
+              <h4 className="text-lg font-semibold text-forest-900">Schedule Weight Check</h4>
+              <button type="button" className="text-sm text-forest-600" onClick={() => setShowWeightModal(false)}>
+                Close
+              </button>
+            </div>
+            <form className="mt-4 grid gap-3" onSubmit={submitWeightSchedule}>
+              <select
+                className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                value={weightFarmId}
+                onChange={(e) => {
+                  setWeightFarmId(e.target.value);
+                  setWeightHouseId("");
+                  setWeightFlockId("");
+                  setWeightBatchId("");
+                }}
+                required
+              >
+                <option value="">Select farm</option>
+                {filteredFarms.map((f) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+              <select
+                className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                value={weightHouseId}
+                onChange={(e) => {
+                  setWeightHouseId(e.target.value);
+                  setWeightFlockId("");
+                  setWeightBatchId("");
+                }}
+                required
+              >
+                <option value="">Select house</option>
+                {filteredHouses
+                  .filter((h) => !weightFarmId || h.farm_id === weightFarmId)
+                  .map((h) => (
+                    <option key={h.id} value={h.id}>{h.name}</option>
+                  ))}
+              </select>
+              <select
+                className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                value={weightFlockId}
+                onChange={(e) => {
+                  const nextFlockId = e.target.value;
+                  setWeightFlockId(nextFlockId);
+                  setWeightBatchId(filteredFlocks.find((flock) => flock.id === nextFlockId)?.batch_id ?? "");
+                }}
+                required
+              >
+                <option value="">Select flock</option>
+                {filteredFlocks
+                  .filter((f) => (!weightFarmId || f.farm_id === weightFarmId) && (!weightHouseId || f.house_id === weightHouseId))
+                  .map((f) => (
+                    <option key={f.id} value={f.id}>{f.flock_code}</option>
+                  ))}
+              </select>
+              <select
+                className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
+                value={weightBatchId}
+                onChange={(e) => setWeightBatchId(e.target.value)}
+                required
+              >
+                <option value="">Select batch</option>
+                {batches
+                  .filter((batch) => !weightFlockId || filteredFlocks.some((flock) => flock.id === weightFlockId && flock.batch_id === batch.id))
+                  .map((batch) => (
+                    <option key={batch.id} value={batch.id}>{batch.batch_code}</option>
+                  ))}
+              </select>
+              <input name="due_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              <input name="due_week_number" type="number" min={0} required placeholder="Chick age week" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              <button type="submit" disabled={saving} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
+                {saving ? "Saving..." : "Schedule Weight Check"}
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {showVaccineModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
@@ -1001,17 +1282,19 @@ export default function HealthPage() {
           className="fixed z-[70] min-w-36 rounded-xl border border-sand-200 bg-white p-1 shadow-lg"
           style={{ top: actionMenu.top, left: Math.max(12, actionMenu.left) }}
         >
-          <button
-            type="button"
-            className="block w-full rounded-lg px-3 py-2 text-left text-xs text-forest-700 hover:bg-sand-50"
-            onClick={() => {
-              const selected = actionMenu.item;
-              setActionMenu({ open: false, item: null, top: 0, left: 0 });
-              if (selected) openEditModal(selected);
-            }}
-          >
-            Edit
-          </button>
+          {actionMenu.item.type !== "weight" ? (
+            <button
+              type="button"
+              className="block w-full rounded-lg px-3 py-2 text-left text-xs text-forest-700 hover:bg-sand-50"
+              onClick={() => {
+                const selected = actionMenu.item;
+                setActionMenu({ open: false, item: null, top: 0, left: 0 });
+                if (selected) openEditModal(selected);
+              }}
+            >
+              Edit
+            </button>
+          ) : null}
           <button
             type="button"
             className="block w-full rounded-lg px-3 py-2 text-left text-xs text-ember-600 hover:bg-ember-50"
@@ -1023,6 +1306,57 @@ export default function HealthPage() {
           >
             Remove
           </button>
+        </div>
+      ) : null}
+
+      {recordWeightModal.open && recordWeightModal.item ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-forest-900/40 px-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-lg font-semibold text-forest-900">Record Sample Weight</h4>
+                <p className="text-sm text-forest-600">
+                  {recordWeightModal.item.scheduleReason} / {recordWeightModal.item.date}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-sm text-forest-600"
+                onClick={() => setRecordWeightModal({ open: false, item: null })}
+              >
+                Close
+              </button>
+            </div>
+            <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={saveWeightRecord}>
+              <label className="grid gap-1 text-sm text-forest-700">
+                Record date
+                <input name="record_date" type="date" defaultValue={recordWeightModal.item.date} required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              </label>
+              <label className="grid gap-1 text-sm text-forest-700">
+                Sample count
+                <input name="sample_count" type="number" min={1} placeholder="Birds sampled" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              </label>
+              <label className="grid gap-1 text-sm text-forest-700">
+                Average weight (g)
+                <input name="average_weight_g" type="number" min={0.01} step="0.01" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              </label>
+              <label className="grid gap-1 text-sm text-forest-700">
+                Min weight (g)
+                <input name="min_weight_g" type="number" min={0} step="0.01" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              </label>
+              <label className="grid gap-1 text-sm text-forest-700">
+                Max weight (g)
+                <input name="max_weight_g" type="number" min={0} step="0.01" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              </label>
+              <label className="grid gap-1 text-sm text-forest-700">
+                Uniformity %
+                <input name="uniformity_pct" type="number" min={0} max={100} step="0.01" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              </label>
+              <button type="submit" disabled={saving} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60 md:col-span-2">
+                {saving ? "Saving..." : "Save Weight Sample"}
+              </button>
+            </form>
+          </div>
         </div>
       ) : null}
 

@@ -287,9 +287,9 @@ export default function SalesPage() {
   const filteredFormBatches = batches.filter(
     (batch) =>
       (!form.branch_id || batch.branch_id === form.branch_id) &&
-      (!form.farm_id || batch.farm_id === form.farm_id) &&
-      (!form.house_id || batch.house_id === form.house_id) &&
-      (!form.flock_id || batch.flock_id === form.flock_id)
+      (!form.farm_id || flocks.some((flock) => flock.batch_id === batch.id && flock.farm_id === form.farm_id)) &&
+      (!form.house_id || flocks.some((flock) => flock.batch_id === batch.id && flock.house_id === form.house_id)) &&
+      (!form.flock_id || flocks.some((flock) => flock.batch_id === batch.id && flock.id === form.flock_id))
   );
 
   return (

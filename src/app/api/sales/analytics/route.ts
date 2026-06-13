@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
         .lte("record_date", dateTo),
       supabaseAdmin
         .from("batches")
-        .select("id, batch_code, flock_id, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
+        .select("id, batch_code, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
         .eq("org_id", ctx.orgId),
       supabaseAdmin.from("inventory_items").select("id, category, unit_cost").eq("org_id", ctx.orgId).limit(500),
       supabaseAdmin.from("stock_ledger").select("item_id, quantity, transaction_type, unit_cost, flock_id").eq("org_id", ctx.orgId).limit(5000),

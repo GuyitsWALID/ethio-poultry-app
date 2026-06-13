@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { createPortal } from "react-dom";
 
@@ -10,6 +10,9 @@ import { createClient } from "@/utils/supabase/client";
 type BatchRow = {
   id: string;
   batch_code: string;
+  branch_id: string;
+  farm_id: string;
+  house_id: string;
   placement_date: string;
   source: "internal_transfer" | "external_purchase";
   total_count: number;
@@ -19,15 +22,28 @@ type BatchRow = {
   status: string;
 };
 
+type SlotRow = {
+  id: string;
+  flock_code: string;
+  flock_type: "broiler" | "layer" | "rearing" | "parent_stock";
+  source: "internal_transfer" | "external_purchase";
+  farm_id: string;
+  house_id: string;
+  current_count: number;
+};
+
 export default function BatchesPage() {
   const { scope, filteredFarms, filteredHouses, filteredFlocks } = useFarmScope();
   const [rows, setRows] = useState<BatchRow[]>([]);
+  const [slotRows, setSlotRows] = useState<SlotRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const farmNameById = useMemo(() => new Map(filteredFarms.map((farm) => [farm.id, farm.name])), [filteredFarms]);
+  const houseNameById = useMemo(() => new Map(filteredHouses.map((house) => [house.id, house.name])), [filteredHouses]);
 
   const loadRows = async () => {
     const supabase = createClient();
@@ -39,60 +55,48 @@ export default function BatchesPage() {
 
     let q = supabase
       .from("batches")
-      .select("id, batch_code, placement_date, source, total_count, status")
+      .select("id, batch_code, branch_id, farm_id, house_id, placement_date, source, total_count, status")
       .eq("org_id", profile.org_id)
       .order("placement_date", { ascending: false })
       .limit(50);
+    if (scope.branchId) q = q.eq("branch_id", scope.branchId);
     if (scope.farmId) q = q.eq("farm_id", scope.farmId);
     if (scope.houseId) q = q.eq("house_id", scope.houseId);
-    if (scope.flockId) q = q.eq("flock_id", scope.flockId);
     const { data } = await q;
     const batchRows = (data ?? []) as Array<{
       id: string;
       batch_code: string;
+      branch_id: string;
+      farm_id: string;
+      house_id: string;
       placement_date: string;
       source: "internal_transfer" | "external_purchase";
       total_count: number;
       status: string;
     }>;
 
-    const batchCodes = Array.from(new Set(batchRows.map((row) => row.batch_code).filter(Boolean)));
-    const { data: intakeRows } = batchCodes.length
-      ? await supabase
-          .from("branch_intake_batches")
-          .select("id, batch_code")
-          .eq("org_id", profile.org_id)
-          .in("batch_code", batchCodes)
-      : { data: [] as Array<{ id: string; batch_code: string }> };
-
-    const intakeIdByBatchCode = new Map<string, string>();
-    (intakeRows ?? []).forEach((row) => {
-      intakeIdByBatchCode.set(row.batch_code, row.id);
-    });
-
-    const intakeIds = Array.from(new Set((intakeRows ?? []).map((row) => row.id)));
-    const { data: linkedFlocks } = intakeIds.length
+    const batchIds = batchRows.map((row) => row.id);
+    const { data: linkedFlocks } = batchIds.length
       ? await supabase
           .from("flocks")
-          .select("intake_batch_id, current_count")
+          .select("batch_id, current_count")
           .eq("org_id", profile.org_id)
-          .in("intake_batch_id", intakeIds)
-      : { data: [] as Array<{ intake_batch_id: string | null; current_count: number | null }> };
+          .in("batch_id", batchIds)
+      : { data: [] as Array<{ batch_id: string | null; current_count: number | null }> };
 
     const flockAgg = new Map<string, { flockTotal: number; chicksTotal: number }>();
     (linkedFlocks ?? []).forEach((flock) => {
-      const intakeBatchId = flock.intake_batch_id;
-      if (!intakeBatchId) return;
-      const prev = flockAgg.get(intakeBatchId) ?? { flockTotal: 0, chicksTotal: 0 };
-      flockAgg.set(intakeBatchId, {
+      const batchId = flock.batch_id;
+      if (!batchId) return;
+      const prev = flockAgg.get(batchId) ?? { flockTotal: 0, chicksTotal: 0 };
+      flockAgg.set(batchId, {
         flockTotal: prev.flockTotal + 1,
         chicksTotal: prev.chicksTotal + (flock.current_count ?? 0),
       });
     });
 
     const mapped = batchRows.map((row) => {
-      const intakeBatchId = intakeIdByBatchCode.get(row.batch_code);
-      const agg = intakeBatchId ? flockAgg.get(intakeBatchId) : undefined;
+      const agg = flockAgg.get(row.id);
       const flockTotal = agg?.flockTotal ?? 0;
       const chicksPerFlock = flockTotal > 0 ? Math.round((agg?.chicksTotal ?? 0) / flockTotal) : 0;
       return {
@@ -102,7 +106,26 @@ export default function BatchesPage() {
         chicks_per_flock: chicksPerFlock,
       };
     }) as BatchRow[];
-    setRows(mapped);
+    const scopedRows = scope.flockId
+      ? mapped.filter((row) => filteredFlocks.some((flock) => flock.id === scope.flockId && flock.batch_id === row.id))
+      : mapped;
+    setRows(scopedRows);
+
+    if (scope.branchId) {
+      const farmIds = filteredFarms.map((farm) => farm.id);
+      const { data: activeSlots } = farmIds.length
+        ? await supabase
+            .from("flocks")
+            .select("id, flock_code, flock_type, source, farm_id, house_id, current_count")
+            .eq("org_id", profile.org_id)
+            .eq("status", "active")
+            .in("farm_id", farmIds)
+            .order("flock_code")
+        : { data: [] as SlotRow[] };
+      setSlotRows((activeSlots ?? []) as SlotRow[]);
+    } else {
+      setSlotRows([]);
+    }
   };
 
   const onEditBatch = async (row: BatchRow) => {
@@ -138,12 +161,10 @@ export default function BatchesPage() {
     setError(null);
     setSuccess(null);
     const supabase = createClient();
-    const { error: archiveError } = await supabase
-      .from("batches")
-      .update({ status: "archived" })
-      .eq("id", row.id);
-    if (archiveError) {
-      setError(archiveError.message);
+    const { error: archiveError } = await supabase.from("batches").update({ status: "archived" }).eq("id", row.id);
+    const { error: flockArchiveError } = await supabase.from("flocks").update({ status: "archived" }).eq("batch_id", row.id).eq("status", "active");
+    if (archiveError || flockArchiveError) {
+      setError(archiveError?.message ?? flockArchiveError?.message ?? "Failed to archive batch.");
     } else {
       setSuccess("Batch archived.");
       await loadRows();
@@ -185,8 +206,10 @@ export default function BatchesPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRows();
-  }, [scope.farmId, scope.houseId, scope.flockId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope.branchId, scope.farmId, scope.houseId, scope.flockId, filteredFarms]);
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -195,15 +218,13 @@ export default function BatchesPage() {
     setLoading(true);
     const formData = new FormData(event.currentTarget);
 
-    if (!scope.branchId || !scope.farmId || !scope.houseId || !scope.flockId) {
-      setError("Select branch, farm, house, and flock in scope filters first.");
+    if (!scope.branchId) {
+      setError("Select a branch in scope filters first.");
       setLoading(false);
       return;
     }
-    const houseValid = filteredHouses.some((h) => h.id === scope.houseId);
-    const flockValid = filteredFlocks.some((f) => f.id === scope.flockId && f.house_id === scope.houseId);
-    if (!houseValid || !flockValid) {
-      setError("Hierarchy validation failed. Check farm/house/flock selection.");
+    if (slotRows.length === 0) {
+      setError("No active flock slots found for this branch. Create the first branch setup before cycling a batch.");
       setLoading(false);
       return;
     }
@@ -223,32 +244,45 @@ export default function BatchesPage() {
       return;
     }
 
-    const totalCount = Number(formData.get("total_count"));
+    const slotPayload = slotRows.map((slot) => ({
+      farm_id: slot.farm_id,
+      house_id: slot.house_id,
+      flock_code: slot.flock_code,
+      flock_type: slot.flock_type,
+      source: slot.source,
+      initial_count: Number(formData.get(`slot_count_${slot.id}`) ?? 0),
+    }));
+    const totalCount = slotPayload.reduce((sum, slot) => sum + slot.initial_count, 0);
+    if (totalCount <= 0 || slotPayload.some((slot) => !Number.isFinite(slot.initial_count) || slot.initial_count <= 0)) {
+      setError("Enter a positive chick count for every flock slot.");
+      setLoading(false);
+      return;
+    }
     const purchaseCost = Number(formData.get("purchase_cost_per_bird") ?? 0);
     const transport = Number(formData.get("transport_cost") ?? 0);
     const other = Number(formData.get("other_cost") ?? 0);
     const totalBatchCost = purchaseCost * totalCount + transport + other;
 
-    const { error: insertError } = await supabase.from("batches").insert({
-      org_id: profile.org_id,
-      branch_id: scope.branchId,
-      farm_id: scope.farmId,
-      house_id: scope.houseId,
-      flock_id: scope.flockId,
-      batch_code: formData.get("batch_code")?.toString().trim(),
-      source: (formData.get("source")?.toString().trim() as "internal_transfer" | "external_purchase") ?? "external_purchase",
-      supplier_name: formData.get("supplier_name")?.toString().trim() || null,
-      purchase_date: formData.get("purchase_date")?.toString() || null,
-      placement_date: formData.get("placement_date")?.toString(),
-      age_at_placement_days: Number(formData.get("age_at_placement_days")) || null,
-      male_count: Number(formData.get("male_count")) || 0,
-      female_count: Number(formData.get("female_count")) || 0,
-      total_count: totalCount,
-      purchase_cost_per_bird: purchaseCost || null,
-      transport_cost: transport || 0,
-      other_cost: other || 0,
-      total_batch_cost: totalBatchCost,
-      notes: formData.get("notes")?.toString().trim() || null,
+    const { error: insertError } = await supabase.rpc("create_branch_batch_cycle", {
+      p_org_id: profile.org_id,
+      p_branch_id: scope.branchId,
+      p_batch: {
+        batch_code: formData.get("batch_code")?.toString().trim(),
+        source: (formData.get("source")?.toString().trim() as "internal_transfer" | "external_purchase") ?? "external_purchase",
+        supplier_name: formData.get("supplier_name")?.toString().trim() || null,
+        purchase_date: formData.get("purchase_date")?.toString() || null,
+        placement_date: formData.get("placement_date")?.toString(),
+        age_at_placement_days: Number(formData.get("age_at_placement_days")) || null,
+        male_count: Number(formData.get("male_count")) || 0,
+        female_count: Number(formData.get("female_count")) || 0,
+        total_count: totalCount,
+        purchase_cost_per_bird: purchaseCost || null,
+        transport_cost: transport || 0,
+        other_cost: other || 0,
+        total_batch_cost: totalBatchCost,
+        notes: formData.get("notes")?.toString().trim() || null,
+      },
+      p_flock_slots: slotPayload,
     });
 
     if (insertError) {
@@ -271,9 +305,9 @@ export default function BatchesPage() {
       </div>
 
       <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-forest-900">Create Batch</h3>
+        <h3 className="text-lg font-semibold text-forest-900">Create Branch Batch Cycle</h3>
         <p className="mt-1 text-sm text-forest-600">
-          Scope selected: {scope.branchId ? "Branch set" : "Branch missing"} / {scope.farmId ? "Farm set" : "Farm missing"} / {scope.houseId ? "House set" : "House missing"} / {scope.flockId ? "Flock set" : "Flock missing"}
+          Scope selected: {scope.branchId ? "Branch set" : "Branch missing"}. Existing active flock slots in this branch will be archived and recreated under the new batch code.
         </p>
         <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={onCreate}>
           <input name="batch_code" required placeholder="Batch code" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
@@ -287,10 +321,53 @@ export default function BatchesPage() {
           <input name="age_at_placement_days" type="number" placeholder="Age at placement (days)" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="male_count" type="number" placeholder="Male count" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="female_count" type="number" placeholder="Female count" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-          <input name="total_count" type="number" required placeholder="Total count" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="purchase_cost_per_bird" type="number" step="0.01" placeholder="Purchase cost per bird" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="transport_cost" type="number" step="0.01" placeholder="Transport cost" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="other_cost" type="number" step="0.01" placeholder="Other cost" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+          <div className="md:col-span-2 rounded-xl border border-sand-200">
+            <div className="border-b border-sand-200 px-3 py-2">
+              <p className="text-sm font-semibold text-forest-900">New flock counts</p>
+              <p className="text-xs text-forest-600">Each row keeps the same farm, house, and visible flock code, but creates a new flock record for this batch.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="border-b border-sand-100 text-left text-xs uppercase tracking-[0.1em] text-forest-600">
+                    <th className="px-3 py-2">Flock</th>
+                    <th className="px-3 py-2">Farm</th>
+                    <th className="px-3 py-2">House</th>
+                    <th className="px-3 py-2">Current birds</th>
+                    <th className="px-3 py-2">New chicks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {slotRows.map((slot) => (
+                    <tr key={slot.id} className="border-b border-sand-100">
+                      <td className="px-3 py-2 font-medium text-forest-900">{slot.flock_code}</td>
+                      <td className="px-3 py-2 text-forest-700">{farmNameById.get(slot.farm_id) ?? slot.farm_id}</td>
+                      <td className="px-3 py-2 text-forest-700">{houseNameById.get(slot.house_id) ?? slot.house_id}</td>
+                      <td className="px-3 py-2 text-forest-700">{slot.current_count.toLocaleString()}</td>
+                      <td className="px-3 py-2">
+                        <input
+                          name={`slot_count_${slot.id}`}
+                          type="number"
+                          min={1}
+                          defaultValue={slot.current_count || ""}
+                          required
+                          className="h-10 w-36 rounded-lg border border-sand-200 px-3 text-sm"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {slotRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-4 text-sm text-forest-600">Select a branch with active flock slots to create a new cycle.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
           <textarea name="notes" placeholder="Notes" className="md:col-span-2 min-h-[90px] rounded-xl border border-sand-200 px-3 py-2 text-sm" />
           {error ? <p className="md:col-span-2 rounded-xl border border-ember-500/40 bg-ember-500/10 px-3 py-2 text-sm text-ember-500">{error}</p> : null}
           {success ? <p className="md:col-span-2 rounded-xl border border-leaf-500/40 bg-leaf-500/10 px-3 py-2 text-sm text-leaf-500">{success}</p> : null}

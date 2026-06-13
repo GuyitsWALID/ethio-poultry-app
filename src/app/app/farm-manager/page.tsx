@@ -56,15 +56,18 @@ export default function FarmManagerDashboardPage() {
       await supabase.from("biosecurity_checks").update({ completed_by: user.id }).eq("id", row.id);
     }
 
-    await supabase.from("health_events").insert({
-      org_id: profile.org_id,
-      flock_id: row.flock_id,
-      event_date: row.date,
-      event_type: "observation",
-      description: `SCHEDULE_STATUS|${row.id}|${status}|${row.type}`,
-      diagnosis: reason ?? null,
-      vet_id: user.id,
-    });
+    const statusFlockId = row.flock_id ?? scope.flockId;
+    if (statusFlockId) {
+      await supabase.from("health_events").insert({
+        org_id: profile.org_id,
+        flock_id: statusFlockId,
+        event_date: row.date,
+        event_type: "observation",
+        description: `SCHEDULE_STATUS|${row.id}|${status}|${row.type}`,
+        diagnosis: reason ?? null,
+        vet_id: user.id,
+      });
+    }
 
     setSavingStatus(false);
     setMissModal({ open: false, row: null });
@@ -90,10 +93,7 @@ export default function FarmManagerDashboardPage() {
       const orgId = profile.org_id;
 
       const scopedFlockIds = filteredFlocks
-        .filter((flock) => {
-          if (!scope.batchId) return true;
-          return filteredBatches.some((batch) => batch.id === scope.batchId && batch.flock_id === flock.id);
-        })
+      .filter((flock) => !scope.batchId || flock.batch_id === scope.batchId)
         .map((flock) => flock.id);
 
       let vaccineQuery = supabase

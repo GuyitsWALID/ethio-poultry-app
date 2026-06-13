@@ -49,7 +49,7 @@ function signedQuantity(entry: StockLedger) {
 }
 
 export default function ReportsPage() {
-  const { scope, filteredFlocks, filteredBatches } = useFarmScope();
+  const { scope, filteredFlocks } = useFarmScope();
   const [loading, setLoading] = useState(true);
   const [dailyRecords, setDailyRecords] = useState<DailyRecord[]>([]);
   const [mortalityEvents, setMortalityEvents] = useState<MortalityEvent[]>([]);
@@ -62,12 +62,9 @@ export default function ReportsPage() {
   const scopedFlockIds = useMemo(
     () =>
       filteredFlocks
-        .filter((flock) => {
-          if (!scope.batchId) return true;
-          return filteredBatches.some((batch) => batch.id === scope.batchId && batch.flock_id === flock.id);
-        })
+      .filter((flock) => !scope.batchId || flock.batch_id === scope.batchId)
         .map((flock) => flock.id),
-    [filteredBatches, filteredFlocks, scope.batchId]
+    [filteredFlocks, scope.batchId]
   );
 
   useEffect(() => {

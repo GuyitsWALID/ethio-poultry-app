@@ -12,6 +12,7 @@ type FlockRow = {
   flock_code: string;
   farm_id: string;
   house_id: string;
+  batch_id: string | null;
   intake_batch_id: string | null;
   flock_type: Database["public"]["Enums"]["flock_type"];
   source: Database["public"]["Enums"]["flock_source"];
@@ -25,7 +26,7 @@ type FlockRow = {
 type IntakeBatchRef = { id: string; batch_code: string; source: string | null };
 
 export default function FlocksPage() {
-  const { scope, loading: scopeLoading, filteredFlocks, filteredBatches, farms, houses } = useFarmScope();
+  const { scope, loading: scopeLoading, filteredFlocks, filteredBatches, batches, farms, houses } = useFarmScope();
   const [rows, setRows] = useState<FlockRow[]>([]);
   const [intakeBatches, setIntakeBatches] = useState<IntakeBatchRef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,60 +68,13 @@ export default function FlocksPage() {
       return;
     }
 
-    const fallbackScopedFlockIds = filteredFlocks
-      .filter((flock) => {
-        if (!scope.batchId) return true;
-        return filteredBatches.some((batch) => batch.id === scope.batchId && batch.flock_id === flock.id);
-      })
+    const scopedFlockIds = filteredFlocks
+      .filter((flock) => !scope.batchId || flock.batch_id === scope.batchId)
       .map((flock) => flock.id);
-
-    let scopedFlockIds = fallbackScopedFlockIds;
-    if (scope.batchId) {
-      const selectedBatch = filteredBatches.find((batch) => batch.id === scope.batchId);
-      const selectedBatchCode = selectedBatch?.batch_code ?? null;
-      const expandedFlockIds = new Set<string>();
-
-      if (selectedBatchCode) {
-        const [{ data: sameCodeBatches }, { data: intakeBatchRows }] = await Promise.all([
-          supabase
-            .from("batches")
-            .select("flock_id")
-            .eq("org_id", orgId)
-            .eq("batch_code", selectedBatchCode),
-          // Supabase generated types in this repo don't yet include branch_intake_batches.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase as any)
-            .from("branch_intake_batches")
-            .select("id")
-            .eq("org_id", orgId)
-            .eq("batch_code", selectedBatchCode),
-        ]);
-
-        (sameCodeBatches ?? []).forEach((row) => {
-          if (row.flock_id) expandedFlockIds.add(row.flock_id);
-        });
-
-        const intakeIds = (intakeBatchRows ?? []).map((row: { id: string }) => row.id);
-        if (intakeIds.length > 0) {
-          const { data: intakeLinkedFlocks } = await supabase
-            .from("flocks")
-            .select("id")
-            .eq("org_id", orgId)
-            .in("intake_batch_id", intakeIds);
-          (intakeLinkedFlocks ?? []).forEach((row) => {
-            if (row.id) expandedFlockIds.add(row.id);
-          });
-        }
-      }
-
-      if (expandedFlockIds.size > 0) {
-        scopedFlockIds = Array.from(expandedFlockIds);
-      }
-    }
 
     let flockQuery = supabase
       .from("flocks")
-      .select("id, flock_code, farm_id, house_id, intake_batch_id, flock_type, source, status, placement_date, initial_count, current_count, notes")
+      .select("id, flock_code, farm_id, house_id, batch_id, intake_batch_id, flock_type, source, status, placement_date, initial_count, current_count, notes")
       .eq("org_id", orgId)
       .order("placement_date", { ascending: false })
       .limit(500);
@@ -198,6 +152,7 @@ export default function FlocksPage() {
     });
     return map;
   }, [intakeBatches]);
+  const batchById = useMemo(() => new Map(batches.map((batch) => [batch.id, batch])), [batches]);
 
   const totalBirds = useMemo(() => filteredRows.reduce((sum, row) => sum + (row.current_count ?? 0), 0), [filteredRows]);
   const activeFlocks = useMemo(() => filteredRows.filter((row) => row.status === "active").length, [filteredRows]);
@@ -324,7 +279,7 @@ export default function FlocksPage() {
                       <span className="rounded-full bg-sand-100 px-2 py-1 text-xs capitalize text-forest-700">{row.status}</span>
                     </td>
                     <td className="px-2 py-3 text-forest-700">
-                      {row.intake_batch_id ? (intakeBatchById.get(row.intake_batch_id)?.batch_code ?? "-") : "-"}
+                      {row.batch_id ? (batchById.get(row.batch_id)?.batch_code ?? row.batch_id) : row.intake_batch_id ? (intakeBatchById.get(row.intake_batch_id)?.batch_code ?? "-") : "-"}
                     </td>
                   </tr>
                 ))}

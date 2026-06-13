@@ -93,10 +93,7 @@ export default function InventoryPage() {
 
     const supabase = createClient();
     const scopedFlockIds = filteredFlocks
-      .filter((flock) => {
-        if (!scope.batchId) return true;
-        return filteredBatches.some((batch) => batch.id === scope.batchId && batch.flock_id === flock.id);
-      })
+      .filter((flock) => !scope.batchId || flock.batch_id === scope.batchId)
       .map((flock) => flock.id);
 
     let ledgerQuery = supabase

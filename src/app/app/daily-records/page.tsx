@@ -60,7 +60,7 @@ type DailyRow = {
 };
 
 export default function DailyRecordsPage() {
-  const { scope, setScope, filteredFarms, filteredFlocks, filteredBatches, filteredHouses, batches } =
+  const { scope, setScope, filteredFarms, filteredFlocks, filteredBatches, filteredHouses } =
     useFarmScope();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rows, setRows] = useState<DailyRow[]>([]);
@@ -122,10 +122,7 @@ export default function DailyRecordsPage() {
       .limit(200);
 
     const scopedFlockIds = filteredFlocks
-      .filter((flock) => {
-        if (!scope.batchId) return true;
-        return filteredBatches.some((batch) => batch.id === scope.batchId && batch.flock_id === flock.id);
-      })
+      .filter((flock) => !scope.batchId || flock.batch_id === scope.batchId)
       .map((flock) => flock.id);
 
     if (scope.flockId) query = query.eq("flock_id", scope.flockId);
@@ -218,7 +215,7 @@ export default function DailyRecordsPage() {
       return;
     }
 
-    if (scope.batchId && !batches.some((batch) => batch.id === scope.batchId && batch.flock_id === scope.flockId)) {
+    if (scope.batchId && !filteredFlocks.some((flock) => flock.id === scope.flockId && flock.batch_id === scope.batchId)) {
       setFormError("Selected batch is not valid for selected flock.");
       setIsSubmitting(false);
       return;

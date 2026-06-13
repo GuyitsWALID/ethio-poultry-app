@@ -152,7 +152,6 @@ export type Database = {
           created_at: string
           farm_id: string
           female_count: number | null
-          flock_id: string
           house_id: string
           id: string
           male_count: number | null
@@ -177,7 +176,6 @@ export type Database = {
           created_at?: string
           farm_id: string
           female_count?: number | null
-          flock_id: string
           house_id: string
           id?: string
           male_count?: number | null
@@ -202,7 +200,6 @@ export type Database = {
           created_at?: string
           farm_id?: string
           female_count?: number | null
-          flock_id?: string
           house_id?: string
           id?: string
           male_count?: number | null
@@ -236,13 +233,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "batches_flock_id_fkey"
-            columns: ["flock_id"]
-            isOneToOne: false
-            referencedRelation: "flocks"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "batches_house_id_fkey"
             columns: ["house_id"]
             isOneToOne: false
@@ -254,6 +244,261 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_feed_templates: {
+        Row: {
+          batch_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          source_type: string
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          source_type?: string
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          source_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_feed_templates_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_feed_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_feed_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_feed_template_rows: {
+        Row: {
+          age_day_end: number
+          age_day_start: number
+          created_at: string
+          feed_intake_recommended_g_per_head: number | null
+          feed_intake_std_g_per_head: number | null
+          feed_type_plan: string | null
+          id: string
+          light_off_time: string | null
+          light_on_time: string | null
+          row_order: number
+          target_weight_max_g: number | null
+          target_weight_min_g: number | null
+          template_id: string
+          updated_at: string
+          week_number: number
+        }
+        Insert: {
+          age_day_end: number
+          age_day_start: number
+          created_at?: string
+          feed_intake_recommended_g_per_head?: number | null
+          feed_intake_std_g_per_head?: number | null
+          feed_type_plan?: string | null
+          id?: string
+          light_off_time?: string | null
+          light_on_time?: string | null
+          row_order?: number
+          target_weight_max_g?: number | null
+          target_weight_min_g?: number | null
+          template_id: string
+          updated_at?: string
+          week_number: number
+        }
+        Update: {
+          age_day_end?: number
+          age_day_start?: number
+          created_at?: string
+          feed_intake_recommended_g_per_head?: number | null
+          feed_intake_std_g_per_head?: number | null
+          feed_type_plan?: string | null
+          id?: string
+          light_off_time?: string | null
+          light_on_time?: string | null
+          row_order?: number
+          target_weight_max_g?: number | null
+          target_weight_min_g?: number | null
+          template_id?: string
+          updated_at?: string
+          week_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_feed_template_rows_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "batch_feed_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_feed_template_milestones: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          is_required: boolean
+          notes: string | null
+          template_id: string
+          title: string
+          trigger_day: number
+          updated_at: string
+          week_number: number | null
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          notes?: string | null
+          template_id: string
+          title: string
+          trigger_day: number
+          updated_at?: string
+          week_number?: number | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          notes?: string | null
+          template_id?: string
+          title?: string
+          trigger_day?: number
+          updated_at?: string
+          week_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_feed_template_milestones_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "batch_feed_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_weight_check_tasks: {
+        Row: {
+          batch_id: string
+          created_at: string
+          created_by: string | null
+          due_date: string
+          due_week_number: number
+          flock_id: string
+          id: string
+          org_id: string
+          status: string
+          template_row_id: string | null
+          updated_at: string
+          weight_record_id: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          created_by?: string | null
+          due_date: string
+          due_week_number: number
+          flock_id: string
+          id?: string
+          org_id: string
+          status?: string
+          template_row_id?: string | null
+          updated_at?: string
+          weight_record_id?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          created_by?: string | null
+          due_date?: string
+          due_week_number?: number
+          flock_id?: string
+          id?: string
+          org_id?: string
+          status?: string
+          template_row_id?: string | null
+          updated_at?: string
+          weight_record_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_weight_check_tasks_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_flock_id_fkey"
+            columns: ["flock_id"]
+            isOneToOne: false
+            referencedRelation: "flocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_template_row_id_fkey"
+            columns: ["template_row_id"]
+            isOneToOne: false
+            referencedRelation: "batch_feed_template_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_weight_record_id_fkey"
+            columns: ["weight_record_id"]
+            isOneToOne: false
+            referencedRelation: "weight_records"
             referencedColumns: ["id"]
           },
         ]
@@ -987,6 +1232,7 @@ export type Database = {
       flocks: {
         Row: {
           age_at_placement_days: number | null
+          batch_id: string | null
           breed_id: string | null
           created_at: string
           current_count: number
@@ -996,6 +1242,7 @@ export type Database = {
           house_id: string
           id: string
           initial_count: number
+          intake_batch_id: string | null
           notes: string | null
           org_id: string
           placement_date: string
@@ -1006,6 +1253,7 @@ export type Database = {
         }
         Insert: {
           age_at_placement_days?: number | null
+          batch_id?: string | null
           breed_id?: string | null
           created_at?: string
           current_count: number
@@ -1015,6 +1263,7 @@ export type Database = {
           house_id: string
           id?: string
           initial_count: number
+          intake_batch_id?: string | null
           notes?: string | null
           org_id: string
           placement_date: string
@@ -1025,6 +1274,7 @@ export type Database = {
         }
         Update: {
           age_at_placement_days?: number | null
+          batch_id?: string | null
           breed_id?: string | null
           created_at?: string
           current_count?: number
@@ -1034,6 +1284,7 @@ export type Database = {
           house_id?: string
           id?: string
           initial_count?: number
+          intake_batch_id?: string | null
           notes?: string | null
           org_id?: string
           placement_date?: string
@@ -1043,6 +1294,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "flocks_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "flocks_breed_id_fkey"
             columns: ["breed_id"]
@@ -1062,6 +1320,13 @@ export type Database = {
             columns: ["house_id"]
             isOneToOne: false
             referencedRelation: "houses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flocks_intake_batch_id_fkey"
+            columns: ["intake_batch_id"]
+            isOneToOne: false
+            referencedRelation: "branch_intake_batches"
             referencedColumns: ["id"]
           },
           {
@@ -2656,6 +2921,15 @@ export type Database = {
     }
     Functions: {
       auth_org_id: { Args: never; Returns: string }
+      create_branch_batch_cycle: {
+        Args: {
+          p_org_id: string
+          p_branch_id: string
+          p_batch: Json
+          p_flock_slots: Json
+        }
+        Returns: Json
+      }
       normalize_user_role: {
         Args: { input_role: string }
         Returns: Database["public"]["Enums"]["user_role"]
@@ -2678,7 +2952,7 @@ export type Database = {
         | "broiler_feed"
         | "medicated_feed"
       flock_source: "internal_transfer" | "external_purchase"
-      flock_status: "active" | "transferred" | "sold" | "culled" | "quarantined"
+      flock_status: "active" | "transferred" | "sold" | "culled" | "quarantined" | "archived"
       flock_type: "layer" | "rearing" | "parent_stock" | "broiler"
       health_event_type: "disease" | "treatment" | "observation"
       house_type: "layer" | "rearing" | "parent_stock" | "broiler"
@@ -2887,7 +3161,7 @@ export const Constants = {
       alert_priority: ["info", "low", "medium", "high", "emergency"],
       alert_status: ["open", "acknowledged", "resolved"],
       flock_source: ["internal_transfer", "external_purchase"],
-      flock_status: ["active", "transferred", "sold", "culled", "quarantined"],
+      flock_status: ["active", "transferred", "sold", "culled", "quarantined", "archived"],
       flock_type: ["layer", "rearing", "parent_stock", "broiler"],
       health_event_type: ["disease", "treatment", "observation"],
       house_type: ["layer", "rearing", "parent_stock", "broiler"],
