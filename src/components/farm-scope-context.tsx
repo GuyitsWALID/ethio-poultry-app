@@ -16,7 +16,15 @@ type Branch = { id: string; name: string };
 type Farm = { id: string; name: string; branch_id: string };
 type House = { id: string; name: string; farm_id: string };
 type Flock = { id: string; flock_code: string; farm_id: string; house_id: string; batch_id: string | null; initial_count: number; current_count: number };
-type Batch = { id: string; batch_code: string; branch_id: string; farm_id: string; house_id: string };
+type Batch = {
+  id: string;
+  batch_code: string;
+  branch_id: string;
+  farm_id: string;
+  house_id: string;
+  placement_date: string | null;
+  age_at_placement_days: number | null;
+};
 
 type ScopeContextValue = {
   role: string | null;
@@ -181,7 +189,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
           supabase.from("flocks").select("id, flock_code, farm_id, house_id, batch_id, initial_count, current_count").in("farm_id", farmIds).order("flock_code"),
           supabase
             .from("batches")
-            .select("id, batch_code, branch_id, farm_id, house_id")
+            .select("id, batch_code, branch_id, farm_id, house_id, placement_date, age_at_placement_days")
             .in("farm_id", farmIds)
             .order("placement_date", { ascending: false }),
         ]);

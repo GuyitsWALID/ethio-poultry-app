@@ -469,6 +469,10 @@ begin
     raise exception 'placement_date is required';
   end if;
 
+  if v_age_days is null or v_age_days < 0 then
+    raise exception 'age_at_placement_days is required and must be non-negative';
+  end if;
+
   v_first_slot := p_flock_slots->0;
   v_farm_id := (v_first_slot->>'farm_id')::uuid;
   v_house_id := (v_first_slot->>'house_id')::uuid;

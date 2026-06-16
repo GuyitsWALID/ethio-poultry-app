@@ -262,6 +262,13 @@ export default function BatchesPage() {
     const transport = Number(formData.get("transport_cost") ?? 0);
     const other = Number(formData.get("other_cost") ?? 0);
     const totalBatchCost = purchaseCost * totalCount + transport + other;
+    const rawAgeAtPlacement = formData.get("age_at_placement_days")?.toString();
+    const ageAtPlacementDays = rawAgeAtPlacement === "" || rawAgeAtPlacement === undefined ? Number.NaN : Number(rawAgeAtPlacement);
+    if (!Number.isInteger(ageAtPlacementDays) || ageAtPlacementDays < 0) {
+      setError("Age at placement is required and must be a non-negative whole number of days.");
+      setLoading(false);
+      return;
+    }
 
     const { error: insertError } = await supabase.rpc("create_branch_batch_cycle", {
       p_org_id: profile.org_id,
@@ -272,7 +279,7 @@ export default function BatchesPage() {
         supplier_name: formData.get("supplier_name")?.toString().trim() || null,
         purchase_date: formData.get("purchase_date")?.toString() || null,
         placement_date: formData.get("placement_date")?.toString(),
-        age_at_placement_days: Number(formData.get("age_at_placement_days")) || null,
+        age_at_placement_days: ageAtPlacementDays,
         male_count: Number(formData.get("male_count")) || 0,
         female_count: Number(formData.get("female_count")) || 0,
         total_count: totalCount,
@@ -318,7 +325,7 @@ export default function BatchesPage() {
           <input name="supplier_name" placeholder="Supplier name" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="purchase_date" type="date" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="placement_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-          <input name="age_at_placement_days" type="number" placeholder="Age at placement (days)" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+          <input name="age_at_placement_days" type="number" min={0} required placeholder="Age at placement (days)" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="male_count" type="number" placeholder="Male count" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="female_count" type="number" placeholder="Female count" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="purchase_cost_per_bird" type="number" step="0.01" placeholder="Purchase cost per bird" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />

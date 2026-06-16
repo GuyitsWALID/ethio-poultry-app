@@ -38,6 +38,25 @@ const feedTypeOptions: Array<{ value: FeedType; label: string; description: stri
 
 const feedTypeLabels = new Map(feedTypeOptions.map((option) => [option.value, option.label]));
 
+const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+
+const calculateFlockAge = (
+  placementDate: string | null | undefined,
+  recordDate: string | null | undefined,
+  ageAtPlacementDays: number | null | undefined = 0
+) => {
+  if (!placementDate || !recordDate) return null;
+  const placed = new Date(`${placementDate}T00:00:00`);
+  const recorded = new Date(`${recordDate}T00:00:00`);
+  const diffDays = Math.floor((recorded.getTime() - placed.getTime()) / 86400000);
+  if (!Number.isFinite(diffDays) || diffDays < 0) return null;
+  const totalAgeDays = diffDays + Math.max(0, ageAtPlacementDays ?? 0);
+  return {
+    weeks: Math.floor(totalAgeDays / 7),
+    days: totalAgeDays,
+  };
+};
+
 type DailyRow = {
   id: string;
   record_date: string;
@@ -59,6 +78,11 @@ type DailyRow = {
   medication_vitamins: string | null;
 };
 
+type AgeSource = {
+  placement_date: string | null;
+  age_at_placement_days: number | null;
+};
+
 export default function DailyRecordsPage() {
   const { scope, setScope, filteredFarms, filteredFlocks, filteredBatches, filteredHouses } =
     useFarmScope();
@@ -76,6 +100,10 @@ export default function DailyRecordsPage() {
   const [formTotalEggs, setFormTotalEggs] = useState("");
   const [formDeaths, setFormDeaths] = useState("");
   const [editingRow, setEditingRow] = useState<DailyRow | null>(null);
+  const [newRecordDate, setNewRecordDate] = useState(() => isoDate(new Date()));
+  const [editRecordDate, setEditRecordDate] = useState("");
+  const [newAgeSource, setNewAgeSource] = useState<AgeSource | null>(null);
+  const [editAgeSource, setEditAgeSource] = useState<AgeSource | null>(null);
   const canCreateRecord = currentRole === "farm_manager";
 
   const parseNumber = (value: FormDataEntryValue | null) => {
@@ -176,6 +204,152 @@ export default function DailyRecordsPage() {
     () => filteredFlocks.find((flock) => flock.id === scope.flockId) ?? null,
     [filteredFlocks, scope.flockId]
   );
+  const selectedBatch = useMemo(() => {
+    const batchId = scope.batchId || selectedFlock?.batch_id;
+    const directBatch = filteredBatches.find((batch) => batch.id === batchId);
+    if (directBatch) return directBatch;
+    if (!selectedFlock) return null;
+    return (
+      filteredBatches.find((batch) => batch.farm_id === selectedFlock.farm_id && batch.house_id === selectedFlock.house_id) ??
+      null
+    );
+  }, [filteredBatches, scope.batchId, selectedFlock]);
+
+  useEffect(() => {
+    const loadAgeSource = async () => {
+      if (!scope.flockId) {
+        setNewAgeSource(null);
+        return;
+      }
+
+      const localSource = selectedBatch?.placement_date
+        ? {
+            placement_date: selectedBatch.placement_date,
+            age_at_placement_days: selectedBatch.age_at_placement_days ?? 0,
+          }
+        : null;
+      if (localSource) {
+        setNewAgeSource(localSource);
+        return;
+      }
+
+      const supabase = createClient();
+      const { data: flock } = await supabase
+        .from("flocks")
+        .select("batch_id, farm_id, house_id, placement_date, age_at_placement_days")
+        .eq("id", scope.flockId)
+        .maybeSingle();
+
+      if (!flock) {
+        setNewAgeSource(null);
+        return;
+      }
+
+      if (flock.batch_id) {
+        const { data: batch } = await supabase
+          .from("batches")
+          .select("placement_date, age_at_placement_days")
+          .eq("id", flock.batch_id)
+          .maybeSingle();
+        if (batch?.placement_date) {
+          setNewAgeSource({
+            placement_date: batch.placement_date,
+            age_at_placement_days: batch.age_at_placement_days ?? 0,
+          });
+          return;
+        }
+      }
+
+      const { data: batch } = await supabase
+        .from("batches")
+        .select("placement_date, age_at_placement_days")
+        .eq("farm_id", flock.farm_id)
+        .eq("house_id", flock.house_id)
+        .order("placement_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setNewAgeSource({
+        placement_date: batch?.placement_date ?? flock.placement_date ?? null,
+        age_at_placement_days: batch?.age_at_placement_days ?? flock.age_at_placement_days ?? 0,
+      });
+    };
+
+    void loadAgeSource();
+  }, [scope.flockId, selectedBatch]);
+
+  useEffect(() => {
+    const loadAgeSource = async () => {
+      if (!editingRow) {
+        setEditAgeSource(null);
+        return;
+      }
+
+      const flock = filteredFlocks.find((item) => item.id === editingRow.flock_id);
+      const localBatch =
+        filteredBatches.find((item) => item.id === flock?.batch_id || item.id === scope.batchId) ??
+        filteredBatches.find((item) => item.farm_id === flock?.farm_id && item.house_id === flock?.house_id);
+      if (localBatch?.placement_date) {
+        setEditAgeSource({
+          placement_date: localBatch.placement_date,
+          age_at_placement_days: localBatch.age_at_placement_days ?? 0,
+        });
+        return;
+      }
+
+      const supabase = createClient();
+      const { data: remoteFlock } = await supabase
+        .from("flocks")
+        .select("batch_id, farm_id, house_id, placement_date, age_at_placement_days")
+        .eq("id", editingRow.flock_id)
+        .maybeSingle();
+
+      if (!remoteFlock) {
+        setEditAgeSource(null);
+        return;
+      }
+
+      if (remoteFlock.batch_id) {
+        const { data: batch } = await supabase
+          .from("batches")
+          .select("placement_date, age_at_placement_days")
+          .eq("id", remoteFlock.batch_id)
+          .maybeSingle();
+        if (batch?.placement_date) {
+          setEditAgeSource({
+            placement_date: batch.placement_date,
+            age_at_placement_days: batch.age_at_placement_days ?? 0,
+          });
+          return;
+        }
+      }
+
+      const { data: batch } = await supabase
+        .from("batches")
+        .select("placement_date, age_at_placement_days")
+        .eq("farm_id", remoteFlock.farm_id)
+        .eq("house_id", remoteFlock.house_id)
+        .order("placement_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setEditAgeSource({
+        placement_date: batch?.placement_date ?? remoteFlock.placement_date ?? null,
+        age_at_placement_days: batch?.age_at_placement_days ?? remoteFlock.age_at_placement_days ?? 0,
+      });
+    };
+
+    void loadAgeSource();
+  }, [editRecordDate, editingRow, filteredBatches, filteredFlocks, scope.batchId]);
+
+  const newRecordAge = useMemo(
+    () => calculateFlockAge(newAgeSource?.placement_date, newRecordDate, newAgeSource?.age_at_placement_days),
+    [newAgeSource, newRecordDate]
+  );
+  const editRecordAge = useMemo(() => {
+    if (!editingRow) return null;
+    return calculateFlockAge(editAgeSource?.placement_date, editRecordDate || editingRow.record_date, editAgeSource?.age_at_placement_days);
+  }, [editAgeSource, editRecordDate, editingRow]);
   const currentLiveBirds = selectedFlock?.current_count ?? null;
   const previewProductionPercentage =
     currentLiveBirds && currentLiveBirds > 0 && formTotalEggs !== ""
@@ -253,7 +427,7 @@ export default function DailyRecordsPage() {
 
     const { data: flockMeta, error: flockError } = await supabase
       .from("flocks")
-      .select("current_count")
+      .select("current_count, batch_id, farm_id, house_id")
       .eq("id", scope.flockId)
       .single();
     if (flockError || !flockMeta) {
@@ -263,6 +437,44 @@ export default function DailyRecordsPage() {
     }
 
     const currentBirds = flockMeta.current_count ?? 0;
+    const batchIdForAge = scope.batchId || flockMeta.batch_id;
+    const localBatch =
+      filteredBatches.find((batch) => batch.id === batchIdForAge) ??
+      filteredBatches.find((batch) => batch.farm_id === flockMeta.farm_id && batch.house_id === flockMeta.house_id);
+    let placementDate = localBatch?.placement_date ?? null;
+    let ageAtPlacementDays = localBatch?.age_at_placement_days ?? 0;
+
+    if (!placementDate && batchIdForAge) {
+      const { data: batchMeta } = await supabase
+        .from("batches")
+        .select("placement_date, age_at_placement_days")
+        .eq("id", batchIdForAge)
+        .maybeSingle();
+      placementDate = batchMeta?.placement_date ?? null;
+      ageAtPlacementDays = batchMeta?.age_at_placement_days ?? 0;
+    }
+
+    if (!placementDate) {
+      const { data: batchMeta } = await supabase
+        .from("batches")
+        .select("placement_date, age_at_placement_days")
+        .eq("org_id", profile.org_id)
+        .eq("farm_id", flockMeta.farm_id)
+        .eq("house_id", flockMeta.house_id)
+        .order("placement_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      placementDate = batchMeta?.placement_date ?? null;
+      ageAtPlacementDays = batchMeta?.age_at_placement_days ?? 0;
+    }
+
+    const flockAge = calculateFlockAge(placementDate, recordDate, ageAtPlacementDays);
+    if (!flockAge) {
+      setFormError("Unable to calculate flock age. Check that the selected batch has a placement date and the record date is not before placement.");
+      setIsSubmitting(false);
+      return;
+    }
+
     const totalEggs = parseNumber(formData.get("total_eggs"));
     const deaths = parseNumber(formData.get("deaths")) ?? 0;
     const productionPercentage =
@@ -274,8 +486,8 @@ export default function DailyRecordsPage() {
       org_id: profile.org_id,
       flock_id: scope.flockId,
       record_date: recordDate,
-      flock_age_weeks: parseNumber(formData.get("flock_age_weeks")),
-      flock_age_days: parseNumber(formData.get("flock_age_days")),
+      flock_age_weeks: flockAge.weeks,
+      flock_age_days: flockAge.days,
       feed_intake_grams: parseNumber(formData.get("feed_intake_grams")),
       feed_intake_quantity: parseNumber(formData.get("feed_intake_quantity")),
       feed_leftover_grams: parseNumber(formData.get("feed_leftover_grams")),
@@ -324,6 +536,8 @@ export default function DailyRecordsPage() {
           : "Daily record saved successfully."
     );
     form.reset();
+    setNewRecordDate(isoDate(new Date()));
+    setEditRecordDate("");
     setFormTotalEggs("");
     setFormDeaths("");
     setEditingRow(null);
@@ -370,7 +584,10 @@ export default function DailyRecordsPage() {
           <button
             className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50"
             type="button"
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setNewRecordDate(isoDate(new Date()));
+              setIsModalOpen(true);
+            }}
           >
             New record
           </button>
@@ -582,6 +799,7 @@ export default function DailyRecordsPage() {
                                       batchId: "",
                                     }));
                                   }
+                                  setEditRecordDate(row.record_date);
                                   setEditingRow(row);
                                 }}
                               >
@@ -621,15 +839,36 @@ export default function DailyRecordsPage() {
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="grid gap-2 text-sm text-forest-700">
                   Record Date
-                  <input name="record_date" type="date" required className={inputClass} />
+                  <input
+                    name="record_date"
+                    type="date"
+                    required
+                    value={newRecordDate}
+                    onChange={(event) => setNewRecordDate(event.target.value)}
+                    className={inputClass}
+                  />
                 </label>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Age Weeks
-                  <input name="flock_age_weeks" type="number" min={0} className={inputClass} />
+                  <input
+                    name="flock_age_weeks"
+                    type="number"
+                    min={0}
+                    readOnly
+                    value={newRecordAge?.weeks ?? ""}
+                    className={`${inputClass} bg-sand-50 text-forest-600`}
+                  />
                 </label>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Age Days
-                  <input name="flock_age_days" type="number" min={0} className={inputClass} />
+                  <input
+                    name="flock_age_days"
+                    type="number"
+                    min={0}
+                    readOnly
+                    value={newRecordAge?.days ?? ""}
+                    className={`${inputClass} bg-sand-50 text-forest-600`}
+                  />
                 </label>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Farm
@@ -840,15 +1079,36 @@ export default function DailyRecordsPage() {
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="grid gap-2 text-sm text-forest-700">
                   Record Date
-                  <input name="record_date" type="date" required defaultValue={editingRow.record_date} className={inputClass} />
+                  <input
+                    name="record_date"
+                    type="date"
+                    required
+                    value={editRecordDate || editingRow.record_date}
+                    onChange={(event) => setEditRecordDate(event.target.value)}
+                    className={inputClass}
+                  />
                 </label>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Age Weeks
-                  <input name="flock_age_weeks" type="number" min={0} defaultValue={editingRow.flock_age_weeks ?? ""} className={inputClass} />
+                  <input
+                    name="flock_age_weeks"
+                    type="number"
+                    min={0}
+                    readOnly
+                    value={editRecordAge?.weeks ?? ""}
+                    className={`${inputClass} bg-sand-50 text-forest-600`}
+                  />
                 </label>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Age Days
-                  <input name="flock_age_days" type="number" min={0} defaultValue={editingRow.flock_age_days ?? ""} className={inputClass} />
+                  <input
+                    name="flock_age_days"
+                    type="number"
+                    min={0}
+                    readOnly
+                    value={editRecordAge?.days ?? ""}
+                    className={`${inputClass} bg-sand-50 text-forest-600`}
+                  />
                 </label>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Flock
