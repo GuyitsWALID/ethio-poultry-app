@@ -83,7 +83,6 @@ export default function UsersPage() {
       supabase.from("profiles").select("id, full_name, phone, role, is_active").eq("org_id", nextOrgId).order("full_name"),
       supabase.from("branches").select("id, name").eq("org_id", nextOrgId).order("name"),
       supabase.from("farms").select("id, name, branch_id").eq("org_id", nextOrgId).order("name"),
-      // @ts-expect-error generated Supabase types are missing this migrated table.
       supabase.from("user_branch_access").select("profile_id, branch_id"),
       supabase.from("user_farm_access").select("profile_id, farm_id").eq("org_id", nextOrgId),
     ]);

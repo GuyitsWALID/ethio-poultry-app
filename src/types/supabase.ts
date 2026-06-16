@@ -2649,6 +2649,52 @@ export type Database = {
           },
         ]
       }
+      user_branch_access: {
+        Row: {
+          branch_id: string
+          created_at: string
+          id: string
+          org_id: string
+          profile_id: string
+        }
+        Insert: {
+          branch_id: string
+          created_at?: string
+          id?: string
+          org_id: string
+          profile_id: string
+        }
+        Update: {
+          branch_id?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_branch_access_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_branch_access_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_branch_access_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_farm_access: {
         Row: {
           created_at: string

@@ -414,13 +414,27 @@ function RecentRecords({ rows }: { rows: KpiResponse["recentRecords"] }) {
 
 export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: DashboardMode; depth?: DashboardDepth }) {
   const { scope, filteredFlocks, filteredBatches } = useFarmScope();
+  const [urlScope, setUrlScope] = useState({ branchId: "", farmId: "", houseId: "", flockId: "", batchId: "", key: "" });
   const [dateFrom, setDateFrom] = useState(defaultFromDate());
   const [dateTo, setDateTo] = useState(todayDate());
   const [data, setData] = useState<KpiResponse>(emptyResponse);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const scopeKey = `${scope.branchId}|${scope.farmId}|${scope.houseId}|${scope.flockId}|${scope.batchId}|${filteredFlocks.length}|${filteredBatches.length}`;
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setUrlScope({
+      branchId: params.get("branch_id") ?? "",
+      farmId: params.get("farm_id") ?? "",
+      houseId: params.get("house_id") ?? "",
+      flockId: params.get("flock_id") ?? "",
+      batchId: params.get("batch_id") ?? "",
+      key: params.toString(),
+    });
+  }, []);
+
+  const scopeKey = `${scope.branchId}|${scope.farmId}|${scope.houseId}|${scope.flockId}|${scope.batchId}|${filteredFlocks.length}|${filteredBatches.length}|${urlScope.key}`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -430,11 +444,11 @@ export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: Dashboard
       const params = new URLSearchParams({
         date_from: dateFrom,
         date_to: dateTo,
-        branch_id: scope.branchId,
-        farm_id: scope.farmId,
-        house_id: scope.houseId,
-        flock_id: scope.flockId,
-        batch_id: scope.batchId,
+        branch_id: urlScope.branchId || scope.branchId,
+        farm_id: urlScope.farmId || scope.farmId,
+        house_id: urlScope.houseId || scope.houseId,
+        flock_id: urlScope.flockId || scope.flockId,
+        batch_id: urlScope.batchId || scope.batchId,
       });
       const response = await fetch(`/api/farm-kpis?${params.toString()}`, { signal: controller.signal });
       if (!response.ok) {
@@ -453,7 +467,7 @@ export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: Dashboard
     });
 
     return () => controller.abort();
-  }, [dateFrom, dateTo, scope.branchId, scope.farmId, scope.houseId, scope.flockId, scope.batchId, scopeKey]);
+  }, [dateFrom, dateTo, scope.branchId, scope.farmId, scope.houseId, scope.flockId, scope.batchId, scopeKey, urlScope]);
 
   const managementCards = [
     { label: "Live Birds", value: formatNumber(data.general.liveBirds), note: "Current active flock count", href: "/app/flocks" },

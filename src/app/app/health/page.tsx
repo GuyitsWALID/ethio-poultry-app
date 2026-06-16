@@ -342,23 +342,28 @@ export default function HealthPage() {
       const plannedDate = parseText(formData.get("planned_date"));
       const vaccineName = parseText(formData.get("vaccine_name"));
       const dosage = parseText(formData.get("dosage"));
-      const route = parseText(formData.get("route"));
-      if (!plannedDate || !vaccineName || !dosage || !route) {
+      const routeText = parseText(formData.get("route"));
+      if (!plannedDate || !vaccineName || !dosage || !routeText) {
         throw new Error("Planned date, vaccine name, dosage, and route are required.");
       }
+      const vaccineRoutes = ["water", "injection", "spray", "eye_drop"] as const;
+      if (!vaccineRoutes.includes(routeText as (typeof vaccineRoutes)[number])) {
+        throw new Error("Route is not valid.");
+      }
+      const route = routeText as (typeof vaccineRoutes)[number];
 
       const { data: newVaccine, error: vaccineError } = await supabase
         .from("vaccination_events")
         .insert({
-        org_id: profile.org_id,
-        flock_id: selectedFlockId,
-        event_date: plannedDate,
-        vaccine_name: vaccineName,
-        dosage,
-        route,
-        birds_vaccinated: null,
-        vet_id: user.id,
-        batch_number: batchCode,
+          org_id: profile.org_id,
+          flock_id: selectedFlockId,
+          event_date: plannedDate,
+          vaccine_name: vaccineName,
+          dosage,
+          route,
+          birds_vaccinated: null,
+          vet_id: user.id,
+          batch_number: batchCode,
           expiry_date: parseText(formData.get("expiry_date")),
         })
         .select("id")
@@ -416,19 +421,20 @@ export default function HealthPage() {
       const { data: newCleanup, error: cleanupError } = await supabase
         .from("biosecurity_checks")
         .insert({
-        org_id: profile.org_id,
-        farm_id: selectedFarmId,
-        checklist_date: date,
-        completed_by: null,
-        notes: `SCHEDULE|${type}${notes ? ` | ${notes}` : ""}`,
+          org_id: profile.org_id,
+          farm_id: selectedFarmId,
+          checklist_date: date,
+          completed_by: null,
+          notes: `SCHEDULE|${type}${notes ? ` | ${notes}` : ""}`,
         })
         .select("id")
         .single();
       if (cleanupError) throw new Error(cleanupError.message);
-      if (newCleanup?.id) {
+      const targetFlockId = cleanFlockId || scope.flockId;
+      if (newCleanup?.id && targetFlockId) {
         await supabase.from("health_events").insert({
           org_id: profile.org_id,
-          flock_id: cleanFlockId || null,
+          flock_id: targetFlockId,
           event_date: date,
           event_type: "observation",
           description: `SCHEDULE_TARGET|${newCleanup.id}|${selectedFarmId}|${cleanHouseId || ""}|${cleanFlockId || ""}`,
@@ -753,19 +759,22 @@ export default function HealthPage() {
       }
 
       const targetDescription = `SCHEDULE_TARGET|${editModal.item.id}|${editModal.farmId}|${editModal.houseId || ""}|${editModal.flockId || ""}`;
+      const targetUpdate: { event_date: string; description: string; flock_id?: string } = {
+        event_date: editModal.date,
+        description: targetDescription,
+      };
+      if (editModal.flockId) targetUpdate.flock_id = editModal.flockId;
       const { error: targetUpdateError } = await supabase
         .from("health_events")
-        .update({
-          event_date: editModal.date,
-          description: targetDescription,
-          flock_id: editModal.flockId || null,
-        })
+        .update(targetUpdate)
         .eq("org_id", profile.org_id)
         .like("description", `SCHEDULE_TARGET|${editModal.item.id}|%`);
       if (targetUpdateError) throw new Error(targetUpdateError.message);
+      const statusUpdate: { event_date: string; flock_id?: string } = { event_date: editModal.date };
+      if (editModal.flockId) statusUpdate.flock_id = editModal.flockId;
       const { error: statusUpdateError } = await supabase
         .from("health_events")
-        .update({ event_date: editModal.date, flock_id: editModal.flockId || null })
+        .update(statusUpdate)
         .eq("org_id", profile.org_id)
         .like("description", `SCHEDULE_STATUS|${editModal.item.id}|%`);
       if (statusUpdateError) throw new Error(statusUpdateError.message);

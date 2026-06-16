@@ -1,14 +1,33 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Search, X } from "lucide-react";
+import { Activity, Egg, Loader2, Plus, Search, Skull, Users, X } from "lucide-react";
+
+import { createClient } from "@/utils/supabase/client";
 
 type Branch = { id: string; name: string };
 type Farm = { id: string; name: string; branch_id: string };
 type House = { id: string; name: string; farm_id: string };
-type Flock = { id: string; flock_code: string; farm_id: string; house_id: string };
+type Flock = {
+  id: string;
+  flock_code: string;
+  farm_id: string;
+  house_id: string;
+  current_count: number;
+  status: string;
+};
+type DailyMetric = {
+  flock_id: string;
+  record_date: string;
+  total_eggs: number | null;
+  production_percentage: number | null;
+  deaths: number | null;
+  mortality_percentage: number | null;
+};
 
 type HouseDraft = { name: string; capacity: number; flocks: Array<Record<string, never>> };
+const today = new Date().toISOString().slice(0, 10);
 
 export default function FarmsPage() {
   const [loading, setLoading] = useState(true);
@@ -18,6 +37,8 @@ export default function FarmsPage() {
   const [farms, setFarms] = useState<Farm[]>([]);
   const [houses, setHouses] = useState<House[]>([]);
   const [flocks, setFlocks] = useState<Flock[]>([]);
+  const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
+  const [selectedFarmId, setSelectedFarmId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [branchFilter, setBranchFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +60,25 @@ export default function FarmsPage() {
     setFarms((data?.farms ?? []) as Farm[]);
     setHouses((data?.houses ?? []) as House[]);
     setFlocks((data?.flocks ?? []) as Flock[]);
+    const contextResponse = await fetch("/api/me/context", { method: "GET" });
+    const context = contextResponse.ok ? await contextResponse.json() : null;
+    const orgId = context?.orgId as string | null;
+    if (orgId) {
+      const supabase = createClient();
+      const { data: records } = await supabase
+        .from("daily_farm_records")
+        .select("flock_id, record_date, total_eggs, production_percentage, deaths, mortality_percentage")
+        .eq("org_id", orgId)
+        .eq("record_date", today);
+      setDailyMetrics((records ?? []) as DailyMetric[]);
+    } else {
+      setDailyMetrics([]);
+    }
     setLoading(false);
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData();
   }, []);
 
@@ -54,6 +90,16 @@ export default function FarmsPage() {
       return farm.name.toLowerCase().includes(q);
     });
   }, [farms, branchFilter, searchQuery]);
+  const selectedFarm = useMemo(
+    () => filteredFarms.find((farm) => farm.id === selectedFarmId) ?? filteredFarms[0] ?? null,
+    [filteredFarms, selectedFarmId]
+  );
+  const branchNameById = useMemo(() => new Map(branches.map((branch) => [branch.id, branch.name])), [branches]);
+  const metricByFlockId = useMemo(() => new Map(dailyMetrics.map((metric) => [metric.flock_id, metric])), [dailyMetrics]);
+  const selectedFarmHouses = useMemo(
+    () => (selectedFarm ? houses.filter((house) => house.farm_id === selectedFarm.id) : []),
+    [houses, selectedFarm]
+  );
 
   const addHouseDraft = () => {
     setDraftHouses((prev) => [...prev, { name: "", capacity: 0, flocks: [] }]);
@@ -206,11 +252,16 @@ export default function FarmsPage() {
               </thead>
               <tbody>
                 {filteredFarms.map((farm) => {
-                  const branchName = branches.find((b) => b.id === farm.branch_id)?.name ?? "-";
+                  const branchName = branchNameById.get(farm.branch_id) ?? "-";
                   const farmHouses = houses.filter((h) => h.farm_id === farm.id);
                   const farmFlocks = flocks.filter((f) => f.farm_id === farm.id);
+                  const selected = selectedFarm?.id === farm.id;
                   return (
-                    <tr key={farm.id} className="border-b border-sand-100">
+                    <tr
+                      key={farm.id}
+                      className={`cursor-pointer border-b border-sand-100 transition hover:bg-sand-50 ${selected ? "bg-leaf-500/10" : ""}`}
+                      onClick={() => setSelectedFarmId(farm.id)}
+                    >
                       <td className="px-2 py-3 font-medium text-forest-900">{farm.name}</td>
                       <td className="px-2 py-3 text-forest-700">{branchName}</td>
                       <td className="px-2 py-3 text-forest-700">{farmHouses.length}</td>
@@ -223,6 +274,75 @@ export default function FarmsPage() {
           </div>
         )}
       </section>
+
+      {selectedFarm ? (
+        <section className="space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-forest-500">Farm hierarchy</p>
+            <h3 className="mt-1 text-xl font-semibold text-forest-900">{selectedFarm.name}</h3>
+            <p className="mt-1 text-sm text-forest-600">
+              Houses in this farm with the current active flock and today&apos;s live production signals.
+            </p>
+          </div>
+
+          {selectedFarmHouses.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-sand-200 bg-sand-50/60 p-8 text-center">
+              <p className="text-sm font-semibold text-forest-900">No houses in this farm</p>
+              <p className="mt-1 text-sm text-forest-600">Create houses through the farm structure modal.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {selectedFarmHouses.map((house) => {
+                const activeFlocks = flocks.filter((flock) => flock.house_id === house.id && flock.status === "active");
+                const activeFlock = activeFlocks[0] ?? flocks.find((flock) => flock.house_id === house.id) ?? null;
+                const metric = activeFlock ? metricByFlockId.get(activeFlock.id) : null;
+                const eggs = metric?.total_eggs ?? 0;
+                const production = metric?.production_percentage ?? null;
+                const mortality = metric?.mortality_percentage ?? null;
+                const deaths = metric?.deaths ?? 0;
+                return (
+                  <article key={house.id} className="rounded-lg border border-sand-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-forest-500">House</p>
+                        <h4 className="mt-1 text-lg font-semibold text-forest-900">{house.name}</h4>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-xs capitalize ${activeFlock ? "bg-leaf-500/10 text-leaf-700" : "bg-sand-100 text-forest-600"}`}>
+                        {activeFlock ? activeFlock.status : "empty"}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 rounded-lg border border-sand-100 bg-sand-50 p-3">
+                      <p className="text-xs uppercase tracking-[0.14em] text-forest-500">Current flock</p>
+                      <p className="mt-1 font-semibold text-forest-900">{activeFlock?.flock_code ?? "No active flock"}</p>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                      <MetricTile icon={Users} label="Live chicks" value={activeFlock ? activeFlock.current_count.toLocaleString() : "-"} />
+                      <MetricTile icon={Activity} label="Production" value={production === null ? "Pending" : `${production}%`} />
+                      <MetricTile icon={Egg} label="Eggs today" value={eggs.toLocaleString()} />
+                      <MetricTile icon={Skull} label="Mortality" value={mortality === null ? `${deaths} deaths` : `${mortality}%`} />
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                      {activeFlock ? (
+                        <Link
+                          className="text-sm font-medium text-forest-800 underline underline-offset-4"
+                          href={`/app/analytics?flock_id=${activeFlock.id}`}
+                        >
+                          View more
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-forest-500">No flock analytics</span>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 p-4" onClick={onCloseModal}>
@@ -382,6 +502,26 @@ export default function FarmsPage() {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function MetricTile({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-h-24 rounded-lg border border-sand-100 bg-white p-3">
+      <div className="flex items-center gap-2 text-forest-500">
+        <Icon className="h-4 w-4" />
+        <span className="text-xs uppercase tracking-[0.12em]">{label}</span>
+      </div>
+      <p className="mt-3 text-lg font-semibold text-forest-900">{value}</p>
     </div>
   );
 }

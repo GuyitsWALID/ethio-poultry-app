@@ -43,7 +43,7 @@ export async function GET() {
       supabaseAdmin.from("branches").select("id, name").eq("org_id", orgId).order("name"),
       supabaseAdmin.from("farms").select("id, name, branch_id").eq("org_id", orgId).order("name"),
       supabaseAdmin.from("houses").select("id, name, farm_id").eq("org_id", orgId).order("name"),
-      supabaseAdmin.from("flocks").select("id, flock_code, farm_id, house_id, batch_id, initial_count, current_count").eq("org_id", orgId).order("flock_code"),
+      supabaseAdmin.from("flocks").select("id, flock_code, farm_id, house_id, batch_id, initial_count, current_count, status").eq("org_id", orgId).order("flock_code"),
       supabaseAdmin
         .from("batches")
         .select("id, batch_code, branch_id, farm_id, house_id")

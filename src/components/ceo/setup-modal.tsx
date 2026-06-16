@@ -15,8 +15,7 @@ interface FarmConfig {
   houses: Array<{
     name: string;
     capacity: number;
-    flocks: Array<{
-      }>;
+    flocks: Array<Record<string, never>>;
   }>;
 }
 
@@ -43,7 +42,7 @@ interface SetupData {
   };
 }
 
-const initialData: Partial<SetupData> = {
+const initialData: SetupData = {
   branch: { name: "", location: "" },
   intakeBatch: {
     source: "external_purchase",
@@ -76,6 +75,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
   const [formData, setFormData] = useState(initialData);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     return () => setMounted(false);
   }, []);
@@ -97,12 +97,12 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
   const intakeTotalCount = Number(formData.intakeBatch?.total_count) || 0;
   const capacityMatchesBatchTotal = intakeTotalCount > 0 && totalHouseCapacity === intakeTotalCount;
 
-  const updateBranch = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, branch: { ...(prev.branch || {}), [field]: value } }));
+  const updateBranch = <K extends keyof SetupData["branch"]>(field: K, value: SetupData["branch"][K]) => {
+    setFormData(prev => ({ ...prev, branch: { ...prev.branch, [field]: value } }));
   };
 
-  const updateIntake = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, intakeBatch: { ...(prev.intakeBatch || {}), [field]: value } }));
+  const updateIntake = (field: keyof SetupData["intakeBatch"], value: string | number) => {
+    setFormData(prev => ({ ...prev, intakeBatch: { ...prev.intakeBatch, [field]: value } as SetupData["intakeBatch"] }));
   };
 
   const addFarm = () => {
@@ -155,7 +155,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
     });
   };
 
-  const updateHouse = (farmIndex: number, houseIndex: number, field: string, value: any) => {
+  const updateHouse = (farmIndex: number, houseIndex: number, field: keyof FarmConfig["houses"][number], value: string | number) => {
     setFormData(prev => {
       const farms = (prev.farms || []).map((farm, index) => {
         if (index !== farmIndex) return farm;
@@ -190,23 +190,6 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
             ? { ...house, flocks: (house.flocks || []).filter((_, j) => j !== flockIndex) }
             : house
         );
-        return { ...farm, houses };
-      });
-      return { ...prev, farms };
-    });
-  };
-
-  const updateFlock = (farmIndex: number, houseIndex: number, flockIndex: number, field: string, value: any) => {
-    setFormData(prev => {
-      const farms = (prev.farms || []).map((farm, index) => {
-        if (index !== farmIndex) return farm;
-        const houses = (farm.houses || []).map((house, i) => {
-          if (i !== houseIndex) return house;
-          const flocks = (house.flocks || []).map((flock, j) =>
-            j === flockIndex ? { ...flock, [field]: value } : flock
-          );
-          return { ...house, flocks };
-        });
         return { ...farm, houses };
       });
       return { ...prev, farms };
@@ -265,8 +248,8 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
 
       onSuccess();
       onClose();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Setup failed");
     } finally {
       setIsSubmitting(false);
     }
