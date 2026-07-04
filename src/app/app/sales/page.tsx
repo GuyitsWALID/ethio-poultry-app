@@ -40,7 +40,39 @@ type Analytics = {
     estimatedProfit: number;
     actualPaidMargin: number | null;
     marginStatus: "estimated" | "tracked";
+    costBasisStatus?: "locked" | "rolling_estimate" | "missing";
+    breakEvenPricePerEgg?: number | null;
+    targetPricePerEgg?: number | null;
+    targetMarginPerEgg?: number;
+    normalEggs?: number;
+    brokenEggs?: number;
+    absorbedCost?: number;
+    costBasisSource?: string;
+    belowTargetCount?: number;
+    belowBreakEvenCount?: number;
     missingCostReasons: string[];
+  };
+  pricingGuidance?: {
+    costBasis: {
+      status: "locked" | "rolling_estimate" | "missing";
+      baseCostPerEgg: number | null;
+      targetMarginPerEgg: number;
+      targetPricePerEgg: number | null;
+      normalEggs: number;
+      brokenEggs: number;
+      absorbedCost: number;
+      sourceLabel: string;
+      missingCostReasons: string[];
+    };
+    tierSummary: Array<{
+      tier: string;
+      label: string;
+      revenue: number;
+      eggsSold: number;
+      marginPerEgg: number | null;
+      totalTierProfit: number | null;
+    }>;
+    warnings: string[];
   };
   charts: {
     daily: Array<{ label: string; revenue: number; quantity: number; estimatedProfit: number; paidProfitMargin: number | null }>;
@@ -49,6 +81,7 @@ type Analytics = {
     quarterly: Array<{ label: string; revenue: number }>;
     productMix: Array<{ label: string; revenue: number; quantity: number }>;
     contribution: Array<{ id: string; label: string; revenue: number; quantity: number }>;
+    salesTiers?: Array<{ tier: string; label: string; revenue: number; eggsSold: number; marginPerEgg: number | null; totalTierProfit: number | null }>;
   };
 };
 
@@ -92,18 +125,40 @@ const emptyAnalytics: Analytics = {
     estimatedProfit: 0,
     actualPaidMargin: null,
     marginStatus: "estimated",
+    costBasisStatus: "missing",
+    breakEvenPricePerEgg: null,
+    targetPricePerEgg: null,
+    targetMarginPerEgg: 0,
+    normalEggs: 0,
+    brokenEggs: 0,
+    absorbedCost: 0,
+    costBasisSource: "Missing cost basis",
+    belowTargetCount: 0,
+    belowBreakEvenCount: 0,
     missingCostReasons: [],
   },
   charts: { daily: [], weekly: [], monthly: [], quarterly: [], productMix: [], contribution: [] },
 };
 
 function currency(value: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: Math.abs(value) < 100 ? 2 : 0,
+  }).format(value);
 }
 
 function labelize(value: string | null | undefined) {
   if (!value) return "-";
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function pricePerEgg(unit: string, unitPrice: string) {
+  const price = Number(unitPrice);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  const normalized = unit.toLowerCase();
+  if (normalized.includes("tray")) return price / 30;
+  if (normalized.includes("crate")) return price / 360;
+  if (normalized.includes("dozen")) return price / 12;
+  return price;
 }
 
 function emptyForm(scope?: Partial<FormState>): FormState {
@@ -291,6 +346,17 @@ export default function SalesPage() {
       (!form.house_id || flocks.some((flock) => flock.batch_id === batch.id && flock.house_id === form.house_id)) &&
       (!form.flock_id || flocks.some((flock) => flock.batch_id === batch.id && flock.id === form.flock_id))
   );
+  const draftPricePerEgg = form.product_category === "egg" ? pricePerEgg(form.unit, form.unit_price) : null;
+  const draftBelowBreakEven =
+    draftPricePerEgg !== null &&
+    analytics.kpis.breakEvenPricePerEgg !== null &&
+    analytics.kpis.breakEvenPricePerEgg !== undefined &&
+    draftPricePerEgg < analytics.kpis.breakEvenPricePerEgg;
+  const draftBelowTarget =
+    draftPricePerEgg !== null &&
+    analytics.kpis.targetPricePerEgg !== null &&
+    analytics.kpis.targetPricePerEgg !== undefined &&
+    draftPricePerEgg < analytics.kpis.targetPricePerEgg;
 
   return (
     <div className="space-y-6">
@@ -347,6 +413,38 @@ export default function SalesPage() {
       </section>
 
       {error ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+
+      <section className="rounded-lg border border-sand-200 bg-white p-4">
+        <div className="grid gap-4 md:grid-cols-4">
+          <article>
+            <p className="text-xs uppercase tracking-[0.16em] text-forest-500">Break-even Egg</p>
+            <p className="mt-2 text-2xl font-semibold text-forest-900">
+              {analytics.kpis.breakEvenPricePerEgg === null || analytics.kpis.breakEvenPricePerEgg === undefined ? "Pending" : currency(analytics.kpis.breakEvenPricePerEgg)}
+            </p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-[0.16em] text-forest-500">Target Price</p>
+            <p className="mt-2 text-2xl font-semibold text-forest-900">
+              {analytics.kpis.targetPricePerEgg === null || analytics.kpis.targetPricePerEgg === undefined ? "Pending" : currency(analytics.kpis.targetPricePerEgg)}
+            </p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-[0.16em] text-forest-500">Cost Basis</p>
+            <p className="mt-2 text-lg font-semibold text-forest-900">{labelize(analytics.kpis.costBasisStatus)}</p>
+            <p className="mt-1 text-xs text-forest-600">{analytics.kpis.costBasisSource}</p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-[0.16em] text-forest-500">Egg Quality</p>
+            <p className="mt-2 text-lg font-semibold text-forest-900">{(analytics.kpis.normalEggs ?? 0).toLocaleString()} normal</p>
+            <p className="mt-1 text-xs text-forest-600">{(analytics.kpis.brokenEggs ?? 0).toLocaleString()} broken absorbed into cost</p>
+          </article>
+        </div>
+        {analytics.pricingGuidance?.warnings?.length ? (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {analytics.pricingGuidance.warnings.join(" ")}
+          </div>
+        ) : null}
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         {[
@@ -440,6 +538,38 @@ export default function SalesPage() {
             <Bar dataKey="revenue" fill="var(--color-revenue)" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ChartContainer>
+      </section>
+
+      <section className="rounded-lg border border-sand-200 bg-white p-5">
+        <h3 className="text-base font-semibold text-forest-900">Price tier margin</h3>
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-sand-200 text-left text-xs uppercase tracking-[0.1em] text-forest-600">
+                <th className="px-2 py-2">Tier</th>
+                <th className="px-2 py-2">Eggs Sold</th>
+                <th className="px-2 py-2">Revenue</th>
+                <th className="px-2 py-2">Margin / Egg</th>
+                <th className="px-2 py-2">Tier Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(analytics.pricingGuidance?.tierSummary ?? []).length === 0 ? (
+                <tr><td className="px-2 py-4 text-forest-600" colSpan={5}>No egg sales tiers in this range.</td></tr>
+              ) : (
+                (analytics.pricingGuidance?.tierSummary ?? []).map((tier) => (
+                  <tr key={tier.tier} className="border-b border-sand-100">
+                    <td className="px-2 py-2 font-medium text-forest-900">{tier.label}</td>
+                    <td className="px-2 py-2 text-forest-700">{currency(tier.eggsSold)}</td>
+                    <td className="px-2 py-2 text-forest-700">{currency(tier.revenue)}</td>
+                    <td className="px-2 py-2 text-forest-700">{tier.marginPerEgg === null ? "Pending" : currency(tier.marginPerEgg)}</td>
+                    <td className="px-2 py-2 text-forest-700">{tier.totalTierProfit === null ? "Pending" : currency(tier.totalTierProfit)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="rounded-lg border border-sand-200 bg-white p-5">
@@ -547,6 +677,17 @@ export default function SalesPage() {
                 Unit Price
                 <input className="h-10 rounded-lg border border-sand-200 px-3 text-sm" type="number" min="0" step="0.01" value={form.unit_price} onChange={(event) => setForm((prev) => ({ ...prev, unit_price: event.target.value }))} />
               </label>
+              {form.product_category === "egg" && draftPricePerEgg !== null ? (
+                <div className={`rounded-lg border px-3 py-2 text-xs md:col-span-3 ${
+                  draftBelowBreakEven
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : draftBelowTarget
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-leaf-200 bg-leaf-50 text-leaf-700"
+                }`}>
+                  Price per egg: {currency(draftPricePerEgg)}. Break-even: {analytics.kpis.breakEvenPricePerEgg === null || analytics.kpis.breakEvenPricePerEgg === undefined ? "Pending" : currency(analytics.kpis.breakEvenPricePerEgg)}. Target: {analytics.kpis.targetPricePerEgg === null || analytics.kpis.targetPricePerEgg === undefined ? "Pending" : currency(analytics.kpis.targetPricePerEgg)}.
+                </div>
+              ) : null}
               <label className="grid gap-1 text-xs text-forest-600">
                 Paid Amount
                 <input className="h-10 rounded-lg border border-sand-200 px-3 text-sm" type="number" min="0" step="0.01" value={form.paid_amount} onChange={(event) => setForm((prev) => ({ ...prev, paid_amount: event.target.value }))} />

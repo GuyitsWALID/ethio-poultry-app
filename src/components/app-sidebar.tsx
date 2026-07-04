@@ -124,6 +124,7 @@ const farmManagerNavSections: NavSection[] = [
     items: [
       { label: "Health Log", href: "/app/health" },
       { label: "Inventory Log", href: "/app/inventory" },
+      { label: "Sales", href: "/app/sales" },
     ],
   },
 ];
