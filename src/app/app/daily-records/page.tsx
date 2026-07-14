@@ -83,6 +83,21 @@ type AgeSource = {
   age_at_placement_days: number | null;
 };
 
+type InventoryUsageItem = {
+  id: string;
+  name: string;
+  category: string;
+  unit: string;
+  unit_cost: number | null;
+};
+
+type WarehouseRow = {
+  id: string;
+  branch_id: string;
+  name: string;
+  type: string;
+};
+
 export default function DailyRecordsPage() {
   const { scope, setScope, filteredFarms, filteredFlocks, filteredBatches, filteredHouses } =
     useFarmScope();
@@ -104,6 +119,8 @@ export default function DailyRecordsPage() {
   const [editRecordDate, setEditRecordDate] = useState("");
   const [newAgeSource, setNewAgeSource] = useState<AgeSource | null>(null);
   const [editAgeSource, setEditAgeSource] = useState<AgeSource | null>(null);
+  const [inventoryItems, setInventoryItems] = useState<InventoryUsageItem[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const canCreateRecord = currentRole === "farm_manager";
 
   const parseNumber = (value: FormDataEntryValue | null) => {
@@ -181,6 +198,39 @@ export default function DailyRecordsPage() {
     };
     void loadRole();
   }, []);
+
+  useEffect(() => {
+    const loadInventoryOptions = async () => {
+      const response = await fetch("/api/me/context", { method: "GET" });
+      if (!response.ok) return;
+      const context = await response.json();
+      const orgId = context?.orgId as string | null;
+      if (!orgId) return;
+
+      const supabase = createClient();
+      let warehouseQuery = supabase
+        .from("warehouses")
+        .select("id, branch_id, name, type")
+        .eq("org_id", orgId)
+        .order("name");
+      if (scope.branchId) warehouseQuery = warehouseQuery.eq("branch_id", scope.branchId);
+
+      const [itemsRes, warehousesRes] = await Promise.all([
+        supabase
+          .from("inventory_items")
+          .select("id, name, category, unit, unit_cost")
+          .eq("org_id", orgId)
+          .in("category", ["feed", "medicine", "vaccine", "vitamin", "supplement", "packaging"])
+          .order("name"),
+        warehouseQuery,
+      ]);
+
+      setInventoryItems((itemsRes.data ?? []) as InventoryUsageItem[]);
+      setWarehouses((warehousesRes.data ?? []) as WarehouseRow[]);
+    };
+
+    void loadInventoryOptions();
+  }, [scope.branchId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -359,6 +409,52 @@ export default function DailyRecordsPage() {
     currentLiveBirds && currentLiveBirds > 0 && formDeaths !== ""
       ? Number(((Number(formDeaths) / currentLiveBirds) * 100).toFixed(2))
       : "";
+  const feedInventoryItems = inventoryItems.filter((item) => item.category === "feed");
+  const healthInventoryItems = inventoryItems.filter((item) => item.category !== "feed");
+  const defaultWarehouseId = warehouses[0]?.id ?? "";
+
+  const buildDailyInventoryUsages = (formData: FormData) => {
+    const feedItemId = parseText(formData.get("feed_inventory_item_id"));
+    const feedWarehouseId = parseText(formData.get("feed_warehouse_id")) ?? defaultWarehouseId;
+    const feedIssueQuantity = parseNumber(formData.get("feed_issue_quantity")) ?? 0;
+    const healthItemId = parseText(formData.get("health_inventory_item_id"));
+    const healthWarehouseId = parseText(formData.get("health_warehouse_id")) ?? defaultWarehouseId;
+    const healthIssueQuantity = parseNumber(formData.get("health_issue_quantity")) ?? 0;
+    const healthUsageReason = parseText(formData.get("health_usage_reason"));
+    const usages: Array<{
+      item_id: string;
+      warehouse_id: string;
+      quantity: number;
+      unit_cost: number;
+      notes: string;
+    }> = [];
+
+    if (feedIssueQuantity > 0) {
+      if (!feedItemId || !feedWarehouseId) throw new Error("Select feed item and warehouse before issuing feed stock.");
+      const item = inventoryItems.find((candidate) => candidate.id === feedItemId);
+      usages.push({
+        item_id: feedItemId,
+        warehouse_id: feedWarehouseId,
+        quantity: feedIssueQuantity,
+        unit_cost: item?.unit_cost ?? 0,
+        notes: "Daily feed issue",
+      });
+    }
+
+    if (healthIssueQuantity > 0) {
+      if (!healthItemId || !healthWarehouseId) throw new Error("Select medication, supplement, or vaccine item and warehouse before issuing stock.");
+      const item = inventoryItems.find((candidate) => candidate.id === healthItemId);
+      usages.push({
+        item_id: healthItemId,
+        warehouse_id: healthWarehouseId,
+        quantity: healthIssueQuantity,
+        unit_cost: item?.unit_cost ?? 0,
+        notes: healthUsageReason ?? "Daily health/supplement issue",
+      });
+    }
+
+    return usages;
+  };
 
   const saveDailyRecord = async (form: HTMLFormElement, rowId?: string) => {
     setFormError(null);
@@ -504,26 +600,28 @@ export default function DailyRecordsPage() {
       recorded_by: user.id,
     };
 
-    const { data: savedRecord, error: dailyError } = rowId
-      ? await supabase
-          .from("daily_farm_records")
-          .update(payload)
-          .eq("id", rowId)
-          .eq("org_id", profile.org_id)
-          .select("id")
-          .single()
-      : await supabase
-          .from("daily_farm_records")
-          .upsert(payload, { onConflict: "org_id,flock_id,record_date" })
-          .select("id")
-          .single();
+    let usages;
+    try {
+      usages = buildDailyInventoryUsages(formData);
+    } catch (usageError) {
+      setFormError(usageError instanceof Error ? usageError.message : "Inventory usage is invalid.");
+      setIsSubmitting(false);
+      return;
+    }
 
-    if (dailyError) {
-      setFormError(
-        dailyError.code === "23505"
-          ? "This flock already has a daily record for that date. Open that row and edit it."
-          : dailyError.message
-      );
+    const saveResponse = await fetch("/api/inventory/daily-usage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        daily_record_id: rowId ?? null,
+        flock_id: scope.flockId,
+        record: payload,
+        usages,
+      }),
+    });
+    const saveResult = await saveResponse.json();
+    if (!saveResponse.ok) {
+      setFormError(saveResult?.error ?? "Could not save the daily record and inventory usage.");
       setIsSubmitting(false);
       return;
     }
@@ -531,8 +629,8 @@ export default function DailyRecordsPage() {
     setFormSuccess(
       rowId
         ? "Daily record updated successfully."
-        : savedRecord?.id
-          ? "Daily record saved as the canonical flock/day entry."
+        : usages.length > 0
+          ? "Daily record saved and inventory usage issued."
           : "Daily record saved successfully."
     );
     form.reset();
@@ -956,6 +1054,65 @@ export default function DailyRecordsPage() {
 
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Inventory Item
+                  <select name="feed_inventory_item_id" className={inputClass}>
+                    <option value="">No feed issue</option>
+                    {feedInventoryItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({item.unit})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Warehouse
+                  <select name="feed_warehouse_id" defaultValue={defaultWarehouseId} className={inputClass}>
+                    <option value="">Select warehouse</option>
+                    {warehouses.map((warehouse) => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Issued From Stock
+                  <input name="feed_issue_quantity" type="number" min={0} step="0.01" placeholder="Item unit quantity" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Medicine/Supplement Item
+                  <select name="health_inventory_item_id" className={inputClass}>
+                    <option value="">No health stock issue</option>
+                    {healthInventoryItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({item.unit})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Health Stock Warehouse
+                  <select name="health_warehouse_id" defaultValue={defaultWarehouseId} className={inputClass}>
+                    <option value="">Select warehouse</option>
+                    {warehouses.map((warehouse) => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Health Stock Issued
+                  <input name="health_issue_quantity" type="number" min={0} step="0.01" placeholder="Item unit quantity" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700 md:col-span-2">
+                  Health Stock Reason
+                  <input name="health_usage_reason" type="text" placeholder="Treatment, supplement, vaccination..." className={inputClass} />
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
                   Current Live Birds
                   <input value={currentLiveBirds ?? ""} readOnly className={`${inputClass} bg-sand-50 text-forest-600`} />
                 </label>
@@ -1143,6 +1300,65 @@ export default function DailyRecordsPage() {
                       </option>
                     ))}
                   </select>
+                </label>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Inventory Item
+                  <select name="feed_inventory_item_id" className={inputClass}>
+                    <option value="">Leave existing feed issue unchanged</option>
+                    {feedInventoryItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({item.unit})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Warehouse
+                  <select name="feed_warehouse_id" defaultValue={defaultWarehouseId} className={inputClass}>
+                    <option value="">Select warehouse</option>
+                    {warehouses.map((warehouse) => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Feed Issued From Stock
+                  <input name="feed_issue_quantity" type="number" min={0} step="0.01" placeholder="Only fill to replace usage issue" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Medicine/Supplement Item
+                  <select name="health_inventory_item_id" className={inputClass}>
+                    <option value="">Leave existing health issue unchanged</option>
+                    {healthInventoryItems.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({item.unit})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Health Stock Warehouse
+                  <select name="health_warehouse_id" defaultValue={defaultWarehouseId} className={inputClass}>
+                    <option value="">Select warehouse</option>
+                    {warehouses.map((warehouse) => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700">
+                  Health Stock Issued
+                  <input name="health_issue_quantity" type="number" min={0} step="0.01" placeholder="Only fill to replace usage issue" className={inputClass} />
+                </label>
+                <label className="grid gap-2 text-sm text-forest-700 md:col-span-2">
+                  Health Stock Reason
+                  <input name="health_usage_reason" type="text" placeholder="Treatment, supplement, vaccination..." className={inputClass} />
                 </label>
               </div>
 

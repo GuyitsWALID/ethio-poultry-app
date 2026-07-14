@@ -2450,16 +2450,25 @@ export type Database = {
       }
       stock_ledger: {
         Row: {
+          batch_id: string | null
           batch_number: string | null
+          branch_id: string | null
           created_at: string
+          daily_record_id: string | null
           expiry_date: string | null
+          farm_id: string | null
           flock_id: string | null
+          house_id: string | null
           id: string
+          invoice_number: string | null
           item_id: string
+          notes: string | null
           org_id: string
+          procurement_type: Database["public"]["Enums"]["procurement_type"] | null
           quantity: number
           recorded_by: string | null
           reference_doc: string | null
+          supplier_name: string | null
           transaction_date: string
           transaction_type: Database["public"]["Enums"]["stock_txn_type"]
           unit_cost: number
@@ -2467,16 +2476,25 @@ export type Database = {
           warehouse_id: string
         }
         Insert: {
+          batch_id?: string | null
           batch_number?: string | null
+          branch_id?: string | null
           created_at?: string
+          daily_record_id?: string | null
           expiry_date?: string | null
+          farm_id?: string | null
           flock_id?: string | null
+          house_id?: string | null
           id?: string
+          invoice_number?: string | null
           item_id: string
+          notes?: string | null
           org_id: string
+          procurement_type?: Database["public"]["Enums"]["procurement_type"] | null
           quantity: number
           recorded_by?: string | null
           reference_doc?: string | null
+          supplier_name?: string | null
           transaction_date?: string
           transaction_type: Database["public"]["Enums"]["stock_txn_type"]
           unit_cost: number
@@ -2484,16 +2502,25 @@ export type Database = {
           warehouse_id: string
         }
         Update: {
+          batch_id?: string | null
           batch_number?: string | null
+          branch_id?: string | null
           created_at?: string
+          daily_record_id?: string | null
           expiry_date?: string | null
+          farm_id?: string | null
           flock_id?: string | null
+          house_id?: string | null
           id?: string
+          invoice_number?: string | null
           item_id?: string
+          notes?: string | null
           org_id?: string
+          procurement_type?: Database["public"]["Enums"]["procurement_type"] | null
           quantity?: number
           recorded_by?: string | null
           reference_doc?: string | null
+          supplier_name?: string | null
           transaction_date?: string
           transaction_type?: Database["public"]["Enums"]["stock_txn_type"]
           unit_cost?: number
@@ -2501,6 +2528,13 @@ export type Database = {
           warehouse_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "stock_ledger_daily_record_id_fkey"
+            columns: ["daily_record_id"]
+            isOneToOne: false
+            referencedRelation: "daily_farm_records"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "stock_ledger_flock_id_fkey"
             columns: ["flock_id"]
@@ -2980,6 +3014,46 @@ export type Database = {
         Args: { input_role: string }
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      record_inventory_movement: {
+        Args: {
+          p_actor_id: string
+          p_item_id: string
+          p_warehouse_id: string
+          p_transaction_type: string
+          p_quantity: number
+          p_unit_cost?: number
+          p_transaction_date?: string
+          p_destination_warehouse_id?: string | null
+          p_branch_id?: string | null
+          p_farm_id?: string | null
+          p_house_id?: string | null
+          p_flock_id?: string | null
+          p_batch_id?: string | null
+          p_procurement_type?: Database["public"]["Enums"]["procurement_type"] | null
+          p_supplier_name?: string | null
+          p_invoice_number?: string | null
+          p_reference_doc?: string | null
+          p_notes?: string | null
+        }
+        Returns: Json
+      }
+      save_daily_record_with_usage: {
+        Args: {
+          p_actor_id: string
+          p_daily_record_id: string | null
+          p_flock_id: string
+          p_record: Json
+          p_usages?: Json
+        }
+        Returns: Json
+      }
+      stock_movement_delta: {
+        Args: {
+          p_transaction_type: Database["public"]["Enums"]["stock_txn_type"]
+          p_quantity: number
+        }
+        Returns: number
+      }
     }
     Enums: {
       account_type: "asset" | "liability" | "equity" | "revenue" | "expense"
@@ -3007,9 +3081,11 @@ export type Database = {
         | "medicine"
         | "vaccine"
         | "vitamin"
+        | "supplement"
         | "equipment"
         | "spare_parts"
         | "packaging"
+        | "miscellaneous"
       lead_activity_type: "call" | "visit" | "message" | "email" | "note"
       lead_source:
         | "telegram"
@@ -3038,6 +3114,7 @@ export type Database = {
       payment_status: "pending" | "partial" | "paid"
       payment_type: "deposit_50" | "final_50" | "full" | "partial"
       pos_payment_method: "cash" | "bank_transfer" | "mobile_money"
+      procurement_type: "monthly" | "emergency" | "miscellaneous"
       sales_order_status:
         | "draft"
         | "proforma_sent"
@@ -3216,9 +3293,11 @@ export const Constants = {
         "medicine",
         "vaccine",
         "vitamin",
+        "supplement",
         "equipment",
         "spare_parts",
         "packaging",
+        "miscellaneous",
       ],
       lead_activity_type: ["call", "visit", "message", "email", "note"],
       lead_source: [
@@ -3250,6 +3329,7 @@ export const Constants = {
       payment_status: ["pending", "partial", "paid"],
       payment_type: ["deposit_50", "final_50", "full", "partial"],
       pos_payment_method: ["cash", "bank_transfer", "mobile_money"],
+      procurement_type: ["monthly", "emergency", "miscellaneous"],
       sales_order_status: [
         "draft",
         "proforma_sent",

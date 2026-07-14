@@ -17,12 +17,17 @@ type InventoryItem = {
 
 type StockLedgerRow = {
   item_id: string;
+  warehouse_id: string;
   quantity: number;
   transaction_type: "receipt" | "issue" | "transfer_out" | "transfer_in" | "adjustment" | "return";
   unit_cost: number;
   transaction_date: string;
   flock_id: string | null;
   reference_doc: string | null;
+  supplier_name?: string | null;
+  invoice_number?: string | null;
+  procurement_type?: "monthly" | "emergency" | "miscellaneous" | null;
+  notes?: string | null;
 };
 
 type FeedScheduleRow = {
@@ -37,6 +42,7 @@ type FeedScheduleRow = {
 
 type WarehouseRow = {
   id: string;
+  branch_id: string;
   name: string;
   type: string;
 };
@@ -62,13 +68,23 @@ type MonthlyPeriod = {
   total_normal_eggs: number;
   total_broken_eggs: number;
   total_revenue: number;
+  total_paid_revenue: number;
+  total_balance_due: number;
+  direct_inventory_cost: number;
+  bird_cogs: number;
+  overhead_cost: number;
+  unallocated_cost: number;
+  excluded_duplicate_cost: number;
   total_absorbed_cost: number;
+  operating_profit: number;
+  cash_operating_surplus: number;
+  reconciliation_warnings: string[];
   base_cost_per_egg: number | null;
   target_margin_per_egg: number;
 };
 
 type InventoryCategory = Database["public"]["Enums"]["inventory_category"];
-type StockTxnType = Database["public"]["Enums"]["stock_txn_type"];
+type StockMovementInputType = "receipt" | "issue" | "return" | "adjustment" | "transfer";
 
 const tabs = [
   { id: "stock", label: "Stock" },
@@ -123,6 +139,7 @@ export default function InventoryPage() {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [ledger, setLedger] = useState<StockLedgerRow[]>([]);
+  const [balanceLedger, setBalanceLedger] = useState<StockLedgerRow[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const [feedRows, setFeedRows] = useState<FeedScheduleRow[]>([]);
   const [costEntries, setCostEntries] = useState<CostEntry[]>([]);
@@ -139,7 +156,10 @@ export default function InventoryPage() {
 
   const [txnItemId, setTxnItemId] = useState("");
   const [txnWarehouseId, setTxnWarehouseId] = useState("");
-  const [txnType, setTxnType] = useState<StockTxnType>("receipt");
+  const [txnType, setTxnType] = useState<StockMovementInputType>("receipt");
+  const [txnDestinationWarehouseId, setTxnDestinationWarehouseId] = useState("");
+  const [txnDate, setTxnDate] = useState(new Date().toISOString().slice(0, 10));
+  const [txnProcurementType, setTxnProcurementType] = useState<"monthly" | "emergency" | "miscellaneous">("monthly");
   const [txnQuantity, setTxnQuantity] = useState(0);
   const [txnUnitCost, setTxnUnitCost] = useState(0);
   const [txnFlockId, setTxnFlockId] = useState("");
@@ -147,6 +167,7 @@ export default function InventoryPage() {
   const [txnReference, setTxnReference] = useState("");
   const [txnSupplier, setTxnSupplier] = useState("");
   const [txnInvoice, setTxnInvoice] = useState("");
+  const [txnNotes, setTxnNotes] = useState("");
 
   const [costDate, setCostDate] = useState(new Date().toISOString().slice(0, 10));
   const [costCategory, setCostCategory] = useState("payroll");
@@ -203,6 +224,7 @@ export default function InventoryPage() {
     if (!nextOrgId) {
       setItems([]);
       setLedger([]);
+      setBalanceLedger([]);
       setWarehouses([]);
       setFeedRows([]);
       setCostEntries([]);
@@ -214,7 +236,7 @@ export default function InventoryPage() {
     const supabase = createClient();
     let ledgerQuery = supabase
       .from("stock_ledger")
-      .select("item_id, quantity, transaction_type, unit_cost, transaction_date, flock_id, reference_doc")
+      .select("item_id, warehouse_id, quantity, transaction_type, unit_cost, transaction_date, flock_id, reference_doc, supplier_name, invoice_number, procurement_type, notes")
       .eq("org_id", nextOrgId)
       .order("transaction_date", { ascending: false })
       .limit(1000);
@@ -234,6 +256,7 @@ export default function InventoryPage() {
     } else if (scope.branchId || scope.farmId || scope.houseId || scope.batchId) {
       setItems([]);
       setLedger([]);
+      setBalanceLedger([]);
       setWarehouses([]);
       setFeedRows([]);
       setCostEntries([]);
@@ -242,15 +265,20 @@ export default function InventoryPage() {
       return;
     }
 
-    const [itemsRes, ledgerRes, feedRes, warehousesRes, costsResponse, periodsResponse] = await Promise.all([
+    const [itemsRes, ledgerRes, balanceLedgerRes, feedRes, warehousesRes, costsResponse, periodsResponse] = await Promise.all([
       supabase
         .from("inventory_items")
         .select("id, name, category, unit, reorder_level, unit_cost")
         .eq("org_id", nextOrgId)
         .order("name"),
       ledgerQuery,
+      supabase
+        .from("stock_ledger")
+        .select("item_id, warehouse_id, quantity, transaction_type, unit_cost, transaction_date, flock_id, reference_doc, supplier_name, invoice_number, procurement_type, notes")
+        .eq("org_id", nextOrgId)
+        .limit(10000),
       feedQuery,
-      supabase.from("warehouses").select("id, name, type").eq("org_id", nextOrgId).order("name"),
+      supabase.from("warehouses").select("id, branch_id, name, type").eq("org_id", nextOrgId).order("name"),
       fetch(`/api/profit/cost-entries?${scopeParams.toString()}`),
       fetch(`/api/profit/monthly?${scopeParams.toString()}`),
     ]);
@@ -261,6 +289,13 @@ export default function InventoryPage() {
     setLedger((ledgerRes.data ?? []) as StockLedgerRow[]);
     setFeedRows((feedRes.data ?? []) as FeedScheduleRow[]);
     const warehouseRows = (warehousesRes.data ?? []) as WarehouseRow[];
+    const balanceRows = (balanceLedgerRes.data ?? []) as StockLedgerRow[];
+    const scopedWarehouseIds = new Set(
+      warehouseRows
+        .filter((warehouse) => !scope.branchId || warehouse.branch_id === scope.branchId)
+        .map((warehouse) => warehouse.id)
+    );
+    setBalanceLedger(balanceRows.filter((row) => scopedWarehouseIds.has(row.warehouse_id)));
     setWarehouses(warehouseRows);
     setCostEntries((costsJson.costEntries ?? []) as CostEntry[]);
     setPeriods((periodsJson.periods ?? []) as MonthlyPeriod[]);
@@ -277,9 +312,9 @@ export default function InventoryPage() {
   const stockByItem = useMemo(() => {
     const sign = (txn: StockLedgerRow["transaction_type"]) => (txn === "issue" || txn === "transfer_out" ? -1 : 1);
     const map = new Map<string, number>();
-    ledger.forEach((entry) => map.set(entry.item_id, (map.get(entry.item_id) ?? 0) + sign(entry.transaction_type) * entry.quantity));
+    balanceLedger.forEach((entry) => map.set(entry.item_id, (map.get(entry.item_id) ?? 0) + sign(entry.transaction_type) * entry.quantity));
     return map;
-  }, [ledger]);
+  }, [balanceLedger]);
 
   const itemNameMap = useMemo(() => new Map(items.map((item) => [item.id, item.name])), [items]);
   const flockLabelMap = useMemo(() => new Map(filteredFlocks.map((flock) => [flock.id, flock.flock_code])), [filteredFlocks]);
@@ -322,50 +357,57 @@ export default function InventoryPage() {
   const onAddLedgerEntry = async (event: React.FormEvent) => {
     event.preventDefault();
     if (saving || !orgId || !canManageStock) return;
-    if (!txnItemId || !txnWarehouseId || txnQuantity <= 0) {
-      setError("Select item, warehouse, transaction type, and positive quantity.");
+    if (!txnItemId || !txnWarehouseId || txnQuantity === 0 || (txnType !== "adjustment" && txnQuantity < 0)) {
+      setError("Select an item and warehouse. Quantity must be positive unless this is a signed adjustment.");
+      return;
+    }
+    if (txnType === "transfer" && (!txnDestinationWarehouseId || txnDestinationWarehouseId === txnWarehouseId)) {
+      setError("Select a different destination warehouse for the transfer.");
       return;
     }
     setSaving(true);
     setError(null);
     setSuccess(null);
 
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const stockLedger = supabase.from("stock_ledger") as unknown as {
-      insert: (values: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
-    };
-    const { error: insertError } = await stockLedger.insert({
-      org_id: orgId,
-      item_id: txnItemId,
-      warehouse_id: txnWarehouseId,
-      transaction_type: txnType,
-      quantity: txnQuantity,
-      unit_cost: txnUnitCost || items.find((item) => item.id === txnItemId)?.unit_cost || 0,
-      flock_id: txnFlockId || null,
-      batch_id: txnBatchId || null,
-      branch_id: scope.branchId || null,
-      farm_id: scope.farmId || null,
-      house_id: scope.houseId || null,
-      supplier_name: txnSupplier.trim() || null,
-      invoice_number: txnInvoice.trim() || null,
-      reference_doc: txnReference.trim() || txnInvoice.trim() || null,
-      recorded_by: user?.id ?? null,
+    const response = await fetch("/api/inventory/stock-movements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        item_id: txnItemId,
+        warehouse_id: txnWarehouseId,
+        destination_warehouse_id: txnType === "transfer" ? txnDestinationWarehouseId : null,
+        transaction_type: txnType,
+        transaction_date: txnDate,
+        procurement_type: txnType === "receipt" ? txnProcurementType : null,
+        quantity: txnQuantity,
+        unit_cost: txnUnitCost || items.find((item) => item.id === txnItemId)?.unit_cost || 0,
+        flock_id: txnFlockId || null,
+        batch_id: txnBatchId || null,
+        branch_id: scope.branchId || null,
+        farm_id: scope.farmId || null,
+        house_id: scope.houseId || null,
+        supplier_name: txnSupplier,
+        invoice_number: txnInvoice,
+        reference_doc: txnReference || txnInvoice,
+        notes: txnNotes,
+      }),
     });
+    const data = await response.json();
 
     setSaving(false);
-    if (insertError) {
-      setError(insertError.message);
+    if (!response.ok) {
+      setError(data?.error ?? "Could not save stock movement.");
       return;
     }
-    setSuccess(txnType === "receipt" ? "Purchase receipt saved." : "Stock movement saved.");
+    setSuccess(txnType === "receipt" ? "Purchase receipt saved." : txnType === "transfer" ? "Warehouse transfer saved as a paired movement." : "Stock movement saved.");
+    setTxnDate(new Date().toISOString().slice(0, 10));
     setTxnQuantity(0);
     setTxnUnitCost(0);
+    setTxnDestinationWarehouseId("");
     setTxnReference("");
     setTxnSupplier("");
     setTxnInvoice("");
+    setTxnNotes("");
     await loadData();
   };
 
@@ -452,7 +494,11 @@ export default function InventoryPage() {
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              setActiveTab(tab.id);
+              if (tab.id === "purchases") setTxnType("receipt");
+              if (tab.id === "issues" && txnType === "receipt") setTxnType("issue");
+            }}
             className={`border-b-2 px-3 py-2 text-sm font-medium transition ${
               activeTab === tab.id
                 ? "border-forest-800 text-forest-900"
@@ -531,9 +577,11 @@ export default function InventoryPage() {
                 <option value="medicine">Medicine</option>
                 <option value="vaccine">Vaccine</option>
                 <option value="vitamin">Vitamin</option>
+                <option value="supplement">Supplement</option>
                 <option value="equipment">Equipment</option>
                 <option value="spare_parts">Spare Parts</option>
                 <option value="packaging">Packaging</option>
+                <option value="miscellaneous">Miscellaneous</option>
               </select>
               <input className={inputClass} placeholder="Unit (kg, bag, liter, piece)" value={unit} onChange={(e) => setUnit(e.target.value)} />
               <input type="number" className={inputClass} placeholder="Reorder level" value={reorderLevel} onChange={(e) => setReorderLevel(Number(e.target.value) || 0)} />
@@ -549,7 +597,7 @@ export default function InventoryPage() {
       {activeTab === "purchases" || activeTab === "issues" ? (
         <div className="grid gap-6 xl:grid-cols-[minmax(360px,430px)_minmax(0,1fr)]">
           <section className="rounded-lg border border-sand-200 bg-white p-5">
-            <h3 className="text-base font-semibold text-forest-900">{activeTab === "purchases" ? "Record Purchase" : "Record Issue or Return"}</h3>
+            <h3 className="text-base font-semibold text-forest-900">{activeTab === "purchases" ? "Monthly or Random Procurement" : "Record Issue or Return"}</h3>
             {!canManageStock ? <p className="mt-2 text-sm text-forest-600">Your role is view-only for stock movements.</p> : null}
             <form className="mt-4 grid gap-3" onSubmit={onAddLedgerEntry}>
               <select className={inputClass} value={txnItemId} onChange={(e) => {
@@ -564,16 +612,33 @@ export default function InventoryPage() {
                 <option value="">Select warehouse</option>
                 {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name} ({warehouse.type})</option>)}
               </select>
-              <select className={inputClass} value={txnType} onChange={(e) => setTxnType(e.target.value as StockTxnType)}>
+              <select className={inputClass} value={txnType} onChange={(e) => setTxnType(e.target.value as StockMovementInputType)}>
                 {activeTab === "purchases" ? <option value="receipt">Receipt</option> : null}
                 <option value="issue">Issue</option>
                 <option value="return">Return</option>
-                <option value="transfer_out">Transfer Out</option>
-                <option value="transfer_in">Transfer In</option>
+                <option value="transfer">Warehouse Transfer</option>
                 <option value="adjustment">Adjustment</option>
               </select>
+              {txnType === "transfer" ? (
+                <select className={inputClass} value={txnDestinationWarehouseId} onChange={(e) => setTxnDestinationWarehouseId(e.target.value)} required>
+                  <option value="">Select destination warehouse</option>
+                  {warehouses
+                    .filter((warehouse) => warehouse.id !== txnWarehouseId)
+                    .map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name} ({warehouse.type})</option>)}
+                </select>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
-                <input type="number" min={0.01} step="0.01" className={inputClass} placeholder="Quantity" value={txnQuantity || ""} onChange={(e) => setTxnQuantity(Number(e.target.value) || 0)} required />
+                <input type="date" className={inputClass} value={txnDate} onChange={(e) => setTxnDate(e.target.value)} required />
+                {txnType === "receipt" ? (
+                  <select className={inputClass} value={txnProcurementType} onChange={(e) => setTxnProcurementType(e.target.value as "monthly" | "emergency" | "miscellaneous")}>
+                    <option value="monthly">Monthly procurement</option>
+                    <option value="emergency">Emergency purchase</option>
+                    <option value="miscellaneous">Miscellaneous purchase</option>
+                  </select>
+                ) : null}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input type="number" min={txnType === "adjustment" ? undefined : 0.01} step="0.01" className={inputClass} placeholder={txnType === "adjustment" ? "Signed quantity (+/-)" : "Quantity"} value={txnQuantity || ""} onChange={(e) => setTxnQuantity(Number(e.target.value) || 0)} required />
                 <input type="number" min={0} step="0.01" className={inputClass} placeholder="Unit cost" value={txnUnitCost || ""} onChange={(e) => setTxnUnitCost(Number(e.target.value) || 0)} />
               </div>
               <select className={inputClass} value={txnFlockId} onChange={(e) => setTxnFlockId(e.target.value)}>
@@ -587,6 +652,7 @@ export default function InventoryPage() {
               <input className={inputClass} placeholder="Supplier" value={txnSupplier} onChange={(e) => setTxnSupplier(e.target.value)} />
               <input className={inputClass} placeholder="Invoice number" value={txnInvoice} onChange={(e) => setTxnInvoice(e.target.value)} />
               <input className={inputClass} placeholder="Reference document" value={txnReference} onChange={(e) => setTxnReference(e.target.value)} />
+              <input className={inputClass} placeholder="Notes or reason" value={txnNotes} onChange={(e) => setTxnNotes(e.target.value)} />
               <button className="h-11 rounded-lg bg-forest-900 px-4 text-sm font-medium text-sand-50 disabled:opacity-60" type="submit" disabled={saving || !canManageStock}>
                 {saving ? "Saving..." : "Save Movement"}
               </button>
@@ -605,12 +671,13 @@ export default function InventoryPage() {
                     <th className="px-2 py-2">Type</th>
                     <th className="px-2 py-2">Qty</th>
                     <th className="px-2 py-2">Cost</th>
+                    <th className="px-2 py-2">Source</th>
                     <th className="px-2 py-2">Flock</th>
                   </tr>
                 </thead>
                 <tbody>
                   {ledger.length === 0 ? (
-                    <tr><td className="px-2 py-4 text-forest-600" colSpan={6}>No stock movements yet.</td></tr>
+                    <tr><td className="px-2 py-4 text-forest-600" colSpan={7}>No stock movements yet.</td></tr>
                   ) : ledger.slice(0, 40).map((entry, index) => (
                     <tr key={`${entry.item_id}-${entry.transaction_date}-${index}`} className="border-b border-sand-100">
                       <td className="px-2 py-2 text-forest-700">{entry.transaction_date}</td>
@@ -618,6 +685,7 @@ export default function InventoryPage() {
                       <td className="px-2 py-2 text-forest-700">{entry.transaction_type}</td>
                       <td className="px-2 py-2 text-forest-700">{money(entry.quantity)}</td>
                       <td className="px-2 py-2 text-forest-700">{money(entry.unit_cost)}</td>
+                      <td className="px-2 py-2 text-forest-700">{entry.procurement_type ?? entry.reference_doc ?? "-"}</td>
                       <td className="px-2 py-2 text-forest-700">{entry.flock_id ? flockLabelMap.get(entry.flock_id) ?? entry.flock_id : "-"}</td>
                     </tr>
                   ))}
@@ -723,31 +791,58 @@ export default function InventoryPage() {
 
           <section className="rounded-lg border border-sand-200 bg-white p-5">
             <h3 className="text-base font-semibold text-forest-900">Monthly Cost Periods</h3>
+            {latestPeriod ? (
+              <div className="mt-4 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-lg bg-sand-50 p-3"><p className="text-xs text-forest-600">Gross Sales</p><p className="mt-1 font-semibold text-forest-900">{money(latestPeriod.total_revenue)}</p></div>
+                  <div className="rounded-lg bg-sand-50 p-3"><p className="text-xs text-forest-600">Operating Profit</p><p className="mt-1 font-semibold text-forest-900">{money(latestPeriod.operating_profit)}</p></div>
+                  <div className="rounded-lg bg-sand-50 p-3"><p className="text-xs text-forest-600">Cash Surplus</p><p className="mt-1 font-semibold text-forest-900">{money(latestPeriod.cash_operating_surplus)}</p></div>
+                  <div className="rounded-lg bg-sand-50 p-3"><p className="text-xs text-forest-600">Receivables</p><p className="mt-1 font-semibold text-forest-900">{money(latestPeriod.total_balance_due)}</p></div>
+                </div>
+                <p className="text-xs text-forest-600">
+                  Cost breakdown: inventory {money(latestPeriod.direct_inventory_cost)} · bird COGS {money(latestPeriod.bird_cogs)} · overhead {money(latestPeriod.overhead_cost)}
+                </p>
+                {(latestPeriod.reconciliation_warnings ?? []).length > 0 ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                    <p className="font-semibold">Reconciliation needs review</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-4">
+                      {latestPeriod.reconciliation_warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="mt-4 overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="border-b border-sand-200 text-left text-xs uppercase tracking-[0.1em] text-forest-600">
                     <th className="px-2 py-2">Period</th>
                     <th className="px-2 py-2">Status</th>
-                    <th className="px-2 py-2">Normal</th>
-                    <th className="px-2 py-2">Broken</th>
+                    <th className="px-2 py-2">Revenue</th>
+                    <th className="px-2 py-2">Paid</th>
+                    <th className="px-2 py-2">Due</th>
                     <th className="px-2 py-2">Cost</th>
+                    <th className="px-2 py-2">Profit</th>
                     <th className="px-2 py-2">Base/Egg</th>
                     <th className="px-2 py-2">Target Price</th>
+                    <th className="px-2 py-2">Quality</th>
                   </tr>
                 </thead>
                 <tbody>
                   {periods.length === 0 ? (
-                    <tr><td className="px-2 py-4 text-forest-600" colSpan={7}>No reconciled cost periods yet.</td></tr>
+                    <tr><td className="px-2 py-4 text-forest-600" colSpan={10}>No reconciled profit periods yet.</td></tr>
                   ) : periods.map((period) => (
                     <tr key={period.id} className="border-b border-sand-100">
                       <td className="px-2 py-2 font-medium text-forest-900">{period.period_start} to {period.period_end}</td>
                       <td className="px-2 py-2 text-forest-700">{period.status}</td>
-                      <td className="px-2 py-2 text-forest-700">{period.total_normal_eggs.toLocaleString()}</td>
-                      <td className="px-2 py-2 text-forest-700">{period.total_broken_eggs.toLocaleString()}</td>
+                      <td className="px-2 py-2 text-forest-700">{money(period.total_revenue)}</td>
+                      <td className="px-2 py-2 text-forest-700">{money(period.total_paid_revenue)}</td>
+                      <td className="px-2 py-2 text-forest-700">{money(period.total_balance_due)}</td>
                       <td className="px-2 py-2 text-forest-700">{money(period.total_absorbed_cost)}</td>
+                      <td className={`px-2 py-2 font-medium ${period.operating_profit >= 0 ? "text-leaf-700" : "text-red-700"}`}>{money(period.operating_profit)}</td>
                       <td className="px-2 py-2 text-forest-700">{money(period.base_cost_per_egg, 4)}</td>
                       <td className="px-2 py-2 text-forest-700">{money(period.base_cost_per_egg === null ? null : period.base_cost_per_egg + period.target_margin_per_egg, 4)}</td>
+                      <td className="px-2 py-2 text-forest-700" title={(period.reconciliation_warnings ?? []).join(" ")}>{(period.reconciliation_warnings ?? []).length > 0 ? `Review (${period.reconciliation_warnings.length})` : "Complete"}</td>
                     </tr>
                   ))}
                 </tbody>

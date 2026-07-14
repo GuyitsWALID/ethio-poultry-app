@@ -95,21 +95,31 @@ export async function GET(request: NextRequest) {
         .eq("org_id", ctx.orgId)
         .gte("sale_date", dateFrom)
         .lte("sale_date", dateTo)
-        .order("sale_date", { ascending: true }),
+        .order("sale_date", { ascending: true })
+        .limit(10000),
       supabaseAdmin
         .from("daily_farm_records")
         .select("record_date, flock_id, normal_eggs, broken_eggs, total_eggs, feed_intake_grams")
         .eq("org_id", ctx.orgId)
         .gte("record_date", dateFrom)
-        .lte("record_date", dateTo),
+        .lte("record_date", dateTo)
+        .limit(10000),
       supabaseAdmin
         .from("batches")
         .select("id, batch_code, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
-        .eq("org_id", ctx.orgId),
-      supabaseAdmin.from("inventory_items").select("id, category, unit_cost").eq("org_id", ctx.orgId).limit(500),
-      supabaseAdmin.from("stock_ledger").select("item_id, quantity, transaction_type, unit_cost, flock_id").eq("org_id", ctx.orgId).limit(5000),
-      supabaseAdmin.from("flocks").select("id, flock_code").eq("org_id", ctx.orgId),
-      supabaseAdmin.from("farms").select("id, name").eq("org_id", ctx.orgId),
+        .eq("org_id", ctx.orgId)
+        .limit(10000),
+      supabaseAdmin.from("inventory_items").select("id, category, unit_cost").eq("org_id", ctx.orgId).limit(10000),
+      supabaseAdmin
+        .from("stock_ledger")
+        .select("item_id, quantity, transaction_type, unit_cost, transaction_date, branch_id, farm_id, house_id, flock_id, batch_id")
+        .eq("org_id", ctx.orgId)
+        .in("transaction_type", ["issue", "return"])
+        .gte("transaction_date", dateFrom)
+        .lte("transaction_date", dateTo)
+        .limit(10000),
+      supabaseAdmin.from("flocks").select("id, flock_code, farm_id, house_id, batch_id").eq("org_id", ctx.orgId).limit(10000),
+      supabaseAdmin.from("farms").select("id, name, branch_id").eq("org_id", ctx.orgId).limit(10000),
       supabaseAdmin
         .from("monthly_cost_periods")
         .select("*")
@@ -125,7 +135,7 @@ export async function GET(request: NextRequest) {
         .eq("org_id", ctx.orgId)
         .gte("entry_date", dateFrom)
         .lte("entry_date", dateTo)
-        .limit(5000),
+        .limit(10000),
     ]);
 
     const firstError =
@@ -142,11 +152,15 @@ export async function GET(request: NextRequest) {
 
     const scopedSales = ((salesRes.data ?? []) as DailySalesRecord[]).filter((record) => hasScopedAccess(ctx, record));
     const records = applySalesFilters(scopedSales, params);
-    const scopedFlockIds = new Set(records.map((record) => record.flock_id).filter(Boolean) as string[]);
+    const requestedScope = {
+      branch_id: params.get("branch_id"),
+      farm_id: params.get("farm_id"),
+      house_id: params.get("house_id"),
+      flock_id: params.get("flock_id"),
+      batch_id: params.get("batch_id"),
+    };
+    const hasRequestedScope = Object.values(requestedScope).some(Boolean);
     const scopedBatchIds = new Set(records.map((record) => record.batch_id).filter(Boolean) as string[]);
-    const scopedBranchIds = new Set(records.map((record) => record.branch_id).filter(Boolean) as string[]);
-    const scopedFarmIds = new Set(records.map((record) => record.farm_id).filter(Boolean) as string[]);
-    const scopedHouseIds = new Set(records.map((record) => record.house_id).filter(Boolean) as string[]);
     const scopeMatches = (row: {
       branch_id?: string | null;
       farm_id?: string | null;
@@ -154,56 +168,77 @@ export async function GET(request: NextRequest) {
       flock_id?: string | null;
       batch_id?: string | null;
     }) => {
-      if (scopedFlockIds.size && row.flock_id && !scopedFlockIds.has(row.flock_id)) return false;
-      if (scopedBatchIds.size && row.batch_id && !scopedBatchIds.has(row.batch_id)) return false;
-      if (scopedHouseIds.size && row.house_id && !scopedHouseIds.has(row.house_id)) return false;
-      if (scopedFarmIds.size && row.farm_id && !scopedFarmIds.has(row.farm_id)) return false;
-      if (scopedBranchIds.size && row.branch_id && !scopedBranchIds.has(row.branch_id)) return false;
-      return true;
+      return (Object.entries(requestedScope) as Array<[keyof typeof requestedScope, string | null]>).every(
+        ([key, value]) => !value || row[key] === value
+      );
     };
+    const lockedScopeMatches = (row: {
+      branch_id?: string | null;
+      farm_id?: string | null;
+      house_id?: string | null;
+      flock_id?: string | null;
+      batch_id?: string | null;
+    }) => (Object.entries(requestedScope) as Array<[keyof typeof requestedScope, string | null]>).every(
+      ([key, value]) => value ? row[key] === value : !row[key]
+    );
+    const farmBranchMap = new Map((farmRes.data ?? []).map((farm) => [farm.id, farm.branch_id]));
+    const productionFlockIds = new Set(
+      (flockRes.data ?? [])
+        .filter((flock) => {
+          if (requestedScope.flock_id && flock.id !== requestedScope.flock_id) return false;
+          if (requestedScope.batch_id && flock.batch_id !== requestedScope.batch_id) return false;
+          if (requestedScope.house_id && flock.house_id !== requestedScope.house_id) return false;
+          if (requestedScope.farm_id && flock.farm_id !== requestedScope.farm_id) return false;
+          if (requestedScope.branch_id && farmBranchMap.get(flock.farm_id) !== requestedScope.branch_id) return false;
+          return true;
+        })
+        .map((flock) => flock.id)
+    );
 
-    const feedItemIds = new Set((inventoryRes.data ?? []).filter((item) => item.category === "feed").map((item) => item.id));
+    const inventoryCategoryByItem = new Map((inventoryRes.data ?? []).map((item) => [item.id, String(item.category)]));
     const costedInventoryItemIds = new Set(
       (inventoryRes.data ?? [])
-        .filter((item) => ["feed", "medicine", "vaccine", "vitamin"].includes(item.category))
+        .filter((item) => ["feed", "medicine", "vaccine", "vitamin", "supplement", "packaging"].includes(item.category))
         .map((item) => item.id)
     );
-    const feedUnitCosts = (inventoryRes.data ?? [])
-      .filter((item) => item.category === "feed" && (item.unit_cost ?? 0) > 0)
-      .map((item) => item.unit_cost ?? 0);
-    const averageFeedUnitCost = feedUnitCosts.length ? feedUnitCosts.reduce((sum, cost) => sum + cost, 0) / feedUnitCosts.length : 0;
-    const issuedFeedCost = (stockRes.data ?? []).reduce((sum, row) => {
-      if (!feedItemIds.has(row.item_id)) return sum;
-      if (row.transaction_type !== "issue" && row.transaction_type !== "transfer_out") return sum;
-      if (scopedFlockIds.size && row.flock_id && !scopedFlockIds.has(row.flock_id)) return sum;
-      return sum + row.quantity * row.unit_cost;
-    }, 0);
-    const issuedInventoryCost = (stockRes.data ?? []).reduce((sum, row) => {
-      if (!costedInventoryItemIds.has(row.item_id)) return sum;
-      if (row.transaction_type !== "issue" && row.transaction_type !== "transfer_out") return sum;
-      if (scopedFlockIds.size && row.flock_id && !scopedFlockIds.has(row.flock_id)) return sum;
-      return sum + row.quantity * row.unit_cost;
-    }, 0);
-    const feedKg = (dailyRes.data ?? []).reduce((sum, row) => {
-      if (scopedFlockIds.size && row.flock_id && !scopedFlockIds.has(row.flock_id)) return sum;
-      return sum + (row.feed_intake_grams ?? 0) / 1000;
-    }, 0);
-    const estimatedFeedCost = feedKg * averageFeedUnitCost;
-    const feedCost = issuedFeedCost > 0 ? issuedFeedCost : estimatedFeedCost;
+    const issuedInventoryCostByCategory = new Map<string, number>();
+    (stockRes.data ?? []).forEach((row) => {
+      if (!costedInventoryItemIds.has(row.item_id)) return;
+      if ((row.transaction_type !== "issue" && row.transaction_type !== "return") || !scopeMatches(row)) return;
+      const category = inventoryCategoryByItem.get(row.item_id) ?? "";
+      const consumptionDelta = row.quantity * row.unit_cost * (row.transaction_type === "return" ? -1 : 1);
+      issuedInventoryCostByCategory.set(category, (issuedInventoryCostByCategory.get(category) ?? 0) + consumptionDelta);
+    });
     const normalEggs = (dailyRes.data ?? []).reduce((sum, row) => {
-      if (scopedFlockIds.size && row.flock_id && !scopedFlockIds.has(row.flock_id)) return sum;
+      if (hasRequestedScope && !productionFlockIds.has(row.flock_id)) return sum;
       return sum + (row.normal_eggs ?? row.total_eggs ?? 0);
     }, 0);
     const brokenEggs = (dailyRes.data ?? []).reduce((sum, row) => {
-      if (scopedFlockIds.size && row.flock_id && !scopedFlockIds.has(row.flock_id)) return sum;
+      if (hasRequestedScope && !productionFlockIds.has(row.flock_id)) return sum;
       return sum + (row.broken_eggs ?? 0);
     }, 0);
-    const overheadCost = (costEntriesRes.data ?? [])
-      .filter(scopeMatches)
-      .reduce((sum, row) => sum + (row.amount ?? 0), 0);
+    const inventoryCostCategories = new Set(["feed", "medicine", "vaccine", "vitamin", "supplement", "packaging"]);
+    const manualInventoryCostByCategory = new Map<string, number>();
+    let overheadCost = 0;
+    (costEntriesRes.data ?? []).filter(scopeMatches).forEach((row) => {
+      const category = String(row.category);
+      if (inventoryCostCategories.has(category)) {
+        manualInventoryCostByCategory.set(category, (manualInventoryCostByCategory.get(category) ?? 0) + (row.amount ?? 0));
+      } else {
+        overheadCost += row.amount ?? 0;
+      }
+    });
+    let issuedInventoryCost = 0;
+    let excludedDuplicateCost = 0;
+    inventoryCostCategories.forEach((category) => {
+      const issued = issuedInventoryCostByCategory.get(category) ?? 0;
+      const manual = manualInventoryCostByCategory.get(category) ?? 0;
+      issuedInventoryCost += issued > 0 ? issued : manual;
+      if (issued > 0) excludedDuplicateCost += manual;
+    });
 
     const lockedPeriod = (lockedPeriodsRes.data ?? [])
-      .filter(scopeMatches)
+      .filter(lockedScopeMatches)
       .sort((a, b) => {
         const specificity =
           Number(Boolean(b.flock_id)) +
@@ -219,7 +254,7 @@ export async function GET(request: NextRequest) {
         if (specificity !== 0) return specificity;
         return a.period_start < b.period_start ? 1 : -1;
       })[0];
-    const rollingAbsorbedCost = (issuedInventoryCost > 0 ? issuedInventoryCost : feedCost) + overheadCost;
+    const rollingAbsorbedCost = issuedInventoryCost + overheadCost;
     const costBasis: EggCostBasis = lockedPeriod?.base_cost_per_egg
       ? {
           status: "locked",
@@ -228,11 +263,13 @@ export async function GET(request: NextRequest) {
           targetPricePerEgg: Number(lockedPeriod.base_cost_per_egg) + Number(lockedPeriod.target_margin_per_egg ?? 0),
           normalEggs: Number(lockedPeriod.total_normal_eggs ?? 0),
           brokenEggs: Number(lockedPeriod.total_broken_eggs ?? 0),
-          absorbedCost: Number(lockedPeriod.total_absorbed_cost ?? 0),
+          absorbedCost:
+            Number(lockedPeriod.direct_inventory_cost ?? 0) + Number(lockedPeriod.overhead_cost ?? 0) ||
+            Number(lockedPeriod.total_absorbed_cost ?? 0),
           sourceLabel: `Locked ${lockedPeriod.period_start} to ${lockedPeriod.period_end}`,
           missingCostReasons: [],
         }
-      : normalEggs > 0 && rollingAbsorbedCost > 0
+      : normalEggs > 0 && issuedInventoryCost > 0
         ? {
             status: "rolling_estimate",
             baseCostPerEgg: rollingAbsorbedCost / normalEggs,
@@ -244,7 +281,7 @@ export async function GET(request: NextRequest) {
             sourceLabel: "Rolling estimate",
             missingCostReasons: [],
           }
-        : missingCostBasis();
+        : missingCostBasis("Egg pricing guidance needs normal-egg production plus issued or manually entered inventory consumption costs.");
     const costPerEgg = costBasis.baseCostPerEgg;
 
     const costPerBirdByBatch = new Map<string, number>();
@@ -290,6 +327,9 @@ export async function GET(request: NextRequest) {
         : null,
       records.some((record) => record.product_category === "bird" && (!record.batch_id || !costPerBirdByBatch.has(record.batch_id)))
         ? "Bird margin is estimated because one or more sales are missing batch cost signals."
+        : null,
+      excludedDuplicateCost > 0
+        ? `${round(excludedDuplicateCost)} in manual inventory costs was excluded because issued stock already provides that category cost.`
         : null,
     ].filter(Boolean);
 
