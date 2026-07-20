@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
@@ -11,6 +12,9 @@ type ScopeState = {
   houseId: string;
   flockId: string;
 };
+
+export type PeriodPreset = "today" | "7d" | "30d" | "mtd" | "qtd" | "custom";
+export type ReportingPeriod = { preset: PeriodPreset; dateFrom: string; dateTo: string };
 
 type Branch = { id: string; name: string };
 type Farm = { id: string; name: string; branch_id: string };
@@ -32,6 +36,8 @@ type ScopeContextValue = {
   loading: boolean;
   scope: ScopeState;
   setScope: React.Dispatch<React.SetStateAction<ScopeState>>;
+  period: ReportingPeriod;
+  setPeriod: React.Dispatch<React.SetStateAction<ReportingPeriod>>;
   branches: Branch[];
   farms: Farm[];
   houses: House[];
@@ -45,6 +51,23 @@ type ScopeContextValue = {
 
 const initialScope: ScopeState = { branchId: "", farmId: "", batchId: "", houseId: "", flockId: "" };
 const SCOPE_STORAGE_KEY = "app_scope_state_v1";
+const PERIOD_STORAGE_KEY = "app_reporting_period_v1";
+
+function isoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+export function reportingPeriodFor(preset: Exclude<PeriodPreset, "custom">, now = new Date()): ReportingPeriod {
+  const end = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const start = new Date(end);
+  if (preset === "7d") start.setUTCDate(start.getUTCDate() - 6);
+  if (preset === "30d") start.setUTCDate(start.getUTCDate() - 29);
+  if (preset === "mtd") start.setUTCDate(1);
+  if (preset === "qtd") {
+    start.setUTCMonth(Math.floor(start.getUTCMonth() / 3) * 3, 1);
+  }
+  return { preset, dateFrom: isoDate(start), dateTo: isoDate(end) };
+}
 
 function normalizeScope(scope: ScopeState, options: { branches: Branch[]; farms: Farm[]; houses: House[]; flocks: Flock[]; batches: Batch[] }): ScopeState {
   const branchId = options.branches.some((b) => b.id === scope.branchId) ? scope.branchId : "";
@@ -74,6 +97,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
   const [isFarmManager, setIsFarmManager] = useState(false);
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState<ScopeState>(initialScope);
+  const [period, setPeriod] = useState<ReportingPeriod>(() => reportingPeriodFor("mtd"));
   const [branches, setBranches] = useState<Branch[]>([]);
   const [farms, setFarms] = useState<Farm[]>([]);
   const [houses, setHouses] = useState<House[]>([]);
@@ -84,7 +108,6 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem(SCOPE_STORAGE_KEY);
     if (saved) {
       try {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setScope(JSON.parse(saved) as ScopeState);
       } catch {
         setScope(initialScope);
@@ -93,8 +116,23 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const saved = localStorage.getItem(PERIOD_STORAGE_KEY);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as ReportingPeriod;
+      if (parsed.dateFrom && parsed.dateTo && parsed.dateFrom <= parsed.dateTo) setPeriod(parsed);
+    } catch {
+      setPeriod(reportingPeriodFor("mtd"));
+    }
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify(scope));
   }, [scope]);
+
+  useEffect(() => {
+    localStorage.setItem(PERIOD_STORAGE_KEY, JSON.stringify(period));
+  }, [period]);
 
   useEffect(() => {
     const loadScopeData = async () => {
@@ -249,6 +287,8 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
         loading,
         scope,
         setScope,
+        period,
+        setPeriod,
         branches,
         farms,
         houses,

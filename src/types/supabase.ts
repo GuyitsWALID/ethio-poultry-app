@@ -871,14 +871,18 @@ export type Database = {
       }
       daily_farm_records: {
         Row: {
+          average_egg_weight_g: number | null
           broken_eggs: number | null
+          closing_birds: number | null
           created_at: string
+          culls: number | null
           deaths: number | null
           deaths_cause: string | null
           feed_intake_grams: number | null
           feed_intake_quantity: number | null
           feed_leftover_grams: number | null
           feed_type: Database["public"]["Enums"]["feed_type"] | null
+          dirty_eggs: number | null
           flock_age_days: number | null
           flock_age_weeks: number | null
           flock_id: string
@@ -886,24 +890,33 @@ export type Database = {
           medication_vitamins: string | null
           mortality_percentage: number | null
           normal_eggs: number | null
+          opening_birds: number | null
+          other_removals: number | null
           org_id: string
           production_percentage: number | null
           record_date: string
           recorded_by: string | null
           synced: boolean
           total_eggs: number | null
+          transfers_in: number | null
+          transfers_out: number | null
           updated_at: string
           vaccination_status: string | null
+          water_consumed_liters: number | null
         }
         Insert: {
+          average_egg_weight_g?: number | null
           broken_eggs?: number | null
+          closing_birds?: number | null
           created_at?: string
+          culls?: number | null
           deaths?: number | null
           deaths_cause?: string | null
           feed_intake_grams?: number | null
           feed_intake_quantity?: number | null
           feed_leftover_grams?: number | null
           feed_type?: Database["public"]["Enums"]["feed_type"] | null
+          dirty_eggs?: number | null
           flock_age_days?: number | null
           flock_age_weeks?: number | null
           flock_id: string
@@ -911,24 +924,33 @@ export type Database = {
           medication_vitamins?: string | null
           mortality_percentage?: number | null
           normal_eggs?: number | null
+          opening_birds?: number | null
+          other_removals?: number | null
           org_id: string
           production_percentage?: number | null
           record_date: string
           recorded_by?: string | null
           synced?: boolean
           total_eggs?: number | null
+          transfers_in?: number | null
+          transfers_out?: number | null
           updated_at?: string
           vaccination_status?: string | null
+          water_consumed_liters?: number | null
         }
         Update: {
+          average_egg_weight_g?: number | null
           broken_eggs?: number | null
+          closing_birds?: number | null
           created_at?: string
+          culls?: number | null
           deaths?: number | null
           deaths_cause?: string | null
           feed_intake_grams?: number | null
           feed_intake_quantity?: number | null
           feed_leftover_grams?: number | null
           feed_type?: Database["public"]["Enums"]["feed_type"] | null
+          dirty_eggs?: number | null
           flock_age_days?: number | null
           flock_age_weeks?: number | null
           flock_id?: string
@@ -936,14 +958,19 @@ export type Database = {
           medication_vitamins?: string | null
           mortality_percentage?: number | null
           normal_eggs?: number | null
+          opening_birds?: number | null
+          other_removals?: number | null
           org_id?: string
           production_percentage?: number | null
           record_date?: string
           recorded_by?: string | null
           synced?: boolean
           total_eggs?: number | null
+          transfers_in?: number | null
+          transfers_out?: number | null
           updated_at?: string
           vaccination_status?: string | null
+          water_consumed_liters?: number | null
         }
         Relationships: [
           {

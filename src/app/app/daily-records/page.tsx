@@ -76,6 +76,15 @@ type DailyRow = {
   deaths_cause: string | null;
   vaccination_status: string | null;
   medication_vitamins: string | null;
+  opening_birds: number | null;
+  closing_birds: number | null;
+  culls: number | null;
+  transfers_in: number | null;
+  transfers_out: number | null;
+  other_removals: number | null;
+  dirty_eggs: number | null;
+  average_egg_weight_g: number | null;
+  water_consumed_liters: number | null;
 };
 
 type AgeSource = {
@@ -160,7 +169,7 @@ export default function DailyRecordsPage() {
     let query = supabase
       .from("daily_farm_records")
       .select(
-        "id, record_date, flock_id, flock_age_weeks, flock_age_days, feed_intake_grams, feed_intake_quantity, feed_leftover_grams, feed_type, normal_eggs, broken_eggs, total_eggs, production_percentage, deaths, mortality_percentage, deaths_cause, vaccination_status, medication_vitamins"
+        "id, record_date, flock_id, flock_age_weeks, flock_age_days, feed_intake_grams, feed_intake_quantity, feed_leftover_grams, feed_type, normal_eggs, broken_eggs, dirty_eggs, average_egg_weight_g, total_eggs, production_percentage, deaths, mortality_percentage, deaths_cause, vaccination_status, medication_vitamins, opening_birds, closing_birds, culls, transfers_in, transfers_out, other_removals, water_consumed_liters"
       )
       .eq("org_id", profile.org_id)
       .order("record_date", { ascending: false })
@@ -597,6 +606,15 @@ export default function DailyRecordsPage() {
       deaths_cause: parseText(formData.get("deaths_cause")),
       vaccination_status: parseText(formData.get("vaccination_status")),
       medication_vitamins: parseText(formData.get("medication_vitamins")),
+      opening_birds: parseNumber(formData.get("opening_birds")),
+      closing_birds: parseNumber(formData.get("closing_birds")),
+      culls: parseNumber(formData.get("culls")) ?? 0,
+      transfers_in: parseNumber(formData.get("transfers_in")) ?? 0,
+      transfers_out: parseNumber(formData.get("transfers_out")) ?? 0,
+      other_removals: parseNumber(formData.get("other_removals")) ?? 0,
+      dirty_eggs: parseNumber(formData.get("dirty_eggs")),
+      average_egg_weight_g: parseNumber(formData.get("average_egg_weight_g")),
+      water_consumed_liters: parseNumber(formData.get("water_consumed_liters")),
       recorded_by: user.id,
     };
 
@@ -935,6 +953,17 @@ export default function DailyRecordsPage() {
 
             <form className="mt-6 grid gap-6" onSubmit={handleSubmit}>
               <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">Opening Birds<input name="opening_birds" type="number" min={0} defaultValue={currentLiveBirds ?? ""} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Closing Birds<input name="closing_birds" type="number" min={0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Culls<input name="culls" type="number" min={0} defaultValue={0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Transfers In<input name="transfers_in" type="number" min={0} defaultValue={0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Transfers Out<input name="transfers_out" type="number" min={0} defaultValue={0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Other Removals<input name="other_removals" type="number" min={0} defaultValue={0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Water Consumed (L)<input name="water_consumed_liters" type="number" min={0} step="0.01" className={inputClass} /></label>
+                <div className="rounded-xl bg-sand-50 p-3 text-xs text-forest-600">Closing birds should reconcile to opening + transfers in − deaths − culls − transfers out − other removals.</div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
                 <label className="grid gap-2 text-sm text-forest-700">
                   Record Date
                   <input
@@ -1124,6 +1153,8 @@ export default function DailyRecordsPage() {
                   Broken Eggs
                   <input name="broken_eggs" type="number" min={0} className={inputClass} />
                 </label>
+                <label className="grid gap-2 text-sm text-forest-700">Dirty Eggs<input name="dirty_eggs" type="number" min={0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Average Egg Weight (g)<input name="average_egg_weight_g" type="number" min={0} step="0.01" className={inputClass} /></label>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Total Eggs
                   <input
@@ -1233,6 +1264,16 @@ export default function DailyRecordsPage() {
             </div>
 
             <form className="mt-6 grid gap-6" onSubmit={handleEditSubmit}>
+              <div className="grid gap-4 md:grid-cols-4">
+                <label className="grid gap-2 text-sm text-forest-700">Opening Birds<input name="opening_birds" type="number" min={0} defaultValue={editingRow.opening_birds ?? ""} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Closing Birds<input name="closing_birds" type="number" min={0} defaultValue={editingRow.closing_birds ?? ""} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Culls<input name="culls" type="number" min={0} defaultValue={editingRow.culls ?? 0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Transfers In<input name="transfers_in" type="number" min={0} defaultValue={editingRow.transfers_in ?? 0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Transfers Out<input name="transfers_out" type="number" min={0} defaultValue={editingRow.transfers_out ?? 0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Other Removals<input name="other_removals" type="number" min={0} defaultValue={editingRow.other_removals ?? 0} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Water Consumed (L)<input name="water_consumed_liters" type="number" min={0} step="0.01" defaultValue={editingRow.water_consumed_liters ?? ""} className={inputClass} /></label>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="grid gap-2 text-sm text-forest-700">
                   Record Date
@@ -1371,6 +1412,8 @@ export default function DailyRecordsPage() {
                   Broken Eggs
                   <input name="broken_eggs" type="number" min={0} defaultValue={editingRow.broken_eggs ?? ""} className={inputClass} />
                 </label>
+                <label className="grid gap-2 text-sm text-forest-700">Dirty Eggs<input name="dirty_eggs" type="number" min={0} defaultValue={editingRow.dirty_eggs ?? ""} className={inputClass} /></label>
+                <label className="grid gap-2 text-sm text-forest-700">Average Egg Weight (g)<input name="average_egg_weight_g" type="number" min={0} step="0.01" defaultValue={editingRow.average_egg_weight_g ?? ""} className={inputClass} /></label>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Total Eggs
                   <input name="total_eggs" type="number" min={0} defaultValue={editingRow.total_eggs ?? ""} className={inputClass} />

@@ -15,7 +15,6 @@ import {
   Egg,
   HeartPulse,
   LayoutDashboard,
-  LineChart,
   PanelLeftClose,
   PanelLeftOpen,
   Package,
@@ -39,14 +38,12 @@ const itemIcons: Record<string, LucideIcon> = {
   "Branch Network": Building2,
   Analytics: ChartNoAxesCombined,
   Reports: ClipboardList,
-  Accounting: Briefcase,
   "Farm Network": Warehouse,
   "Flock Portfolio": Egg,
   Batches: Boxes,
   "Daily Records": ClipboardList,
   Feed: Package,
   Mortality: Activity,
-  Sensors: LineChart,
   Health: HeartPulse,
   Inventory: Box,
   Sales: Briefcase,
@@ -57,8 +54,6 @@ const itemIcons: Record<string, LucideIcon> = {
   "Branch Reports": ClipboardList,
   "Health Log": Stethoscope,
   "Inventory Log": Package,
-  "Vet Dashboard": Stethoscope,
-  "Store Dashboard": Package,
 };
 
 const ceoNavSections: NavSection[] = [
@@ -69,7 +64,6 @@ const ceoNavSections: NavSection[] = [
       { label: "Branch Network", href: "/app/ceo/setup" },
       { label: "Analytics", href: "/app/analytics" },
       { label: "Reports", href: "/app/reports" },
-      { label: "Accounting", href: "/app/accounting" },
     ],
   },
   {
@@ -81,7 +75,6 @@ const ceoNavSections: NavSection[] = [
       { label: "Daily Records", href: "/app/daily-records" },
       { label: "Feed", href: "/app/feeding-log" },
       { label: "Mortality", href: "/app/mortality" },
-      { label: "Sensors", href: "/app/sensors" },
     ],
   },
   {
@@ -91,10 +84,6 @@ const ceoNavSections: NavSection[] = [
       { label: "Inventory", href: "/app/inventory" },
       { label: "Sales", href: "/app/sales" },
     ],
-  },
-  {
-    title: "Organization",
-    items: [],
   },
 ];
 
@@ -116,7 +105,6 @@ const farmManagerNavSections: NavSection[] = [
     items: [
       { label: "Operations Analytics", href: "/app/analytics" },
       { label: "Branch Reports", href: "/app/reports" },
-      { label: "Sensors", href: "/app/sensors" },
     ],
   },
   {
@@ -160,7 +148,6 @@ export function AppSidebar() {
         {
           title: "Veterinary",
           items: [
-            { label: "Vet Dashboard", href: "/app/veterinarian" },
             { label: "Mortality", href: "/app/mortality" },
             { label: "Health", href: "/app/health" },
           ],
@@ -172,7 +159,6 @@ export function AppSidebar() {
         {
           title: "Store Operations",
           items: [
-            { label: "Store Dashboard", href: "/app/store-keeper" },
             { label: "Inventory", href: "/app/inventory" },
           ],
         },
@@ -196,7 +182,7 @@ export function AppSidebar() {
     <aside
       className={`hidden flex-col border-r border-sand-200 bg-forest-900 text-sand-50 lg:flex ${
         collapsed ? "w-20" : "w-64"
-      } transition-all duration-300`}
+      } transition-[width] duration-300`}
     >
       <div
         className={`border-b border-sand-200/10 ${
@@ -207,7 +193,7 @@ export function AppSidebar() {
       >
         <Link
           href="/app"
-          className={`flex items-center rounded-xl text-sand-50 transition hover:bg-forest-800 ${
+          className={`flex items-center rounded-xl text-sand-50 transition hover:bg-forest-800 focus-visible:ring-2 focus-visible:ring-sand-50 ${
             collapsed ? "h-10 w-10 justify-center" : "min-w-0 flex-1 gap-3 px-2 py-2"
           }`}
           aria-label="Dashboard"
@@ -228,7 +214,7 @@ export function AppSidebar() {
         <button
           type="button"
           onClick={() => setCollapsed((prev) => !prev)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sand-200/20 text-sand-100 transition hover:border-sand-200/40 hover:bg-forest-800"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sand-200/20 text-sand-100 transition hover:border-sand-200/40 hover:bg-forest-800 focus-visible:ring-2 focus-visible:ring-sand-50"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
@@ -250,7 +236,7 @@ export function AppSidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition ${
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition focus-visible:ring-2 focus-visible:ring-sand-50 ${
                     active
                       ? "bg-sand-50 text-forest-900"
                       : "text-sand-100 hover:bg-forest-800 hover:text-white"
@@ -274,7 +260,7 @@ export function AppSidebar() {
                         [section.title]: !isOpen,
                       }))
                     }
-                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sand-100 transition hover:bg-forest-800"
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sand-100 transition hover:bg-forest-800 focus-visible:ring-2 focus-visible:ring-sand-50"
                     aria-expanded={isOpen}
                   >
                     <span className="text-xs uppercase tracking-[0.25em]">
@@ -296,7 +282,7 @@ export function AppSidebar() {
                           <Link
                             key={item.href}
                             href={item.href}
-                            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 transition ${
+                            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 transition focus-visible:ring-2 focus-visible:ring-sand-50 ${
                               active
                                 ? "bg-sand-50 text-forest-900"
                                 : "text-sand-100 hover:bg-forest-800 hover:text-white"
@@ -316,12 +302,6 @@ export function AppSidebar() {
       <div className={`mt-auto border-t border-sand-200/10 ${collapsed ? "px-3 py-4" : "px-6 py-4"}`}>
         {!collapsed ? (
           <div className="space-y-3">
-            <Link
-              href="/app/settings"
-              className="flex w-full items-center justify-center rounded-xl border border-sand-200/30 px-3 py-2 text-xs text-sand-100 transition hover:bg-forest-800"
-            >
-              Settings
-            </Link>
             <div className="flex items-center justify-between text-xs text-sand-200">
               <span>{footer}</span>
               <SignOutButton />

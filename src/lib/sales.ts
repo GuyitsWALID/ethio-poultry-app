@@ -34,7 +34,7 @@ export type DailySalesRecord = {
   flock_id: string | null;
   batch_id: string | null;
   sale_date: string;
-  product_category: "egg" | "bird";
+  product_category: "egg" | "bird" | "training" | "equipment_medicine" | "consultancy" | "package";
   product_label: string;
   quantity: number;
   unit: string;
@@ -94,7 +94,7 @@ export async function getSalesContext(): Promise<SalesContext | Response> {
     orgId: profile.org_id,
     role,
     canView: ["ceo", "system_admin", "super_admin", "store_keeper", "farm_manager"].includes(role),
-    canMutate: role === "farm_manager",
+    canMutate: ["farm_manager", "ceo", "system_admin", "super_admin"].includes(role),
     allowedBranchIds: new Set((branchAccessRes.data ?? []).map((row) => row.branch_id)),
     allowedFarmIds: new Set((farmAccessRes.data ?? []).map((row) => row.farm_id)),
   };
@@ -117,6 +117,7 @@ export async function resolveSaleScope(
     house_id?: string | null;
     flock_id?: string | null;
     batch_id?: string | null;
+    require_farm?: boolean;
   }
 ) {
   let branchId = input.branch_id || null;
@@ -178,7 +179,12 @@ export async function resolveSaleScope(
     branchId = farm.branch_id;
   }
 
-  if (!farmId) return { error: "Select at least a farm, flock, or batch for the sale." };
+  if (!farmId && input.require_farm !== false) return { error: "Select at least a farm, flock, or batch for poultry sales." };
+  if (!farmId && branchId) {
+    const { data } = await supabaseAdmin.from("branches").select("id, org_id").eq("id", branchId).eq("org_id", ctx.orgId).maybeSingle();
+    if (!data) return { error: "Branch is not available in this organization." };
+  }
+  if (!farmId) return { branch_id: branchId, farm_id: null, house_id: null, flock_id: null, batch_id: null };
   if (!hasScopedAccess(ctx, { branch_id: branchId, farm_id: farmId })) {
     return { error: "You do not have access to record sales for this scope." };
   }

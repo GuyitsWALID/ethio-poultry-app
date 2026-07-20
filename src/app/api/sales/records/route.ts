@@ -10,7 +10,7 @@ import {
   type DailySalesRecord,
 } from "@/lib/sales";
 
-const VALID_CATEGORIES = new Set(["egg", "bird"]);
+const VALID_CATEGORIES = new Set(["egg", "bird", "training", "equipment_medicine", "consultancy", "package"]);
 
 function numberFrom(value: unknown, fallback = 0) {
   const number = Number(value);
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     const ctx = await getSalesContext();
     if (ctx instanceof Response) return ctx;
     if (!ctx.canView) return json({ error: "You do not have access to sales records." }, 403);
-    if (!ctx.canMutate) return json({ error: "Only farm managers can create daily sales records." }, 403);
+    if (!ctx.canMutate) return json({ error: "You do not have permission to create sales records." }, 403);
 
     const body = await request.json();
     const productCategory = String(body.product_category ?? "");
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     const grossAmount = Math.round(quantity * unitPrice * 100) / 100;
 
     if (!saleDate) return json({ error: "Sale date is required." }, 400);
-    if (!VALID_CATEGORIES.has(productCategory)) return json({ error: "Product category must be egg or bird." }, 400);
+    if (!VALID_CATEGORIES.has(productCategory)) return json({ error: "Select a supported revenue category." }, 400);
     if (!productLabel) return json({ error: "Product label is required." }, 400);
     if (quantity <= 0) return json({ error: "Quantity must be greater than zero." }, 400);
     if (unitPrice < 0) return json({ error: "Unit price cannot be negative." }, 400);
@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
       house_id: cleanText(body.house_id),
       flock_id: cleanText(body.flock_id),
       batch_id: cleanText(body.batch_id),
+      require_farm: productCategory === "egg" || productCategory === "bird",
     });
     if ("error" in scope) return json({ error: scope.error }, 400);
 
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
         product_category: productCategory,
         product_label: productLabel,
         quantity,
-        unit: cleanText(body.unit) ?? (productCategory === "egg" ? "tray" : "bird"),
+        unit: cleanText(body.unit) ?? (productCategory === "egg" ? "tray" : productCategory === "bird" ? "bird" : "unit"),
         unit_price: unitPrice,
         gross_amount: grossAmount,
         paid_amount: paidAmount,

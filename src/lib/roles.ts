@@ -7,8 +7,8 @@ const roleRouteMap: Record<AppRole, string> = {
   system_admin: "/app/ceo",
   ceo: "/app/ceo",
   farm_manager: "/app/farm-manager",
-  veterinarian: "/app/veterinarian",
-  store_keeper: "/app/store-keeper",
+  veterinarian: "/app/health",
+  store_keeper: "/app/inventory",
 };
 
 const aliasMap: Record<string, AppRole> = {

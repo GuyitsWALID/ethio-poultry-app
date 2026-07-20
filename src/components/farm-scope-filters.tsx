@@ -1,6 +1,6 @@
  "use client";
 
-import { useFarmScope } from "@/components/farm-scope-context";
+import { reportingPeriodFor, useFarmScope, type PeriodPreset } from "@/components/farm-scope-context";
 
 export function FarmScopeFilters() {
   const {
@@ -8,6 +8,8 @@ export function FarmScopeFilters() {
     loading,
     scope,
     setScope,
+    period,
+    setPeriod,
     branches,
     filteredFarms,
     filteredHouses,
@@ -27,7 +29,38 @@ export function FarmScopeFilters() {
       <p className="text-xs uppercase tracking-[0.2em] text-forest-500">
         {role === "ceo" ? "Executive Scope Filters" : "Branch Scope Filters"}
       </p>
-      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
+        <label className="grid gap-1 text-xs text-forest-600">
+          Reporting Period
+          <select
+            className={selectClass}
+            value={period.preset}
+            onChange={(event) => {
+              const preset = event.target.value as PeriodPreset;
+              if (preset === "custom") setPeriod((prev) => ({ ...prev, preset }));
+              else setPeriod(reportingPeriodFor(preset));
+            }}
+          >
+            <option value="today">Today</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="mtd">Month to date</option>
+            <option value="qtd">Quarter to date</option>
+            <option value="custom">Custom range</option>
+          </select>
+        </label>
+        {period.preset === "custom" ? (
+          <>
+            <label className="grid gap-1 text-xs text-forest-600">
+              From
+              <input type="date" className={selectClass} value={period.dateFrom} max={period.dateTo} onChange={(event) => setPeriod((prev) => ({ ...prev, dateFrom: event.target.value }))} />
+            </label>
+            <label className="grid gap-1 text-xs text-forest-600">
+              To
+              <input type="date" className={selectClass} value={period.dateTo} min={period.dateFrom} onChange={(event) => setPeriod((prev) => ({ ...prev, dateTo: event.target.value }))} />
+            </label>
+          </>
+        ) : null}
         <label className="grid gap-1 text-xs text-forest-600">
           Branch
           <select

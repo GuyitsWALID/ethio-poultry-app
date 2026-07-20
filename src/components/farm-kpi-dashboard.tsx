@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -413,8 +414,7 @@ function RecentRecords({ rows }: { rows: KpiResponse["recentRecords"] }) {
 }
 
 export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: DashboardMode; depth?: DashboardDepth }) {
-  const { scope, filteredFlocks, filteredBatches } = useFarmScope();
-  const [urlScope, setUrlScope] = useState({ branchId: "", farmId: "", houseId: "", flockId: "", batchId: "", key: "" });
+  const { scope, filteredFlocks, filteredBatches, period } = useFarmScope();
   const [dateFrom, setDateFrom] = useState(defaultFromDate());
   const [dateTo, setDateTo] = useState(todayDate());
   const [data, setData] = useState<KpiResponse>(emptyResponse);
@@ -422,19 +422,13 @@ export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: Dashboard
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUrlScope({
-      branchId: params.get("branch_id") ?? "",
-      farmId: params.get("farm_id") ?? "",
-      houseId: params.get("house_id") ?? "",
-      flockId: params.get("flock_id") ?? "",
-      batchId: params.get("batch_id") ?? "",
-      key: params.toString(),
-    });
-  }, []);
+    if (mode === "management") {
+      setDateFrom(period.dateFrom);
+      setDateTo(period.dateTo);
+    }
+  }, [mode, period.dateFrom, period.dateTo]);
 
-  const scopeKey = `${scope.branchId}|${scope.farmId}|${scope.houseId}|${scope.flockId}|${scope.batchId}|${filteredFlocks.length}|${filteredBatches.length}|${urlScope.key}`;
+  const scopeKey = `${scope.branchId}|${scope.farmId}|${scope.houseId}|${scope.flockId}|${scope.batchId}|${filteredFlocks.length}|${filteredBatches.length}`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -444,11 +438,11 @@ export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: Dashboard
       const params = new URLSearchParams({
         date_from: dateFrom,
         date_to: dateTo,
-        branch_id: urlScope.branchId || scope.branchId,
-        farm_id: urlScope.farmId || scope.farmId,
-        house_id: urlScope.houseId || scope.houseId,
-        flock_id: urlScope.flockId || scope.flockId,
-        batch_id: urlScope.batchId || scope.batchId,
+        branch_id: scope.branchId,
+        farm_id: scope.farmId,
+        house_id: scope.houseId,
+        flock_id: scope.flockId,
+        batch_id: scope.batchId,
       });
       const response = await fetch(`/api/farm-kpis?${params.toString()}`, { signal: controller.signal });
       if (!response.ok) {
@@ -467,7 +461,7 @@ export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: Dashboard
     });
 
     return () => controller.abort();
-  }, [dateFrom, dateTo, scope.branchId, scope.farmId, scope.houseId, scope.flockId, scope.batchId, scopeKey, urlScope]);
+  }, [dateFrom, dateTo, scope.branchId, scope.farmId, scope.houseId, scope.flockId, scope.batchId, scopeKey]);
 
   const managementCards = [
     { label: "Live Birds", value: formatNumber(data.general.liveBirds), note: "Current active flock count", href: "/app/flocks" },
@@ -503,7 +497,7 @@ export function FarmKpiDashboard({ mode, depth = "overview" }: { mode: Dashboard
 
   return (
     <div className="space-y-6">
-      <ScopeAndDateFilters mode={mode} dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} />
+      {mode === "operations" ? <ScopeAndDateFilters mode={mode} dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} /> : null}
 
       {error ? <div className="rounded-2xl border border-ember-500/30 bg-ember-500/10 p-4 text-sm text-ember-500">{error}</div> : null}
 

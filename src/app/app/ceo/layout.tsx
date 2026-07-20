@@ -29,8 +29,8 @@ export default async function CeoLayout({
   const isCeoRole = rawRole === "ceo" || rawRole === "system_admin" || rawRole === "super_admin";
 
   if (!isCeoRole) {
-    if (rawRole === "veterinarian") redirect("/app/veterinarian");
-    if (rawRole === "store_keeper") redirect("/app/store-keeper");
+    if (rawRole === "veterinarian") redirect("/app/health");
+    if (rawRole === "store_keeper") redirect("/app/inventory");
     redirect("/app/farm-manager");
   }
 

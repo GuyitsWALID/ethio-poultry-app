@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -15,7 +16,7 @@ type SalesRecord = {
   flock_id: string | null;
   batch_id: string | null;
   sale_date: string;
-  product_category: "egg" | "bird";
+  product_category: ProductCategory;
   product_label: string;
   quantity: number;
   unit: string;
@@ -85,10 +86,11 @@ type Analytics = {
   };
 };
 
+type ProductCategory = "egg" | "bird" | "training" | "equipment_medicine" | "consultancy" | "package";
 type FormState = {
   id: string;
   sale_date: string;
-  product_category: "egg" | "bird";
+  product_category: ProductCategory;
   product_label: string;
   quantity: string;
   unit: string;
@@ -112,6 +114,10 @@ defaultFrom.setDate(defaultFrom.getDate() - 29);
 const productLabels = {
   egg: ["table_egg", "broken_egg", "hatching_egg"],
   bird: ["pullet", "chick", "spent_layer", "broiler"],
+  training: ["training_enrollment", "workshop", "farm_visit_training"],
+  equipment_medicine: ["equipment", "medicine", "vaccine", "supplement"],
+  consultancy: ["farm_consultancy", "technical_support", "assessment"],
+  package: ["starter_package", "farm_package", "custom_package"],
 };
 
 const emptyAnalytics: Analytics = {
@@ -206,6 +212,7 @@ export default function SalesPage() {
     batches,
     filteredFarms,
     filteredHouses,
+    period,
   } = useFarmScope();
   const [records, setRecords] = useState<SalesRecord[]>([]);
   const [analytics, setAnalytics] = useState<Analytics>(emptyAnalytics);
@@ -226,7 +233,13 @@ export default function SalesPage() {
     })
   );
 
-  const canMutate = role === "farm_manager";
+  const canMutate = ["farm_manager", "ceo", "system_admin", "super_admin"].includes(role ?? "");
+  useEffect(() => {
+    if (role === "ceo" || role === "system_admin" || role === "super_admin") {
+      setDateFrom(period.dateFrom);
+      setDateTo(period.dateTo);
+    }
+  }, [period.dateFrom, period.dateTo, role]);
   const branchName = useMemo(() => new Map(branches.map((item) => [item.id, item.name])), [branches]);
   const farmName = useMemo(() => new Map(farms.map((item) => [item.id, item.name])), [farms]);
   const flockName = useMemo(() => new Map(flocks.map((item) => [item.id, item.flock_code])), [flocks]);
@@ -263,7 +276,6 @@ export default function SalesPage() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSales();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
@@ -393,6 +405,7 @@ export default function SalesPage() {
 
       <section className="rounded-lg border border-sand-200 bg-white p-4">
         <div className="grid gap-3 md:grid-cols-3">
+          {role === "farm_manager" ? <>
           <label className="grid gap-1 text-xs text-forest-600">
             From
             <input className="h-10 rounded-lg border border-sand-200 px-3 text-sm text-forest-900" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
@@ -401,12 +414,17 @@ export default function SalesPage() {
             To
             <input className="h-10 rounded-lg border border-sand-200 px-3 text-sm text-forest-900" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
           </label>
+          </> : <p className="self-end text-sm text-forest-600 md:col-span-2">Using Executive Scope period: {dateFrom} to {dateTo}</p>}
           <label className="grid gap-1 text-xs text-forest-600">
             Product
             <select className="h-10 rounded-lg border border-sand-200 px-3 text-sm text-forest-900" value={productCategory} onChange={(event) => setProductCategory(event.target.value)}>
               <option value="">All Products</option>
               <option value="egg">Eggs</option>
               <option value="bird">Birds</option>
+              <option value="training">Training</option>
+              <option value="equipment_medicine">Equipment &amp; Medicine</option>
+              <option value="consultancy">Consultancy</option>
+              <option value="package">Packages</option>
             </select>
           </label>
         </div>
@@ -652,9 +670,13 @@ export default function SalesPage() {
               </label>
               <label className="grid gap-1 text-xs text-forest-600">
                 Category
-                <select className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.product_category} onChange={(event) => setForm((prev) => ({ ...prev, product_category: event.target.value as "egg" | "bird", product_label: productLabels[event.target.value as "egg" | "bird"][0], unit: event.target.value === "egg" ? "tray" : "bird" }))}>
+                <select className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.product_category} onChange={(event) => { const category=event.target.value as ProductCategory; setForm((prev) => ({ ...prev, product_category: category, product_label: productLabels[category][0], unit: category === "egg" ? "tray" : category === "bird" ? "bird" : "unit" })); }}>
                   <option value="egg">Egg</option>
                   <option value="bird">Bird</option>
+                  <option value="training">Training</option>
+                  <option value="equipment_medicine">Equipment &amp; Medicine</option>
+                  <option value="consultancy">Consultancy</option>
+                  <option value="package">Package</option>
                 </select>
               </label>
               <label className="grid gap-1 text-xs text-forest-600">

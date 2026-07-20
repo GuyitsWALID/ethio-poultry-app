@@ -9,7 +9,7 @@ import {
   type DailySalesRecord,
 } from "@/lib/sales";
 
-const VALID_CATEGORIES = new Set(["egg", "bird"]);
+const VALID_CATEGORIES = new Set(["egg", "bird", "training", "equipment_medicine", "consultancy", "package"]);
 
 function numberFrom(value: unknown, fallback = 0) {
   const number = Number(value);
@@ -60,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const paidAmount = numberFrom(body.paid_amount, existing.record.paid_amount);
     const grossAmount = Math.round(quantity * unitPrice * 100) / 100;
 
-    if (!VALID_CATEGORIES.has(productCategory)) return json({ error: "Product category must be egg or bird." }, 400);
+    if (!VALID_CATEGORIES.has(productCategory)) return json({ error: "Select a supported revenue category." }, 400);
     if (quantity <= 0) return json({ error: "Quantity must be greater than zero." }, 400);
     if (unitPrice < 0) return json({ error: "Unit price cannot be negative." }, 400);
     if (paidAmount < 0 || paidAmount > grossAmount) {
@@ -73,6 +73,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       house_id: cleanText(body.house_id) ?? existing.record.house_id,
       flock_id: cleanText(body.flock_id) ?? existing.record.flock_id,
       batch_id: cleanText(body.batch_id) ?? existing.record.batch_id,
+      require_farm: productCategory === "egg" || productCategory === "bird",
     });
     if ("error" in scope) return json({ error: scope.error }, 400);
 
