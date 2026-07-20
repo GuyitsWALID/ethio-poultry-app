@@ -996,6 +996,24 @@ export type Database = {
           },
         ]
       }
+      feed_control_settings: {
+        Row: { id: string; org_id: string; warning_variance_pct: number; critical_variance_pct: number; created_at: string; updated_at: string }
+        Insert: { id?: string; org_id: string; warning_variance_pct?: number; critical_variance_pct?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; org_id?: string; warning_variance_pct?: number; critical_variance_pct?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      feed_day_closures: {
+        Row: { id: string; org_id: string; batch_id: string; flock_id: string; record_date: string; status: string; planned_feed_kg: number; actual_feed_kg: number; variance_kg: number; override_reason: string | null; closed_by: string | null; closed_at: string | null; reopened_by: string | null; reopened_at: string | null; reopen_reason: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; org_id: string; batch_id: string; flock_id: string; record_date: string; status?: string; planned_feed_kg?: number; actual_feed_kg: number; variance_kg?: number; override_reason?: string | null; closed_by?: string | null; closed_at?: string | null; reopened_by?: string | null; reopened_at?: string | null; reopen_reason?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; org_id?: string; batch_id?: string; flock_id?: string; record_date?: string; status?: string; planned_feed_kg?: number; actual_feed_kg?: number; variance_kg?: number; override_reason?: string | null; closed_by?: string | null; closed_at?: string | null; reopened_by?: string | null; reopened_at?: string | null; reopen_reason?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      feed_milestone_executions: {
+        Row: { id: string; org_id: string; milestone_id: string; flock_id: string | null; status: string; completed_by: string | null; completed_at: string; notes: string | null; created_at: string }
+        Insert: { id?: string; org_id: string; milestone_id: string; flock_id?: string | null; status?: string; completed_by?: string | null; completed_at?: string; notes?: string | null; created_at?: string }
+        Update: { id?: string; org_id?: string; milestone_id?: string; flock_id?: string | null; status?: string; completed_by?: string | null; completed_at?: string; notes?: string | null; created_at?: string }
+        Relationships: []
+      }
       feeding_schedules: {
         Row: {
           batch_id: string
@@ -1064,7 +1082,11 @@ export type Database = {
         Row: {
           actual_feed_kg: number | null
           batch_id: string
+          completed_at: string | null
+          completed_by: string | null
           created_at: string
+          feed_item_id: string | null
+          feed_type: Database["public"]["Enums"]["feed_type"] | null
           feeders_count: number
           flock_id: string
           id: string
@@ -1075,12 +1097,18 @@ export type Database = {
           recorded_by: string | null
           session_name: string
           session_time: string | null
+          status: string
           updated_at: string
+          warehouse_id: string | null
         }
         Insert: {
           actual_feed_kg?: number | null
           batch_id: string
+          completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
+          feed_item_id?: string | null
+          feed_type?: Database["public"]["Enums"]["feed_type"] | null
           feeders_count: number
           flock_id: string
           id?: string
@@ -1091,12 +1119,18 @@ export type Database = {
           recorded_by?: string | null
           session_name: string
           session_time?: string | null
+          status?: string
           updated_at?: string
+          warehouse_id?: string | null
         }
         Update: {
           actual_feed_kg?: number | null
           batch_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
           created_at?: string
+          feed_item_id?: string | null
+          feed_type?: Database["public"]["Enums"]["feed_type"] | null
           feeders_count?: number
           flock_id?: string
           id?: string
@@ -1107,7 +1141,9 @@ export type Database = {
           recorded_by?: string | null
           session_name?: string
           session_time?: string | null
+          status?: string
           updated_at?: string
+          warehouse_id?: string | null
         }
         Relationships: [
           {
@@ -2496,6 +2532,8 @@ export type Database = {
           recorded_by: string | null
           reference_doc: string | null
           supplier_name: string | null
+          source_key: string | null
+          source_kind: string | null
           transaction_date: string
           transaction_type: Database["public"]["Enums"]["stock_txn_type"]
           unit_cost: number
@@ -2522,6 +2560,8 @@ export type Database = {
           recorded_by?: string | null
           reference_doc?: string | null
           supplier_name?: string | null
+          source_key?: string | null
+          source_kind?: string | null
           transaction_date?: string
           transaction_type: Database["public"]["Enums"]["stock_txn_type"]
           unit_cost: number
@@ -2548,6 +2588,8 @@ export type Database = {
           recorded_by?: string | null
           reference_doc?: string | null
           supplier_name?: string | null
+          source_key?: string | null
+          source_kind?: string | null
           transaction_date?: string
           transaction_type?: Database["public"]["Enums"]["stock_txn_type"]
           unit_cost?: number
@@ -3028,6 +3070,7 @@ export type Database = {
     }
     Functions: {
       auth_org_id: { Args: never; Returns: string }
+      close_feed_day: { Args: { p_actor_id: string; p_flock_id: string; p_record_date: string; p_override_reason?: string | null }; Returns: Json }
       create_branch_batch_cycle: {
         Args: {
           p_org_id: string
@@ -3041,6 +3084,10 @@ export type Database = {
         Args: { input_role: string }
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      record_feed_weight: { Args: { p_actor_id: string; p_task_id: string; p_record_date: string; p_sample_count: number; p_average_weight_g: number; p_min_weight_g: number; p_max_weight_g: number; p_uniformity_pct: number }; Returns: Json }
+      record_feed_milestone: { Args: { p_actor_id: string; p_milestone_id: string; p_flock_id: string; p_status: string; p_notes?: string | null }; Returns: Json }
+      reopen_feed_day: { Args: { p_actor_id: string; p_flock_id: string; p_record_date: string; p_reason: string }; Returns: Json }
+      save_feed_template: { Args: { p_actor_id: string; p_batch_id: string; p_name: string; p_source_type: string; p_rows: Json }; Returns: Json }
       record_inventory_movement: {
         Args: {
           p_actor_id: string

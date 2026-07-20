@@ -118,8 +118,8 @@ function normalizeRow(row: Record<string, unknown>): ExtractedRow {
     age_day_end: end,
     feed_intake_std_g_per_head: numberOrNull(row.feed_intake_std_g_per_head),
     feed_intake_recommended_g_per_head: numberOrNull(row.feed_intake_recommended_g_per_head),
-    target_weight_min_g: min === null || max === null ? min : Math.min(min, max),
-    target_weight_max_g: min === null || max === null ? max : Math.max(min, max),
+    target_weight_min_g: min,
+    target_weight_max_g: max,
     feed_type_plan: String(row.feed_type_plan ?? "").trim(),
     light_on_time: normalizeTime(row.light_on_time),
     light_off_time: normalizeTime(row.light_off_time),
@@ -139,11 +139,15 @@ function extractJson(text: string) {
 
 export async function POST(request: Request) {
   try {
+    const ctx = await getFeedContext();
+    if (ctx instanceof Response) return ctx;
+    if (!ctx.canManage) return feedJson({ error: "Only an operations manager can import feed templates." }, 403);
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
       return Response.json({ error: "Upload a feed template file." }, { status: 400 });
     }
+    if (file.size > 5 * 1024 * 1024) return feedJson({ error: "Template files must be 5 MB or smaller." }, 413);
 
     const contentType = file.type || "application/octet-stream";
     const name = file.name.toLowerCase();
@@ -154,17 +158,11 @@ export async function POST(request: Request) {
     }
 
     if (contentType.includes("pdf") || name.endsWith(".pdf")) {
-      return Response.json(
-        {
-          rows: [],
-          error: "PDF upload is accepted, but this build needs a PDF-to-image converter before local vision extraction can read it. Upload a screenshot/image or CSV for now.",
-        },
-        { status: 422 }
-      );
+      return feedJson({ error: "PDF extraction is not supported. Upload CSV, text, PNG, JPEG, or WebP." }, 415);
     }
 
-    if (!contentType.startsWith("image/")) {
-      return Response.json({ error: "Unsupported file type. Use CSV, text, PDF, or image." }, { status: 415 });
+    if (!["image/png", "image/jpeg", "image/webp"].includes(contentType)) {
+      return Response.json({ error: "Unsupported file type. Use CSV, text, PNG, JPEG, or WebP." }, { status: 415 });
     }
 
     const bytes = Buffer.from(await file.arrayBuffer());
@@ -210,3 +208,4 @@ export async function POST(request: Request) {
     );
   }
 }
+import { feedJson, getFeedContext } from "@/lib/feed-control";

@@ -1,1006 +1,171 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/set-state-in-effect */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  BarChart3,
-  CalendarCheck,
-  CheckCircle2,
-  FileUp,
-  Gauge,
-  LineChart as LineChartIcon,
-  Plus,
-  Save,
-  Scale,
-  Upload,
-} from "lucide-react";
-import {
-  Area,
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  Line,
-  ReferenceArea,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { AlertTriangle, Check, ChevronDown, Clock3, PackageOpen, RefreshCw, Scale, Wheat, X } from "lucide-react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
-import { createClient } from "@/utils/supabase/client";
 
-type TemplateSource = "default" | "manual" | "upload";
-type WeightStatus = "On track" | "Below target" | "Above target" | "Missing" | "Pending";
-
-type BatchMeta = {
-  id: string;
-  batch_code: string;
-  placement_date: string;
-  age_at_placement_days: number | null;
-  total_count: number;
+type Metric = { value: number | null; unit: string; status: string; reason?: string; label?: string; actualKg?: number; plannedKg?: number; variancePct?: number | null; uniformityPct?: number | null; sampleCount?: number; kind?: string };
+type Session = { id: string | null; session_name: string; session_time: string | null; planned_feed_kg: number; actual_feed_kg: number | null; feeders_count: number; status: string; feed_item_id: string | null; warehouse_id: string | null; feed_type: string | null; notes: string | null };
+type TodayFlock = { id: string; flock_code: string; flock_type: string; current_count: number; plannedKg: number; actualKg: number; varianceKg: number; variancePct: number | null; closeStatus: string; sessions: Session[] };
+type Trend = { date: string; plannedKg: number; actualKg: number | null; openingBirds: number | null; source: string };
+type Task = { id: string; flock_id: string; due_date: string; due_week_number: number; status: string; result: string | null; displayStatus: string; batch_feed_template_rows?: { target_weight_min_g: number | null; target_weight_max_g: number | null } | null };
+type Milestone = { id: string; title: string; notes: string | null; category: string; flockId: string; flockCode: string; dueDate: string; displayStatus: string; execution: { status: string } | null };
+type TemplateRow = { week_number: number; age_day_start: number; age_day_end: number; feed_intake_std_g_per_head: number | null; feed_intake_recommended_g_per_head: number | null; target_weight_min_g: number | null; target_weight_max_g: number | null; feed_type_plan: string; light_on_time: string; light_off_time: string };
+type FeedData = {
+  meta: { batchId: string; today: string; dateFrom: string; dateTo: string; refreshedAt: string; confidence: string; sources: Record<string, { status: string; error: string | null }> };
+  batch: { batch_code: string; ageDays: number; totalBirds: number; flockTypes: string[] };
+  today: { flocks: TodayFlock[] };
+  kpis: { planCompletion: Metric; feedVariance: Metric; feedPerBirdDay: Metric; stockCover: Metric; weight: Metric; fcr: Metric; coverage: Metric & { coveredDays: number; expectedDays: number; legacyDays: number } };
+  trends: { daily: Trend[] };
+  inventory: { balances: Array<{ itemId: string; itemName: string; warehouseId: string; warehouseName: string; onHand: number; unit: string }>; totalOnHand: number; estimatedValue: number };
+  financials: { feedCostEtb: number | null; costCoveragePct: number | null; leftoversKg: number; leftoverPct: number | null; confidence: string };
+  template: ({ id: string; name: string; source_type: string; rows: TemplateRow[]; currentTarget: TemplateRow | null } | null);
+  templateVersions: Array<{ id: string; name: string; source_type: string; is_active: boolean; created_at: string }>;
+  suggestedRows: TemplateRow[];
+  tasks: Task[];
+  milestones: Milestone[];
+  nextCheck: Partial<Task> & { displayStatus: string };
+  exceptions: Array<{ severity: string; title: string; reason: string; action: string }>;
+  settings: { warningVariancePct: number; criticalVariancePct: number };
+  permissions: { canManage: boolean; canConfigure: boolean; canRecordWeight: boolean };
 };
 
-type FlockRow = {
-  id: string;
-  flock_code: string;
-  initial_count: number;
-  current_count: number;
-  placement_date: string;
-  batch_id: string | null;
-};
+const feedTypes = [
+  ["starter_feed", "Starter feed"], ["grower_pullet_feed", "Grower / pullet feed"], ["layer_feed", "Layer feed"], ["broiler_feed", "Broiler feed"], ["medicated_feed", "Medicated feed"],
+] as const;
 
-type FeedTemplate = {
-  id: string;
-  batch_id: string;
-  name: string;
-  source_type: TemplateSource;
-  is_active: boolean;
-};
+function fmt(value: number | null, places = 1) { return value === null ? "Unavailable" : new Intl.NumberFormat("en-US", { maximumFractionDigits: places }).format(value); }
+function dateLabel(value: string) { return new Intl.DateTimeFormat("en-ET", { month: "short", day: "numeric" }).format(new Date(`${value}T12:00:00Z`)); }
 
-type TemplateRow = {
-  id?: string;
-  client_id: string;
-  week_number: number;
-  age_day_start: number;
-  age_day_end: number;
-  feed_intake_std_g_per_head: number | null;
-  feed_intake_recommended_g_per_head: number | null;
-  target_weight_min_g: number | null;
-  target_weight_max_g: number | null;
-  feed_type_plan: string;
-  light_on_time: string;
-  light_off_time: string;
-  row_order: number;
-};
-
-type MilestoneRow = {
-  id: string;
-  week_number: number | null;
-  trigger_day: number;
-  title: string;
-  category: "feed" | "weight" | "vaccine" | "light" | "note";
-  notes: string | null;
-  is_required: boolean;
-};
-
-type DailyRecord = {
-  record_date: string;
-  flock_id: string;
-  feed_intake_grams: number | null;
-  deaths: number | null;
-};
-
-type WeightRecord = {
-  id: string;
-  flock_id: string;
-  record_date: string;
-  sample_count: number | null;
-  average_weight_g: number | null;
-  min_weight_g: number | null;
-  max_weight_g: number | null;
-  uniformity_pct: number | null;
-};
-
-type WeightTask = {
-  id: string;
-  flock_id: string;
-  template_row_id: string | null;
-  due_week_number: number;
-  due_date: string;
-  status: "scheduled" | "completed" | "missed";
-  weight_record_id: string | null;
-};
-
-type ChartPoint = {
-  week: number;
-  targetMin: number | null;
-  targetMax: number | null;
-  actualWeight: number | null;
-  weightStatus: WeightStatus;
-  actualFeed: number | null;
-  targetFeed: number | null;
-};
-
-const inputClass = "h-10 w-full rounded-lg border border-sand-200 bg-white px-3 text-sm text-forest-900";
-
-const defaultPulletRows: TemplateRow[] = [
-  [8, 49, 56, 51, 55, 514, 546, "Pullet", "11:00", "1:00"],
-  [9, 57, 63, 55, 60, 602, 638, "Pullet", "11:00", "1:00"],
-  [10, 64, 70, 59, 65, 690, 630, "Pullet", "11:00", "1:00"],
-  [11, 71, 77, 62, 67, 723, 778, "Pullet", "11:00", "1:00"],
-  [12, 78, 84, 65, 70, 875, 925, "Pullet", "11:00", "1:00"],
-  [13, 85, 91, 68, 73, 968, 1022, "Pullet", "11:00", "1:00"],
-  [14, 92, 98, 71, 75, 1051, 1110, "Pullet", "11:00", "1:00"],
-  [15, 99, 105, 74, 80, 1133, 1197, "Pullet", "11:00", "1:00"],
-  [16, 106, 112, 77, 83, 1216, 1284, "Pullet", "11:00", "1:00"],
-  [17, 113, 119, 82, 87, 1289, 1361, "Pullet", "11:00", "1:00"],
-  [18, 120, 126, 87, 90, 1363, 1438, "Pullet", "11:00", "1:00"],
-  [19, 127, 133, 90, 95, 1460, 1460, "Pullet", "11:00", "1:00"],
-  [20, 134, 140, 100, 105, 1510, 1510, "75% pullet + 25% layer", "11:00", "2:00"],
-  [21, 141, 147, 107, 107, 1565, 1565, "50% pullet + 50% layer", "11:00", "3:00"],
-  [22, 142, 148, 110, 110, 1610, 1610, "25% pullet + 75% layer", "11:00", "4:00"],
-  [23, 143, 149, 115, 115, 1640, 1640, "Layer", "11:00", "4:00"],
-  [24, 150, 156, 120, 120, 1660, 1660, "Layer", "11:00", "4:00"],
-].map(([week, start, end, std, rec, min, max, feed, on, off], index) => {
-  const minWeight = Number(min);
-  const maxWeight = Number(max);
-  return {
-    client_id: `default-${week}`,
-    week_number: Number(week),
-    age_day_start: Number(start),
-    age_day_end: Number(end),
-    feed_intake_std_g_per_head: Number(std),
-    feed_intake_recommended_g_per_head: Number(rec),
-    target_weight_min_g: Math.min(minWeight, maxWeight),
-    target_weight_max_g: Math.max(minWeight, maxWeight),
-    feed_type_plan: String(feed),
-    light_on_time: normalizeTime(String(on)),
-    light_off_time: normalizeTime(String(off)),
-    row_order: index,
-  };
-});
-
-function normalizeTime(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  const [hourRaw, minuteRaw = "00"] = trimmed.split(":");
-  const hour = hourRaw.padStart(2, "0");
-  const minute = minuteRaw.padStart(2, "0");
-  return `${hour}:${minute}`;
+function Status({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "warning" | "critical" }) {
+  const styles = tone === "good" ? "bg-emerald-50 text-emerald-800" : tone === "warning" ? "bg-amber-50 text-amber-900" : tone === "critical" ? "bg-red-50 text-red-800" : "bg-stone-100 text-stone-700";
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${styles}`}>{children}</span>;
 }
 
-function parseNumeric(value: unknown) {
-  if (value === null || value === undefined || value === "") return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+function KpiCard({ title, metric, icon }: { title: string; metric: Metric; icon: React.ReactNode }) {
+  const tone = metric.value === null ? "neutral" : metric.label?.includes("Critical") || metric.status === "Review" ? "critical" : metric.label?.includes("Review") ? "warning" : "good";
+  return <article className="rounded-2xl border border-[#e5d9c4] bg-white p-4 shadow-[0_1px_2px_rgba(36,51,40,.04)]">
+    <div className="flex items-start justify-between gap-3"><span className="grid size-9 place-items-center rounded-xl bg-[#f2eee4] text-[#274331]">{icon}</span><Status tone={tone}>{metric.value === null ? metric.status : metric.label ?? metric.status}</Status></div>
+    <h3 className="mt-5 text-[11px] font-semibold uppercase tracking-[.19em] text-[#536958]">{title}</h3>
+    <p className="mt-1 text-2xl font-semibold text-[#142c20]">{fmt(metric.value)}{metric.value !== null && <span className="ml-1 text-sm font-medium text-[#657468]">{metric.unit}</span>}</p>
+    {metric.reason && <p className="mt-2 text-xs leading-5 text-[#657468]">{metric.reason}</p>}
+  </article>;
 }
 
-function toDate(value: string) {
-  return new Date(`${value}T00:00:00`);
+export default function FeedControlPage() {
+  const { scope, period, filteredBatches, loading: scopeLoading } = useFarmScope();
+  const [data, setData] = useState<FeedData | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
+  const [templateOpen, setTemplateOpen] = useState(false); const [weightTask, setWeightTask] = useState<Task | null>(null);
+
+  const load = useCallback(async () => {
+    if (!scope.batchId) { setData(null); setError(""); return; }
+    setLoading(true); setError("");
+    const params = new URLSearchParams({ batch_id: scope.batchId, date_from: period.dateFrom, date_to: period.dateTo });
+    try { const response = await fetch(`/api/feed/control?${params}`, { cache: "no-store" }); const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Feed Control could not load."); setData(body as FeedData); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Feed Control could not load."); } finally { setLoading(false); }
+  }, [period.dateFrom, period.dateTo, scope.batchId]);
+  useEffect(() => { void load(); }, [load]);
+
+  if (!scope.batchId) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10">
+    <section className="rounded-3xl border border-[#ded2bc] bg-[#183324] p-7 text-white shadow-sm sm:p-10">
+      <p className="text-xs font-semibold uppercase tracking-[.25em] text-[#d8c89a]">Feed control</p><h1 className="mt-3 text-3xl font-semibold">Choose a batch to run the daily feed ledger</h1>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-[#d6dfd8]">Feed execution is flock-specific. Select a batch in Executive Scope Filters; this page will not silently change your persistent scope.</p>
+      <div className="mt-7 flex flex-wrap gap-2">{scopeLoading ? <span>Loading batches…</span> : filteredBatches.length ? filteredBatches.map((batch) => <span key={batch.id} className="rounded-full border border-white/20 px-3 py-1.5 text-xs">{batch.batch_code}</span>) : <span className="text-sm">No active batch is available in the current scope.</span>}</div>
+    </section>
+  </main>;
+
+  return <main className="mx-auto w-full max-w-[1560px] space-y-6 p-4 sm:p-6 lg:p-10">
+    <header className="flex flex-col gap-4 rounded-3xl border border-[#ded2bc] bg-[#183324] p-6 text-white shadow-sm lg:flex-row lg:items-end lg:justify-between">
+      <div><p className="text-[11px] font-semibold uppercase tracking-[.25em] text-[#dac99c]">Daily ration ledger</p><h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Feed Control</h1><p className="mt-2 text-sm text-[#d6dfd8]">{data ? `${data.batch.batch_code} · age ${data.batch.ageDays} days · ${data.batch.totalBirds.toLocaleString()} live birds` : "Loading batch context…"}</p></div>
+      <div className="flex flex-wrap items-center gap-2 text-xs"><Status tone={data?.meta.confidence === "Actual" ? "good" : "warning"}>{data?.meta.confidence ?? "Loading"}</Status><span>{period.dateFrom} — {period.dateTo}</span><button type="button" onClick={() => void load()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 px-4 font-semibold hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"><RefreshCw className={`size-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} />Refresh</button></div>
+    </header>
+    <div aria-live="polite" className="sr-only">{message || error || (loading ? "Loading Feed Control" : "")}</div>
+    {error && <div role="alert" className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><span>{error}</span><button type="button" onClick={() => void load()} className="underline">Retry</button></div>}
+    {loading && !data ? <LoadingState /> : data && <>
+      <TodayFeeding data={data} reload={load} announce={setMessage} />
+      <section aria-labelledby="feed-actions-title"><div className="mb-3 flex items-end justify-between"><div><h2 id="feed-actions-title" className="text-xl font-semibold text-[#173225]">Action queue</h2><p className="mt-1 text-sm text-[#647267]">Only exceptions with a precise cause and recovery action.</p></div><Status tone={data.exceptions.length ? "warning" : "good"}>{data.exceptions.length ? `${data.exceptions.length} open` : "Clear"}</Status></div>
+        {data.exceptions.length ? <div className="grid gap-3 lg:grid-cols-2">{data.exceptions.map((item) => <article key={`${item.title}-${item.reason}`} className="rounded-2xl border border-[#e5d9c4] bg-white p-4"><div className="flex gap-3"><AlertTriangle className={`mt-0.5 size-5 shrink-0 ${item.severity === "critical" ? "text-red-600" : "text-amber-600"}`} /><div><h3 className="font-semibold text-[#193426]">{item.title}</h3><p className="mt-1 text-sm leading-6 text-[#637167]">{item.reason}</p><p className="mt-2 text-xs font-semibold uppercase tracking-wide text-[#8a6735]">{item.action}</p></div></div></article>)}</div> : <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">No feed-control exceptions in this scope.</div>}
+      </section>
+      <section aria-labelledby="feed-kpis-title"><h2 id="feed-kpis-title" className="mb-3 text-xl font-semibold text-[#173225]">Control metrics</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"><KpiCard title="Plan completion" metric={data.kpis.planCompletion} icon={<Check className="size-4" />} /><KpiCard title="Feed variance" metric={data.kpis.feedVariance} icon={<Wheat className="size-4" />} /><KpiCard title="Feed / bird / day" metric={data.kpis.feedPerBirdDay} icon={<Clock3 className="size-4" />} /><KpiCard title="Stock cover" metric={data.kpis.stockCover} icon={<PackageOpen className="size-4" />} /><KpiCard title="Weight response" metric={data.kpis.weight} icon={<Scale className="size-4" />} /><KpiCard title={data.kpis.fcr.kind ?? "Applicable FCR"} metric={data.kpis.fcr} icon={<span className="text-xs font-bold">FCR</span>} /></div></section>
+      <div className="grid gap-6 xl:grid-cols-[1.55fr_1fr]"><FeedTrend data={data} /><InventoryPanel data={data} /></div>
+      <WeightTasks data={data} onRecord={setWeightTask} />
+      <MilestoneTimeline data={data} reload={load} announce={setMessage} />
+      <TemplateManager data={data} open={templateOpen} setOpen={setTemplateOpen} reload={load} announce={setMessage} batchId={scope.batchId} />
+      <details className="rounded-2xl border border-[#e5d9c4] bg-white p-5"><summary className="min-h-11 cursor-pointer text-base font-semibold text-[#173225]">Data trust and source status</summary><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(data.meta.sources).map(([name, source]) => <div key={name} className="rounded-xl bg-[#f7f4ed] p-3"><div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold capitalize text-[#173225]">{name.replaceAll(/([A-Z])/g, " $1")}</span><Status tone={source.status === "available" ? "good" : "critical"}>{source.status}</Status></div>{source.error && <p className="mt-2 text-xs text-red-700">{source.error}</p>}</div>)}</div><p className="mt-4 text-xs text-[#68766b]">Refreshed {new Date(data.meta.refreshedAt).toLocaleString()} · Addis Ababa reporting boundary · confidence {data.meta.confidence}.</p></details>
+      {weightTask && <WeightDrawer task={weightTask} date={data.meta.today} close={() => setWeightTask(null)} reload={load} announce={setMessage} />}
+    </>}
+  </main>;
 }
 
-function isoDate(date: Date) {
-  return date.toISOString().slice(0, 10);
+function LoadingState() { return <div className="grid animate-pulse gap-4 motion-reduce:animate-none sm:grid-cols-2 xl:grid-cols-3" aria-label="Loading feed data">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-40 rounded-2xl bg-stone-200" />)}</div>; }
+
+function TodayFeeding({ data, reload, announce }: { data: FeedData; reload: () => Promise<void>; announce: (value: string) => void }) {
+  return <section aria-labelledby="today-feed-title" className="rounded-3xl border border-[#ded2bc] bg-[#f7f2e7] p-4 sm:p-6"><div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[.2em] text-[#7e6537]">{data.meta.today}</p><h2 id="today-feed-title" className="mt-1 text-2xl font-semibold text-[#173225]">Today’s feeding</h2><p className="mt-1 text-sm text-[#657468]">Complete each ration, then close the flock day to synchronize Daily Records and inventory.</p></div><div className="text-xs text-[#657468]">Coverage {data.kpis.coverage.coveredDays}/{data.kpis.coverage.expectedDays} days{data.kpis.coverage.legacyDays ? ` · ${data.kpis.coverage.legacyDays} legacy` : ""}</div></div>
+    <div className="mt-5 space-y-4">{data.today.flocks.map((flock) => <FlockLedger key={`${flock.id}-${data.meta.refreshedAt}`} flock={flock} data={data} reload={reload} announce={announce} />)}</div>
+  </section>;
 }
 
-function addDays(date: string, days: number) {
-  const next = toDate(date);
-  next.setDate(next.getDate() + days);
-  return isoDate(next);
+function FlockLedger({ flock, data, reload, announce }: { flock: TodayFlock; data: FeedData; reload: () => Promise<void>; announce: (value: string) => void }) {
+  const [sessions, setSessions] = useState(flock.sessions); const [saving, setSaving] = useState(""); const [override, setOverride] = useState(""); const [reopen, setReopen] = useState("");
+  const dirty = JSON.stringify(sessions) !== JSON.stringify(flock.sessions);
+  useEffect(() => { const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, [dirty]);
+  function addSession() { setSessions((current) => [...current, { id: null, session_name: `Additional ${current.length - 1}`, session_time: null, planned_feed_kg: 0, actual_feed_kg: null, feeders_count: 1, status: "planned", feed_item_id: null, warehouse_id: null, feed_type: current[0]?.feed_type ?? null, notes: null }]); }
+  async function save(session: Session) { setSaving(session.session_name); const response = await fetch("/api/feed/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batchId: data.meta.batchId, flockId: flock.id, recordDate: data.meta.today, sessionName: session.session_name, sessionTime: session.session_time, plannedFeedKg: session.planned_feed_kg, actualFeedKg: session.actual_feed_kg, feedersCount: session.feeders_count, status: session.status, feedItemId: session.feed_item_id, warehouseId: session.warehouse_id, feedType: session.feed_type, notes: session.notes }) }); const body = await response.json(); setSaving(""); if (!response.ok) { announce(body.error); return; } announce(`${session.session_name} session saved.`); await reload(); }
+  async function remove(session: Session, index: number) { if (!session.id) { setSessions((rows) => rows.filter((_, i) => i !== index)); return; } const response = await fetch("/api/feed/sessions", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: session.id, batchId: data.meta.batchId }) }); const body = await response.json(); if (!response.ok) { announce(body.error); return; } announce(`${session.session_name} session removed.`); await reload(); }
+  async function closeDay(method: "POST" | "DELETE") { const reason = method === "POST" ? override : reopen; const response = await fetch("/api/feed/day-close", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batchId: data.meta.batchId, flockId: flock.id, recordDate: data.meta.today, overrideReason: method === "POST" ? reason : undefined, reason: method === "DELETE" ? reason : undefined }) }); const body = await response.json(); if (!response.ok) { announce(body.error); return; } announce(method === "POST" ? "Feeding day closed and inventory posted." : "Feeding day reopened."); await reload(); }
+  const balances = data.inventory.balances;
+  return <article className="overflow-hidden rounded-2xl border border-[#ded2bc] bg-white"><header className="flex flex-col gap-3 border-b border-[#eee5d5] px-4 py-4 lg:flex-row lg:items-center lg:justify-between"><div><div className="flex items-center gap-2"><h3 className="font-semibold text-[#173225]">{flock.flock_code}</h3><Status tone={flock.closeStatus === "closed" ? "good" : "warning"}>{flock.closeStatus === "closed" ? "Day closed" : "Day open"}</Status></div><p className="mt-1 text-xs text-[#68766b]">{flock.flock_type} · {flock.current_count.toLocaleString()} birds · {flock.actualKg} / {flock.plannedKg} kg</p></div><div className="flex items-center gap-3"><div className="h-2 w-full overflow-hidden rounded-full bg-[#ebe5d8] lg:w-64" aria-label={`${flock.actualKg} of ${flock.plannedKg} kilograms recorded`}><div className="h-full rounded-full bg-[#bd8a36] transition-[width] motion-reduce:transition-none" style={{ width: `${Math.min(100, flock.plannedKg ? flock.actualKg / flock.plannedKg * 100 : 0)}%` }} /></div>{flock.closeStatus !== "closed" && <button type="button" onClick={addSession} className="min-h-11 whitespace-nowrap rounded-xl border border-[#bba981] px-3 text-xs font-semibold text-[#173225]">Add session</button>}</div></header>
+    <div className="divide-y divide-[#eee5d5]">{sessions.map((session, index) => <div key={`${session.session_name}-${index}`} className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[1.1fr_.8fr_.8fr_.8fr_1fr_1fr_auto] xl:items-end">
+      <label className="text-xs font-medium text-[#4e6253]">Session<input name={`session-${flock.id}-${index}`} value={session.session_name} disabled={flock.closeStatus === "closed" || Boolean(session.id)} onChange={(event) => setSessions((rows) => rows.map((row, i) => i === index ? { ...row, session_name: event.target.value } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] bg-white px-3 text-sm text-[#183225] disabled:bg-stone-50" /></label>
+      <label className="text-xs font-medium text-[#4e6253]">Time<input name={`time-${flock.id}-${index}`} type="time" value={session.session_time?.slice(0, 5) ?? ""} disabled={flock.closeStatus === "closed"} onChange={(event) => setSessions((rows) => rows.map((row, i) => i === index ? { ...row, session_time: event.target.value } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] px-3 text-sm" /></label>
+      <label className="text-xs font-medium text-[#4e6253]">Planned kg<input name={`plan-${flock.id}-${index}`} type="number" min="0.01" step="0.01" value={session.planned_feed_kg} disabled={flock.closeStatus === "closed"} onChange={(event) => setSessions((rows) => rows.map((row, i) => i === index ? { ...row, planned_feed_kg: Number(event.target.value) } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] px-3 text-sm" /></label>
+      <label className="text-xs font-medium text-[#4e6253]">Actual kg<input name={`actual-${flock.id}-${index}`} type="number" min="0" step="0.01" value={session.actual_feed_kg ?? ""} disabled={flock.closeStatus === "closed"} onChange={(event) => setSessions((rows) => rows.map((row, i) => i === index ? { ...row, actual_feed_kg: event.target.value === "" ? null : Number(event.target.value), status: event.target.value === "" ? "planned" : "completed" } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] px-3 text-sm" /></label>
+      <label className="text-xs font-medium text-[#4e6253]">Feed stock<select name={`item-${flock.id}-${index}`} value={session.feed_item_id ?? ""} disabled={flock.closeStatus === "closed"} onChange={(event) => setSessions((rows) => rows.map((row, i) => i === index ? { ...row, feed_item_id: event.target.value || null } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] bg-white px-3 text-sm"><option value="">Select item</option>{Array.from(new Map(balances.map((row) => [row.itemId, row])).values()).map((row) => <option key={row.itemId} value={row.itemId}>{row.itemName}</option>)}</select></label>
+      <label className="text-xs font-medium text-[#4e6253]">Warehouse<select name={`warehouse-${flock.id}-${index}`} value={session.warehouse_id ?? ""} disabled={flock.closeStatus === "closed"} onChange={(event) => setSessions((rows) => rows.map((row, i) => i === index ? { ...row, warehouse_id: event.target.value || null } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] bg-white px-3 text-sm"><option value="">Select warehouse</option>{Array.from(new Map(balances.map((row) => [row.warehouseId, row])).values()).map((row) => <option key={row.warehouseId} value={row.warehouseId}>{row.warehouseName}</option>)}</select></label>
+      <button type="button" disabled={!data.permissions.canManage || flock.closeStatus === "closed" || saving === session.session_name} onClick={() => void save(session)} className="min-h-11 rounded-xl bg-[#244b35] px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{saving === session.session_name ? "Saving…" : "Save"}</button>
+      <label className="text-xs font-medium text-[#4e6253] xl:col-span-2">Feed type<select name={`feedtype-${flock.id}-${index}`} value={session.feed_type ?? ""} disabled={flock.closeStatus === "closed"} onChange={(event) => setSessions((rows) => rows.map((row, i) => i === index ? { ...row, feed_type: event.target.value } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] bg-white px-3 text-sm"><option value="">Select type</option>{feedTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label className="text-xs font-medium text-[#4e6253] xl:col-span-4">Notes<input name={`notes-${flock.id}-${index}`} value={session.notes ?? ""} disabled={flock.closeStatus === "closed"} onChange={(event) => setSessions((rows) => rows.map((row, i) => i === index ? { ...row, notes: event.target.value } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] px-3 text-sm" /></label>{flock.closeStatus !== "closed" && <button type="button" onClick={() => void remove(session, index)} className="min-h-11 rounded-xl px-3 text-xs font-semibold text-red-700 underline">Remove</button>}
+    </div>)}</div>
+    <footer className="flex flex-col gap-3 bg-[#fbf8f1] p-4 sm:flex-row sm:items-end sm:justify-end">{flock.closeStatus === "closed" ? <><label className="w-full text-xs font-medium text-[#4e6253] sm:max-w-sm">Reason to reopen<input name={`reopen-${flock.id}`} value={reopen} onChange={(event) => setReopen(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] px-3 text-sm" /></label><button type="button" disabled={!reopen.trim()} onClick={() => void closeDay("DELETE")} className="min-h-11 rounded-xl border border-[#bba981] px-4 text-sm font-semibold text-[#173225] disabled:opacity-50">Reopen day</button></> : <><label className="w-full text-xs font-medium text-[#4e6253] sm:max-w-md">Stock override reason <span className="font-normal">(only if needed)</span><input name={`override-${flock.id}`} value={override} onChange={(event) => setOverride(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] px-3 text-sm" /></label><button type="button" onClick={() => void closeDay("POST")} className="min-h-11 rounded-xl bg-[#b77b21] px-5 text-sm font-semibold text-white hover:bg-[#9a6519]">Close feeding day</button></>}</footer>
+  </article>;
 }
 
-function daysBetween(start: string, end: string) {
-  const ms = toDate(end).getTime() - toDate(start).getTime();
-  return Math.floor(ms / 86_400_000);
+function FeedTrend({ data }: { data: FeedData }) {
+  const visible = data.trends.daily.slice(-30); const max = Math.max(1, ...visible.flatMap((row) => [row.plannedKg, row.actualKg ?? 0]));
+  return <section className="rounded-2xl border border-[#e5d9c4] bg-white p-5"><div className="flex items-end justify-between"><div><h2 className="text-lg font-semibold text-[#173225]">Feed versus target</h2><p className="mt-1 text-sm text-[#68766b]">Closed sessions are authoritative; legacy totals are labelled.</p></div><div className="flex gap-3 text-xs text-[#68766b]"><span><i className="mr-1 inline-block size-2 rounded-full bg-[#c08a32]" />Plan</span><span><i className="mr-1 inline-block size-2 rounded-full bg-[#244b35]" />Actual</span></div></div>
+    <div className="mt-6 flex h-52 items-end gap-1" role="img" aria-label={`Daily feed chart from ${data.meta.dateFrom} to ${data.meta.dateTo}. Exact values follow in the table.`}>{visible.map((row) => <div key={row.date} className="group relative flex h-full min-w-0 flex-1 items-end justify-center gap-px"><span className="w-[42%] rounded-t-sm bg-[#c08a32]/55" style={{ height: `${row.plannedKg / max * 100}%` }} /><span className="w-[42%] rounded-t-sm bg-[#244b35]" style={{ height: `${(row.actualKg ?? 0) / max * 100}%` }} /><span className="pointer-events-none absolute bottom-full z-10 mb-2 hidden whitespace-nowrap rounded bg-[#173225] px-2 py-1 text-[10px] text-white group-hover:block group-focus-within:block">{dateLabel(row.date)}: {row.actualKg ?? "missing"} / {row.plannedKg} kg</span></div>)}</div>
+    <details className="mt-4"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-[#365340]">Exact daily values</summary><div className="max-h-72 overflow-auto"><table className="w-full text-left text-sm"><thead className="sticky top-0 bg-white text-xs uppercase tracking-wide text-[#68766b]"><tr><th className="p-2">Date</th><th className="p-2">Plan</th><th className="p-2">Actual</th><th className="p-2">Source</th></tr></thead><tbody>{visible.map((row) => <tr key={row.date} className="border-t border-[#eee5d5]"><td className="p-2">{row.date}</td><td className="p-2">{row.plannedKg} kg</td><td className="p-2">{row.actualKg === null ? "Missing" : `${row.actualKg} kg`}</td><td className="p-2">{row.source}</td></tr>)}</tbody></table></div></details>
+  </section>;
 }
 
-function rowForAge(rows: TemplateRow[], ageDays: number) {
-  return rows.find((row) => ageDays >= row.age_day_start && ageDays <= row.age_day_end)
-    ?? rows.find((row) => row.week_number === Math.floor(ageDays / 7))
-    ?? null;
+function InventoryPanel({ data }: { data: FeedData }) { return <section className="rounded-2xl border border-[#e5d9c4] bg-white p-5"><div className="flex items-start justify-between"><div><h2 className="text-lg font-semibold text-[#173225]">Feed availability and cost</h2><p className="mt-1 text-sm text-[#68766b]">Compatible kilogram stock by warehouse.</p></div><Status tone={data.kpis.stockCover.value !== null && data.kpis.stockCover.value >= 7 ? "good" : "warning"}>{fmt(data.kpis.stockCover.value)} days</Status></div><div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-[#f7f4ed] p-3"><div><p className="text-[10px] font-semibold uppercase tracking-wide text-[#68766b]">Period feed cost</p><p className="mt-1 font-semibold text-[#173225]">{data.financials.feedCostEtb === null ? "Unavailable" : `ETB ${fmt(data.financials.feedCostEtb, 0)}`}</p><p className="mt-1 text-[10px] text-[#68766b]">{data.financials.confidence} · {fmt(data.financials.costCoveragePct)}% costed</p></div><div><p className="text-[10px] font-semibold uppercase tracking-wide text-[#68766b]">Recorded leftovers</p><p className="mt-1 font-semibold text-[#173225]">{fmt(data.financials.leftoversKg)} kg</p><p className="mt-1 text-[10px] text-[#68766b]">{fmt(data.financials.leftoverPct)}% of recorded feed</p></div></div><div className="mt-3 divide-y divide-[#eee5d5]">{data.inventory.balances.length ? data.inventory.balances.map((row) => <div key={`${row.itemId}-${row.warehouseId}`} className="flex items-center justify-between gap-4 py-3"><div><p className="text-sm font-semibold text-[#173225]">{row.itemName}</p><p className="text-xs text-[#68766b]">{row.warehouseName}</p></div><p className="text-sm font-semibold tabular-nums text-[#173225]">{fmt(row.onHand)} {row.unit}</p></div>) : <p className="py-8 text-center text-sm text-[#68766b]">No compatible feed inventory balance is available.</p>}</div><Link href="/app/inventory" className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-[#365b42] underline underline-offset-4">Open Inventory</Link></section>; }
+
+function WeightTasks({ data, onRecord }: { data: FeedData; onRecord: (task: Task) => void }) { const relevant = data.tasks.filter((task) => task.status !== "completed").slice(0, 10); return <section className="rounded-2xl border border-[#e5d9c4] bg-white p-5"><div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-semibold text-[#173225]">Weight and uniformity checks</h2><p className="mt-1 text-sm text-[#68766b]">Samples are shared with the Health record; results are assessed against the sample-age target.</p></div><Status tone={relevant.some((task) => task.displayStatus === "Overdue") ? "warning" : "good"}>{relevant.length ? `${relevant.length} open` : "All checks complete"}</Status></div><div className="mt-4 grid gap-2">{relevant.map((task) => <div key={task.id} className="flex flex-col gap-3 rounded-xl border border-[#eee5d5] p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-[#173225]">Week {task.due_week_number} weight check</p><p className="mt-1 text-xs text-[#68766b]">Due {task.due_date} · {task.displayStatus}</p></div>{data.permissions.canRecordWeight && <button type="button" onClick={() => onRecord(task)} className="min-h-11 rounded-xl border border-[#bba981] px-4 text-sm font-semibold text-[#173225]">Record sample</button>}</div>)}{!relevant.length && <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900">Every generated weight check is complete.</p>}</div></section>; }
+
+function MilestoneTimeline({ data, reload, announce }: { data: FeedData; reload: () => Promise<void>; announce: (value: string) => void }) {
+  const relevant = data.milestones.filter((item) => !item.execution).sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 12);
+  async function complete(item: Milestone, status: "completed" | "skipped") { const response = await fetch("/api/feed/milestones", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ milestoneId: item.id, flockId: item.flockId, status }) }); const body = await response.json(); if (!response.ok) { announce(body.error); return; } announce(status === "completed" ? "Milestone completed." : "Milestone skipped with an explicit execution record."); await reload(); }
+  return <section className="rounded-2xl border border-[#e5d9c4] bg-white p-5"><div className="flex items-start justify-between"><div><h2 className="text-lg font-semibold text-[#173225]">Execution milestones</h2><p className="mt-1 text-sm text-[#68766b]">Past milestones stay overdue until someone records completion or a skip.</p></div><Status tone={relevant.some((item) => item.displayStatus === "Overdue") ? "warning" : "good"}>{relevant.length ? `${relevant.length} actionable` : "All milestones complete"}</Status></div><div className="mt-4 grid gap-2 lg:grid-cols-2">{relevant.map((item) => <article key={`${item.id}-${item.flockId}`} className="rounded-xl border border-[#eee5d5] p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold text-[#173225]">{item.title}</p><p className="mt-1 text-xs text-[#68766b]">{item.flockCode} · due {item.dueDate} · {item.displayStatus}</p>{item.notes && <p className="mt-2 text-xs leading-5 text-[#68766b]">{item.notes}</p>}</div><Status tone={item.displayStatus === "Overdue" ? "warning" : "neutral"}>{item.displayStatus}</Status></div>{data.permissions.canManage && <div className="mt-3 flex gap-2"><button type="button" onClick={() => void complete(item, "completed")} className="min-h-11 rounded-xl bg-[#244b35] px-3 text-xs font-semibold text-white">Mark complete</button><button type="button" onClick={() => void complete(item, "skipped")} className="min-h-11 rounded-xl border border-[#bba981] px-3 text-xs font-semibold text-[#173225]">Skip</button></div>}</article>)}{!relevant.length && <p className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-900 lg:col-span-2">No unexecuted feed or lighting milestones remain.</p>}</div></section>;
 }
 
-function statusForWeight(actual: number | null, row: TemplateRow | null): WeightStatus {
-  if (actual === null) return "Pending";
-  if (!row || row.target_weight_min_g === null || row.target_weight_max_g === null) return "Pending";
-  if (actual < row.target_weight_min_g) return "Below target";
-  if (actual > row.target_weight_max_g) return "Above target";
-  return "On track";
+function TemplateManager({ data, open, setOpen, reload, announce, batchId }: { data: FeedData; open: boolean; setOpen: (value: boolean) => void; reload: () => Promise<void>; announce: (value: string) => void; batchId: string }) {
+  const [rows, setRows] = useState<TemplateRow[]>(data.template?.rows ?? data.suggestedRows); const [name, setName] = useState(data.template?.name ?? "Breed-standard feed plan"); const [saving, setSaving] = useState(false); const [imported, setImported] = useState(false); const [uploading, setUploading] = useState(false); const [thresholds, setThresholds] = useState({ warning: String(data.settings.warningVariancePct), critical: String(data.settings.criticalVariancePct) });
+  useEffect(() => { setRows(data.template?.rows ?? data.suggestedRows); setName(data.template?.name ?? "Breed-standard feed plan"); }, [data.template, data.suggestedRows]);
+  const templateDirty = JSON.stringify(rows) !== JSON.stringify(data.template?.rows ?? data.suggestedRows) || name !== (data.template?.name ?? "Breed-standard feed plan");
+  useEffect(() => { const warn = (event: BeforeUnloadEvent) => { if (templateDirty) event.preventDefault(); }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, [templateDirty]);
+  async function save(sourceType: string) { setSaving(true); const response = await fetch("/api/feed/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batchId, name, sourceType, rows }) }); const body = await response.json(); setSaving(false); if (!response.ok) { announce(body.error); return; } announce("Feed template, schedules, and weight tasks saved transactionally."); await reload(); }
+  async function importFile(file: File) { setUploading(true); const form = new FormData(); form.set("file", file); const response = await fetch("/api/feed-template/import", { method: "POST", body: form }); const body = await response.json(); setUploading(false); if (!response.ok) { announce(body.error); return; } setRows(body.rows as TemplateRow[]); setName(file.name.replace(/\.[^.]+$/, "") || "Imported feed template"); setImported(true); announce(`${body.rows.length} rows imported. Review them before saving.`); }
+  async function saveThresholds() { const response = await fetch("/api/feed/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ warningVariancePct: Number(thresholds.warning), criticalVariancePct: Number(thresholds.critical) }) }); const body = await response.json(); if (!response.ok) { announce(body.error); return; } announce("Feed variance thresholds updated."); await reload(); }
+  return <section className="overflow-hidden rounded-2xl border border-[#e5d9c4] bg-white"><button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-16 w-full items-center justify-between gap-4 p-5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-[#244b35]"><div><h2 className="text-lg font-semibold text-[#173225]">Template management and versions</h2><p className="mt-1 text-sm text-[#68766b]">{data.template ? `${data.template.name} · ${data.template.source_type}` : "Not configured"}</p></div><ChevronDown className={`size-5 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`} /></button>{open && <div className="border-t border-[#eee5d5] p-5">{data.permissions.canConfigure && <div className="mb-5 flex flex-wrap items-end gap-3 rounded-xl bg-[#f7f4ed] p-4"><label className="text-xs font-medium text-[#4e6253]">Warning variance (%)<input name="warning-threshold" type="number" min="0.1" step="0.1" value={thresholds.warning} onChange={(event) => setThresholds((current) => ({ ...current, warning: event.target.value }))} className="mt-1 min-h-11 w-36 rounded-xl border border-[#d9ceb9] bg-white px-3" /></label><label className="text-xs font-medium text-[#4e6253]">Critical variance (%)<input name="critical-threshold" type="number" min="0.2" step="0.1" value={thresholds.critical} onChange={(event) => setThresholds((current) => ({ ...current, critical: event.target.value }))} className="mt-1 min-h-11 w-36 rounded-xl border border-[#d9ceb9] bg-white px-3" /></label><button type="button" onClick={() => void saveThresholds()} className="min-h-11 rounded-xl border border-[#bba981] px-4 text-sm font-semibold text-[#173225]">Save thresholds</button></div>}<div className="flex flex-col gap-4 sm:flex-row sm:items-end"><label className="block max-w-xl flex-1 text-sm font-medium text-[#4e6253]">Template name<input name="template-name" value={name} onChange={(event) => setName(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] px-3" /></label><label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-[#bba981] px-4 text-sm font-semibold text-[#173225]">{uploading ? "Extracting…" : "Import CSV or image"}<input name="template-import" type="file" accept=".csv,.txt,image/png,image/jpeg,image/webp" disabled={uploading} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.target.value = ""; }} className="sr-only" /></label></div><p className="mt-2 text-xs text-[#68766b]">Maximum 5 MB. PDF is intentionally not offered because extraction is not implemented.</p>{rows.length ? <div className="mt-4 overflow-x-auto"><table className="min-w-[920px] w-full text-left text-sm"><thead className="text-xs uppercase tracking-wide text-[#68766b]"><tr><th className="p-2">Week</th><th className="p-2">Age start</th><th className="p-2">Age end</th><th className="p-2">Feed g/bird</th><th className="p-2">Weight min</th><th className="p-2">Weight max</th><th className="p-2">Feed type</th></tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.week_number}-${index}`} className="border-t border-[#eee5d5]">{(["week_number", "age_day_start", "age_day_end", "feed_intake_recommended_g_per_head", "target_weight_min_g", "target_weight_max_g"] as const).map((field) => <td key={field} className="p-2"><label className="sr-only" htmlFor={`${field}-${index}`}>{field.replaceAll("_", " ")} row {index + 1}</label><input id={`${field}-${index}`} name={`${field}-${index}`} type="number" min="0" value={row[field] ?? ""} onChange={(event) => setRows((current) => current.map((item, i) => i === index ? { ...item, [field]: event.target.value === "" ? null : Number(event.target.value) } : item))} className="min-h-10 w-24 rounded-lg border border-[#d9ceb9] px-2" /></td>)}<td className="p-2"><label className="sr-only" htmlFor={`template-feed-${index}`}>Feed type row {index + 1}</label><select id={`template-feed-${index}`} name={`template-feed-${index}`} value={row.feed_type_plan} onChange={(event) => setRows((current) => current.map((item, i) => i === index ? { ...item, feed_type_plan: event.target.value } : item))} className="min-h-10 rounded-lg border border-[#d9ceb9] bg-white px-2">{feedTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td></tr>)}</tbody></table></div> : <p className="mt-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">No breed standards are available. Add standards or build manual rows.</p>}<div className="mt-5 flex flex-wrap gap-2"><button type="button" disabled={!rows.length || saving || !data.permissions.canManage} onClick={() => void save(imported ? "upload" : data.template ? "manual" : "breed_standard")} className="min-h-11 rounded-xl bg-[#244b35] px-4 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Save replacement atomically"}</button><button type="button" onClick={() => setRows((current) => [...current, { week_number: current.length ? Math.max(...current.map((row) => row.week_number)) + 1 : 0, age_day_start: current.length ? Math.max(...current.map((row) => row.age_day_end)) + 1 : 0, age_day_end: current.length ? Math.max(...current.map((row) => row.age_day_end)) + 7 : 6, feed_intake_std_g_per_head: null, feed_intake_recommended_g_per_head: null, target_weight_min_g: null, target_weight_max_g: null, feed_type_plan: "grower_pullet_feed", light_on_time: "06:00", light_off_time: "18:00" }])} className="min-h-11 rounded-xl border border-[#bba981] px-4 text-sm font-semibold text-[#173225]">Add row</button></div><div className="mt-6 border-t border-[#eee5d5] pt-4"><h3 className="text-sm font-semibold text-[#173225]">Version history</h3><ul className="mt-2 space-y-2 text-sm text-[#68766b]">{data.templateVersions.map((version) => <li key={version.id}>{version.name} · {version.source_type} · {new Date(version.created_at).toLocaleDateString()}{version.is_active ? " · Active" : ""}</li>)}</ul></div></div>}</section>;
 }
 
-function statusClass(status: WeightStatus) {
-  if (status === "On track") return "bg-leaf-500/10 text-leaf-700";
-  if (status === "Below target") return "bg-ember-500/10 text-ember-600";
-  if (status === "Above target") return "bg-amber-500/10 text-amber-700";
-  if (status === "Missing") return "bg-ember-500/10 text-ember-600";
-  return "bg-sand-100 text-forest-600";
-}
-
-export default function FeedPage() {
-  const { scope, setScope, role, filteredBatches } = useFarmScope();
-  const [orgId, setOrgId] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [batch, setBatch] = useState<BatchMeta | null>(null);
-  const [flocks, setFlocks] = useState<FlockRow[]>([]);
-  const [template, setTemplate] = useState<FeedTemplate | null>(null);
-  const [templateRows, setTemplateRows] = useState<TemplateRow[]>([]);
-  const [milestones, setMilestones] = useState<MilestoneRow[]>([]);
-  const [dailyRecords, setDailyRecords] = useState<DailyRecord[]>([]);
-  const [weightRecords, setWeightRecords] = useState<WeightRecord[]>([]);
-  const [weightTasks, setWeightTasks] = useState<WeightTask[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editorSource, setEditorSource] = useState<TemplateSource>("manual");
-  const [editorRows, setEditorRows] = useState<TemplateRow[]>([]);
-  const [templateName, setTemplateName] = useState("Pullet feed template");
-  const [uploading, setUploading] = useState(false);
-
-  const canManage = role === "farm_manager" || role === "ceo" || role === "system_admin" || role === "super_admin";
-
-  const selectedBatchId = scope.batchId;
-
-  useEffect(() => {
-    if (!scope.batchId && filteredBatches.length > 0) {
-      setScope((prev) => ({ ...prev, batchId: filteredBatches[0].id }));
-    }
-  }, [filteredBatches, scope.batchId, setScope]);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const supabase = createClient();
-    const db = supabase as any;
-    const contextResponse = await fetch("/api/me/context");
-    if (!contextResponse.ok) {
-      setLoading(false);
-      setError("Unable to load organization context.");
-      return;
-    }
-    const context = await contextResponse.json();
-    const nextOrgId = context?.orgId as string | null;
-    const nextUserId = context?.userId as string | null;
-    setOrgId(nextOrgId);
-    setUserId(nextUserId);
-
-    if (!nextOrgId || !selectedBatchId) {
-      setBatch(null);
-      setFlocks([]);
-      setTemplate(null);
-      setTemplateRows([]);
-      setMilestones([]);
-      setDailyRecords([]);
-      setWeightRecords([]);
-      setWeightTasks([]);
-      setLoading(false);
-      return;
-    }
-
-    const { data: selectedBatch, error: batchError } = await supabase
-      .from("batches")
-      .select("id, batch_code, placement_date, age_at_placement_days, total_count")
-      .eq("id", selectedBatchId)
-      .eq("org_id", nextOrgId)
-      .maybeSingle();
-
-    if (batchError || !selectedBatch) {
-      setError(batchError?.message ?? "Selected batch was not found.");
-      setLoading(false);
-      return;
-    }
-
-    const { data: linkedFlockRows } = await supabase
-      .from("flocks")
-      .select("id")
-      .eq("org_id", nextOrgId)
-      .eq("batch_id", selectedBatchId);
-
-    const flockIds = ((linkedFlockRows ?? []) as Array<{ id: string }>).map((row) => row.id);
-
-    const [
-      flocksRes,
-      templateRes,
-      dailyRes,
-      weightsRes,
-      tasksRes,
-    ] = await Promise.all([
-      flockIds.length
-        ? supabase.from("flocks").select("id, flock_code, initial_count, current_count, placement_date, batch_id").eq("org_id", nextOrgId).in("id", flockIds)
-        : Promise.resolve({ data: [] }),
-      db.from("batch_feed_templates").select("id, batch_id, name, source_type, is_active").eq("org_id", nextOrgId).eq("batch_id", selectedBatchId).eq("is_active", true).maybeSingle(),
-      flockIds.length
-        ? supabase
-            .from("daily_farm_records")
-            .select("record_date, flock_id, feed_intake_grams, deaths")
-            .eq("org_id", nextOrgId)
-            .in("flock_id", flockIds)
-            .order("record_date", { ascending: true })
-        : Promise.resolve({ data: [] }),
-      flockIds.length
-        ? supabase
-            .from("weight_records")
-            .select("id, flock_id, record_date, sample_count, average_weight_g, min_weight_g, max_weight_g, uniformity_pct")
-            .eq("org_id", nextOrgId)
-            .in("flock_id", flockIds)
-            .order("record_date", { ascending: true })
-        : Promise.resolve({ data: [] }),
-      db
-        .from("batch_weight_check_tasks")
-        .select("id, flock_id, template_row_id, due_week_number, due_date, status, weight_record_id")
-        .eq("org_id", nextOrgId)
-        .eq("batch_id", selectedBatchId)
-        .order("due_date", { ascending: true }),
-    ]);
-
-    const activeTemplate = templateRes.data as FeedTemplate | null;
-    let nextRows: TemplateRow[] = [];
-    let nextMilestones: MilestoneRow[] = [];
-    if (activeTemplate) {
-      const [{ data: rowsData }, { data: milestoneData }] = await Promise.all([
-        db
-          .from("batch_feed_template_rows")
-          .select("id, week_number, age_day_start, age_day_end, feed_intake_std_g_per_head, feed_intake_recommended_g_per_head, target_weight_min_g, target_weight_max_g, feed_type_plan, light_on_time, light_off_time, row_order")
-          .eq("template_id", activeTemplate.id)
-          .order("row_order", { ascending: true }),
-        db
-          .from("batch_feed_template_milestones")
-          .select("id, week_number, trigger_day, title, category, notes, is_required")
-          .eq("template_id", activeTemplate.id)
-          .order("trigger_day", { ascending: true }),
-      ]);
-
-      nextRows = ((rowsData ?? []) as any[]).map((row, index) => ({
-        ...row,
-        client_id: row.id ?? `saved-${index}`,
-        light_on_time: row.light_on_time?.slice(0, 5) ?? "",
-        light_off_time: row.light_off_time?.slice(0, 5) ?? "",
-      }));
-      nextMilestones = (milestoneData ?? []) as MilestoneRow[];
-    }
-
-    setBatch(selectedBatch as BatchMeta);
-    setFlocks((flocksRes.data ?? []) as FlockRow[]);
-    setTemplate(activeTemplate);
-    setTemplateRows(nextRows);
-    setMilestones(nextMilestones);
-    setDailyRecords((dailyRes.data ?? []) as DailyRecord[]);
-    setWeightRecords((weightsRes.data ?? []) as WeightRecord[]);
-    setWeightTasks((tasksRes.data ?? []) as WeightTask[]);
-    setLoading(false);
-  }, [selectedBatchId]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadData();
-  }, [loadData]);
-
-  const batchAgeDays = useMemo(() => {
-    if (!batch) return null;
-    return daysBetween(batch.placement_date, isoDate(new Date())) + (batch.age_at_placement_days ?? 0);
-  }, [batch]);
-
-  const currentTemplateRow = useMemo(
-    () => (batchAgeDays === null ? null : rowForAge(templateRows, batchAgeDays)),
-    [batchAgeDays, templateRows]
-  );
-
-  const totalInitialBirds = useMemo(
-    () => flocks.reduce((sum, flock) => sum + (flock.initial_count ?? 0), 0),
-    [flocks]
-  );
-
-  const totalCurrentBirds = useMemo(
-    () => flocks.reduce((sum, flock) => sum + (flock.current_count ?? 0), 0),
-    [flocks]
-  );
-
-  const cumulativeMortality = useMemo(
-    () => dailyRecords.reduce((sum, record) => sum + (record.deaths ?? 0), 0),
-    [dailyRecords]
-  );
-
-  const mortalityAdjustedLiveBirds = Math.max(totalInitialBirds - cumulativeMortality, 0);
-
-  const dailyFeedByWeek = useMemo(() => {
-    if (!batch || totalInitialBirds <= 0) return new Map<number, number>();
-    const byDate = new Map<string, { feed: number; deaths: number }>();
-    dailyRecords.forEach((record) => {
-      const current = byDate.get(record.record_date) ?? { feed: 0, deaths: 0 };
-      current.feed += record.feed_intake_grams ?? 0;
-      current.deaths += record.deaths ?? 0;
-      byDate.set(record.record_date, current);
-    });
-
-    let deathsRunning = 0;
-    const weekValues = new Map<number, { total: number; count: number }>();
-    Array.from(byDate.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .forEach(([date, value]) => {
-        deathsRunning += value.deaths;
-        const liveBirds = Math.max(totalInitialBirds - deathsRunning, 1);
-        const ageDays = daysBetween(batch.placement_date, date) + (batch.age_at_placement_days ?? 0);
-        const week = Math.floor(ageDays / 7);
-        const perBird = value.feed / liveBirds;
-        const current = weekValues.get(week) ?? { total: 0, count: 0 };
-        current.total += perBird;
-        current.count += 1;
-        weekValues.set(week, current);
-      });
-
-    const result = new Map<number, number>();
-    weekValues.forEach((value, week) => {
-      result.set(week, Number((value.total / value.count).toFixed(2)));
-    });
-    return result;
-  }, [batch, dailyRecords, totalInitialBirds]);
-
-  const weightByWeek = useMemo(() => {
-    if (!batch) return new Map<number, number>();
-    const values = new Map<number, { total: number; count: number }>();
-    weightRecords.forEach((record) => {
-      if (record.average_weight_g === null) return;
-      const ageDays = daysBetween(batch.placement_date, record.record_date) + (batch.age_at_placement_days ?? 0);
-      const week = Math.floor(ageDays / 7);
-      const current = values.get(week) ?? { total: 0, count: 0 };
-      current.total += record.average_weight_g;
-      current.count += 1;
-      values.set(week, current);
-    });
-
-    const result = new Map<number, number>();
-    values.forEach((value, week) => result.set(week, Number((value.total / value.count).toFixed(2))));
-    return result;
-  }, [batch, weightRecords]);
-
-  const chartData = useMemo<ChartPoint[]>(() => {
-    return templateRows.map((row) => {
-      const actualWeight = weightByWeek.get(row.week_number) ?? null;
-      return {
-        week: row.week_number,
-        targetMin: row.target_weight_min_g,
-        targetMax: row.target_weight_max_g,
-        actualWeight,
-        weightStatus: statusForWeight(actualWeight, row),
-        actualFeed: dailyFeedByWeek.get(row.week_number) ?? null,
-        targetFeed: row.feed_intake_recommended_g_per_head,
-      };
-    });
-  }, [dailyFeedByWeek, templateRows, weightByWeek]);
-
-  const latestWeight = useMemo(() => {
-    return [...weightRecords]
-      .filter((record) => record.average_weight_g !== null)
-      .sort((a, b) => b.record_date.localeCompare(a.record_date))[0] ?? null;
-  }, [weightRecords]);
-
-  const latestWeightStatus = statusForWeight(latestWeight?.average_weight_g ?? null, currentTemplateRow);
-
-  const feedCompliance = useMemo(() => {
-    if (!currentTemplateRow?.feed_intake_recommended_g_per_head || batchAgeDays === null) return null;
-    const actual = dailyFeedByWeek.get(Math.floor(batchAgeDays / 7));
-    if (actual === undefined) return null;
-    return Number(((actual / currentTemplateRow.feed_intake_recommended_g_per_head) * 100).toFixed(1));
-  }, [batchAgeDays, currentTemplateRow, dailyFeedByWeek]);
-
-  const fcr = useMemo(() => {
-    const ordered = [...weightRecords]
-      .filter((record) => record.average_weight_g !== null)
-      .sort((a, b) => a.record_date.localeCompare(b.record_date));
-    if (ordered.length < 2 || totalCurrentBirds <= 0) return null;
-    const first = ordered[0].average_weight_g ?? 0;
-    const last = ordered[ordered.length - 1].average_weight_g ?? 0;
-    const gainKg = ((last - first) * totalCurrentBirds) / 1000;
-    const feedKg = dailyRecords.reduce((sum, record) => sum + (record.feed_intake_grams ?? 0) / 1000, 0);
-    return gainKg > 0 ? Number((feedKg / gainKg).toFixed(2)) : null;
-  }, [dailyRecords, totalCurrentBirds, weightRecords]);
-
-  const nextTask = useMemo(() => {
-    const today = isoDate(new Date());
-    return weightTasks.find((task) => task.status !== "completed" && task.due_date >= today)
-      ?? weightTasks.find((task) => task.status !== "completed")
-      ?? null;
-  }, [weightTasks]);
-
-  const timeline = useMemo(() => {
-    if (!batch) return [];
-    const today = isoDate(new Date());
-    const taskItems = weightTasks.map((task) => ({
-      id: `task-${task.id}`,
-      date: task.due_date,
-      title: `Week ${task.due_week_number} weigh-in`,
-      category: "weight",
-      status: task.status === "completed" ? "completed" : task.due_date < today ? "missed" : "upcoming",
-    }));
-    const milestoneItems = milestones.map((milestone) => {
-      const date = addDays(batch.placement_date, milestone.trigger_day - (batch.age_at_placement_days ?? 0));
-      return {
-        id: `milestone-${milestone.id}`,
-        date,
-        title: milestone.title,
-        category: milestone.category,
-        status: date < today ? "completed" : "upcoming",
-      };
-    });
-    return [...taskItems, ...milestoneItems].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 18);
-  }, [batch, milestones, weightTasks]);
-
-  const openEditor = (source: TemplateSource) => {
-    setEditorSource(source);
-    setTemplateName(source === "default" ? "Default pullet template" : source === "upload" ? "Uploaded feed template" : "Manual feed template");
-    setEditorRows(source === "default" ? defaultPulletRows.map((row) => ({ ...row, client_id: `${row.client_id}-${Date.now()}` })) : [{
-      client_id: `manual-${Date.now()}`,
-      week_number: 0,
-      age_day_start: 0,
-      age_day_end: 6,
-      feed_intake_std_g_per_head: null,
-      feed_intake_recommended_g_per_head: null,
-      target_weight_min_g: null,
-      target_weight_max_g: null,
-      feed_type_plan: "",
-      light_on_time: "",
-      light_off_time: "",
-      row_order: 0,
-    }]);
-    setEditorOpen(true);
-  };
-
-  const updateEditorRow = (clientId: string, key: keyof TemplateRow, value: string) => {
-    setEditorRows((rows) =>
-      rows.map((row) => {
-        if (row.client_id !== clientId) return row;
-        if (key === "feed_type_plan" || key === "light_on_time" || key === "light_off_time") return { ...row, [key]: value };
-        return { ...row, [key]: parseNumeric(value) ?? 0 };
-      })
-    );
-  };
-
-  const addEditorRow = () => {
-    setEditorRows((rows) => {
-      const last = rows[rows.length - 1];
-      const nextWeek = (last?.week_number ?? 0) + 1;
-      const start = (last?.age_day_end ?? -1) + 1;
-      return [
-        ...rows,
-        {
-          client_id: `row-${Date.now()}`,
-          week_number: nextWeek,
-          age_day_start: start,
-          age_day_end: start + 6,
-          feed_intake_std_g_per_head: null,
-          feed_intake_recommended_g_per_head: null,
-          target_weight_min_g: null,
-          target_weight_max_g: null,
-          feed_type_plan: last?.feed_type_plan ?? "",
-          light_on_time: last?.light_on_time ?? "",
-          light_off_time: last?.light_off_time ?? "",
-          row_order: rows.length,
-        },
-      ];
-    });
-  };
-
-  const saveTemplate = async () => {
-    if (!orgId || !userId || !batch) return;
-    setError(null);
-    setMessage(null);
-    const supabase = createClient();
-    const db = supabase as any;
-    await db.from("batch_feed_templates").update({ is_active: false }).eq("org_id", orgId).eq("batch_id", batch.id).eq("is_active", true);
-    const { data: insertedTemplate, error: templateError } = await db
-      .from("batch_feed_templates")
-      .insert({
-        org_id: orgId,
-        batch_id: batch.id,
-        name: templateName.trim() || "Batch feed template",
-        source_type: editorSource,
-        is_active: true,
-        created_by: userId,
-      })
-      .select("id")
-      .single();
-
-    if (templateError || !insertedTemplate?.id) {
-      setError(templateError?.message ?? "Failed to save feed template.");
-      return;
-    }
-
-    const rowsPayload = editorRows.map((row, index) => ({
-      template_id: insertedTemplate.id,
-      week_number: row.week_number,
-      age_day_start: row.age_day_start,
-      age_day_end: row.age_day_end,
-      feed_intake_std_g_per_head: row.feed_intake_std_g_per_head,
-      feed_intake_recommended_g_per_head: row.feed_intake_recommended_g_per_head,
-      target_weight_min_g: row.target_weight_min_g,
-      target_weight_max_g: row.target_weight_max_g,
-      feed_type_plan: row.feed_type_plan || null,
-      light_on_time: row.light_on_time || null,
-      light_off_time: row.light_off_time || null,
-      row_order: index,
-    }));
-    const { data: insertedRows, error: rowsError } = await db
-      .from("batch_feed_template_rows")
-      .insert(rowsPayload)
-      .select("id, week_number, age_day_start, feed_type_plan, light_on_time, light_off_time");
-
-    if (rowsError) {
-      setError(rowsError.message);
-      return;
-    }
-
-    const milestonePayload = (insertedRows ?? [])
-      .filter((row: any, index: number, all: any[]) => {
-        const prev = all[index - 1];
-        return index === 0 || row.feed_type_plan !== prev?.feed_type_plan || row.light_off_time !== prev?.light_off_time;
-      })
-      .map((row: any) => ({
-        template_id: insertedTemplate.id,
-        week_number: row.week_number,
-        trigger_day: row.age_day_start,
-        title: row.feed_type_plan ? `Switch feed plan to ${row.feed_type_plan}` : `Week ${row.week_number} feed milestone`,
-        category: "feed",
-        notes: row.light_on_time && row.light_off_time ? `Lighting ${row.light_on_time}-${row.light_off_time}` : null,
-        is_required: true,
-      }));
-    if (milestonePayload.length > 0) await db.from("batch_feed_template_milestones").insert(milestonePayload);
-
-    const weightRows = (insertedRows ?? []).filter((row: any) => row.week_number % 2 === 0);
-    const taskPayload = flocks.flatMap((flock) =>
-      weightRows.map((row: any) => ({
-        org_id: orgId,
-        batch_id: batch.id,
-        flock_id: flock.id,
-        template_row_id: row.id,
-        due_week_number: row.week_number,
-        due_date: addDays(batch.placement_date, (row.week_number * 7) - (batch.age_at_placement_days ?? 0)),
-        status: "scheduled",
-        created_by: userId,
-      }))
-    );
-    if (taskPayload.length > 0) {
-      await db.from("batch_weight_check_tasks").upsert(taskPayload, { onConflict: "org_id,batch_id,flock_id,due_week_number" });
-    }
-
-    setMessage("Batch feed template saved and weight checks scheduled.");
-    setEditorOpen(false);
-    await loadData();
-  };
-
-  const importTemplate = async (file: File) => {
-    setUploading(true);
-    setError(null);
-    const formData = new FormData();
-    formData.append("file", file);
-    const response = await fetch("/api/feed-template/import", { method: "POST", body: formData });
-    const data = await response.json();
-    setUploading(false);
-    if (!response.ok) {
-      setError(data?.error ?? "Template extraction failed. You can still enter it manually.");
-      return;
-    }
-    const rows = (data?.rows ?? []) as Partial<TemplateRow>[];
-    if (rows.length === 0) {
-      setError("No rows were extracted. Try a clearer file or create the template manually.");
-      return;
-    }
-    setEditorSource("upload");
-    setTemplateName(file.name.replace(/\.[^.]+$/, "") || "Uploaded feed template");
-    setEditorRows(rows.map((row, index) => ({
-      client_id: `upload-${index}-${Date.now()}`,
-      week_number: Number(row.week_number ?? 0),
-      age_day_start: Number(row.age_day_start ?? 0),
-      age_day_end: Number(row.age_day_end ?? 0),
-      feed_intake_std_g_per_head: parseNumeric(row.feed_intake_std_g_per_head),
-      feed_intake_recommended_g_per_head: parseNumeric(row.feed_intake_recommended_g_per_head),
-      target_weight_min_g: parseNumeric(row.target_weight_min_g),
-      target_weight_max_g: parseNumeric(row.target_weight_max_g),
-      feed_type_plan: String(row.feed_type_plan ?? ""),
-      light_on_time: row.light_on_time ? normalizeTime(String(row.light_on_time)) : "",
-      light_off_time: row.light_off_time ? normalizeTime(String(row.light_off_time)) : "",
-      row_order: index,
-    })));
-    setEditorOpen(true);
-    setMessage(data?.notes ?? "Template extracted. Review the grid before saving.");
-  };
-
-  return (
-    <div className="mx-auto w-full max-w-[1500px] space-y-6 px-4">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Nutrition intelligence</p>
-          <h2 className="text-2xl font-semibold text-forest-900">Feed Control</h2>
-          <p className="mt-1 text-sm text-forest-600">
-            Batch template, feed compliance, weight progression, and production risk in one place.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            className="h-10 min-w-64 rounded-lg border border-sand-200 bg-white px-3 text-sm"
-            value={scope.batchId}
-            onChange={(event) => setScope((prev) => ({ ...prev, batchId: event.target.value }))}
-          >
-            <option value="">Select batch</option>
-            {filteredBatches.map((item) => (
-              <option key={item.id} value={item.id}>{item.batch_code}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {error ? <p className="rounded-lg border border-ember-500/30 bg-ember-500/10 px-4 py-3 text-sm text-ember-600">{error}</p> : null}
-      {message ? <p className="rounded-lg border border-leaf-500/30 bg-leaf-500/10 px-4 py-3 text-sm text-leaf-700">{message}</p> : null}
-
-      {!selectedBatchId && filteredBatches.length === 0 ? (
-        <section className="rounded-lg border border-dashed border-sand-300 bg-white p-8 text-center">
-          <h3 className="text-lg font-semibold text-forest-900">No live batch available</h3>
-          <p className="mt-2 text-sm text-forest-600">Create or assign a batch first, then Feed Control will open it automatically.</p>
-        </section>
-      ) : null}
-
-      {selectedBatchId ? (
-        <>
-          {!template && !loading ? (
-            <section className="rounded-lg border border-sand-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-forest-900">Create the batch feed template</h3>
-                  <p className="mt-1 text-sm text-forest-600">This becomes the source of truth for feed, weight, lighting, and milestone tracking.</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button className="rounded-lg bg-forest-900 px-4 py-2 text-sm text-sand-50" onClick={() => openEditor("default")} disabled={!canManage}>Use default pullet template</button>
-                  <button className="rounded-lg border border-sand-200 px-4 py-2 text-sm text-forest-700" onClick={() => openEditor("manual")} disabled={!canManage}>Create manually</button>
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-sand-200 px-4 py-2 text-sm text-forest-700">
-                    <Upload className="h-4 w-4" />
-                    {uploading ? "Extracting..." : "Upload file"}
-                    <input className="hidden" type="file" accept=".csv,.txt,.pdf,image/*" disabled={!canManage || uploading} onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void importTemplate(file);
-                    }} />
-                  </label>
-                </div>
-              </div>
-            </section>
-          ) : null}
-
-          {template ? (
-            <section className="rounded-lg border border-sand-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-forest-900">{template.name}</h3>
-                  <p className="text-sm text-forest-600">Source: {template.source_type} / Batch: {batch?.batch_code ?? "-"}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button className="rounded-lg border border-sand-200 px-4 py-2 text-sm text-forest-700" onClick={() => {
-                    setEditorSource("manual");
-                    setTemplateName(template.name);
-                    setEditorRows(templateRows.map((row) => ({ ...row, client_id: `${row.id}-${Date.now()}` })));
-                    setEditorOpen(true);
-                  }} disabled={!canManage}>
-                    Edit template
-                  </button>
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-sand-200 px-4 py-2 text-sm text-forest-700">
-                    <FileUp className="h-4 w-4" />
-                    Upload replacement
-                    <input className="hidden" type="file" accept=".csv,.txt,.pdf,image/*" disabled={!canManage || uploading} onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void importTemplate(file);
-                    }} />
-                  </label>
-                </div>
-              </div>
-            </section>
-          ) : null}
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-            <MetricCard icon={CalendarCheck} label="Batch Age" value={batchAgeDays === null ? "Pending" : `Week ${Math.floor(batchAgeDays / 7)}`} detail={batchAgeDays === null ? "-" : `${batchAgeDays} days from placement`} />
-            <MetricCard icon={Scale} label="Live Birds" value={totalCurrentBirds.toLocaleString()} detail={`${mortalityAdjustedLiveBirds.toLocaleString()} mortality-adjusted feed denominator`} />
-            <MetricCard icon={Gauge} label="Feed Compliance" value={feedCompliance === null ? "Pending" : `${feedCompliance}%`} detail="Actual per bird / target" />
-            <MetricCard icon={LineChartIcon} label="Weight Status" value={latestWeightStatus} detail={latestWeight?.average_weight_g ? `${latestWeight.average_weight_g} g latest avg` : "No sampled weight"} status={latestWeightStatus} />
-            <MetricCard icon={BarChart3} label="Estimated FCR" value={fcr === null ? "Pending" : fcr.toString()} detail="Feed kg / gain kg" />
-            <MetricCard icon={AlertTriangle} label="Next Check" value={nextTask ? `Week ${nextTask.due_week_number}` : "Pending"} detail={nextTask?.due_date ?? "No scheduled check"} />
-          </div>
-
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.6fr)]">
-            <section className="rounded-lg border border-sand-200 bg-white p-5 shadow-sm">
-              <h3 className="text-base font-semibold text-forest-900">Weight Progression</h3>
-              <p className="mt-1 text-sm text-forest-600">Template target band vs sampled average body weight.</p>
-              <div className="mt-4 h-[360px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e7dfcf" />
-                    <XAxis dataKey="week" tickFormatter={(value) => `W${value}`} />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Area dataKey="targetMax" name="Target max" fill="#b7d7b0" stroke="#7aa66f" fillOpacity={0.25} />
-                    <Area dataKey="targetMin" name="Target min" fill="#ffffff" stroke="#7aa66f" fillOpacity={1} />
-                    {chartData.map((point) =>
-                      point.weightStatus === "Below target" && point.actualWeight !== null ? (
-                        <ReferenceArea key={point.week} x1={point.week - 0.35} x2={point.week + 0.35} fill="#ef4444" fillOpacity={0.08} />
-                      ) : null
-                    )}
-                    <Line type="monotone" dataKey="actualWeight" name="Actual weight" stroke="#0f3d2e" strokeWidth={3} dot={{ r: 4 }} connectNulls />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
-
-            <section className="rounded-lg border border-sand-200 bg-white p-5 shadow-sm">
-              <h3 className="text-base font-semibold text-forest-900">Timeline</h3>
-              <div className="mt-4 max-h-[360px] space-y-3 overflow-auto">
-                {timeline.length === 0 ? <p className="text-sm text-forest-600">No milestones yet.</p> : null}
-                {timeline.map((item) => (
-                  <div key={item.id} className="flex gap-3 rounded-lg border border-sand-100 bg-sand-50/40 p-3">
-                    <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${item.status === "completed" ? "bg-leaf-500/10 text-leaf-700" : item.status === "missed" ? "bg-ember-500/10 text-ember-600" : "bg-amber-500/10 text-amber-700"}`}>
-                      <CheckCircle2 className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-forest-900">{item.title}</p>
-                      <p className="text-xs capitalize text-forest-600">{item.date} / {item.category} / {item.status}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <section className="rounded-lg border border-sand-200 bg-white p-5 shadow-sm">
-            <h3 className="text-base font-semibold text-forest-900">Daily Feed vs Target</h3>
-            <p className="mt-1 text-sm text-forest-600">Actual feed per bird uses initial birds minus cumulative mortality.</p>
-            <div className="mt-4 h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e7dfcf" />
-                  <XAxis dataKey="week" tickFormatter={(value) => `W${value}`} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="actualFeed" name="Actual g/bird" fill="#0f3d2e" radius={[6, 6, 0, 0]} />
-                  <Line type="monotone" dataKey="targetFeed" name="Target g/bird" stroke="#f59e0b" strokeWidth={3} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-sand-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-semibold text-forest-900">Two-Week Weight Checks</h3>
-                <p className="mt-1 text-sm text-forest-600">Sample weights are scheduled and recorded in Health Log; Feed uses them for tracking and FCR.</p>
-              </div>
-            </div>
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-[900px] text-sm">
-                <thead>
-                  <tr className="border-b border-sand-200 text-left text-xs uppercase tracking-[0.12em] text-forest-600 [&>th]:px-3 [&>th]:py-2">
-                    <th>Due</th>
-                    <th>Week</th>
-                    <th>Flock</th>
-                    <th>Expected Weight</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {weightTasks.length === 0 ? <tr><td colSpan={6} className="px-3 py-4 text-forest-600">No scheduled checks yet.</td></tr> : null}
-                  {weightTasks.map((task) => {
-                    const row = templateRows.find((item) => item.id === task.template_row_id) ?? templateRows.find((item) => item.week_number === task.due_week_number) ?? null;
-                    const flock = flocks.find((item) => item.id === task.flock_id);
-                    const status: WeightStatus = task.status === "completed" ? "On track" : task.due_date < isoDate(new Date()) ? "Missing" : "Pending";
-                    return (
-                      <tr key={task.id} className="border-b border-sand-100 [&>td]:px-3 [&>td]:py-3">
-                        <td>{task.due_date}</td>
-                        <td>Week {task.due_week_number}</td>
-                        <td>{flock?.flock_code ?? task.flock_id}</td>
-                        <td>{row?.target_weight_min_g ?? "-"}-{row?.target_weight_max_g ?? "-"} g</td>
-                        <td><span className={`rounded-full px-2 py-1 text-xs ${statusClass(status)}`}>{task.status === "completed" ? "Completed" : status}</span></td>
-                        <td>
-                          <button className="rounded-lg border border-sand-200 px-3 py-1.5 text-xs text-forest-700" onClick={() => { window.location.href = "/app/health"; }}>
-                            Manage in Health Log
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      {editorOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/50 px-4">
-          <div className="max-h-[92vh] w-full max-w-7xl overflow-auto rounded-lg bg-white p-6 shadow-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-forest-900">Review Batch Feed Template</h3>
-                <p className="text-sm text-forest-600">AI/file output is assistive. Review every row before saving it as the source of truth.</p>
-              </div>
-              <button className="rounded-lg border border-sand-200 px-3 py-2 text-sm" onClick={() => setEditorOpen(false)}>Close</button>
-            </div>
-            <label className="mt-5 grid gap-1 text-sm text-forest-700">
-              Template name
-              <input className={inputClass} value={templateName} onChange={(event) => setTemplateName(event.target.value)} />
-            </label>
-            <div className="mt-4 overflow-x-auto rounded-lg border border-sand-100">
-              <table className="min-w-[1250px] text-sm">
-                <thead>
-                  <tr className="border-b border-sand-200 bg-sand-50 text-left text-xs uppercase tracking-[0.12em] text-forest-600 [&>th]:px-2 [&>th]:py-2">
-                    <th>Week</th>
-                    <th>Day start</th>
-                    <th>Day end</th>
-                    <th>Std g/head</th>
-                    <th>Recommended g/head</th>
-                    <th>Weight min g</th>
-                    <th>Weight max g</th>
-                    <th>Feed type plan</th>
-                    <th>Light on</th>
-                    <th>Light off</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {editorRows.map((row) => (
-                    <tr key={row.client_id} className="border-b border-sand-100 [&>td]:px-2 [&>td]:py-2">
-                      <td><input className={inputClass} type="number" value={row.week_number} onChange={(event) => updateEditorRow(row.client_id, "week_number", event.target.value)} /></td>
-                      <td><input className={inputClass} type="number" value={row.age_day_start} onChange={(event) => updateEditorRow(row.client_id, "age_day_start", event.target.value)} /></td>
-                      <td><input className={inputClass} type="number" value={row.age_day_end} onChange={(event) => updateEditorRow(row.client_id, "age_day_end", event.target.value)} /></td>
-                      <td><input className={inputClass} type="number" value={row.feed_intake_std_g_per_head ?? ""} onChange={(event) => updateEditorRow(row.client_id, "feed_intake_std_g_per_head", event.target.value)} /></td>
-                      <td><input className={inputClass} type="number" value={row.feed_intake_recommended_g_per_head ?? ""} onChange={(event) => updateEditorRow(row.client_id, "feed_intake_recommended_g_per_head", event.target.value)} /></td>
-                      <td><input className={inputClass} type="number" value={row.target_weight_min_g ?? ""} onChange={(event) => updateEditorRow(row.client_id, "target_weight_min_g", event.target.value)} /></td>
-                      <td><input className={inputClass} type="number" value={row.target_weight_max_g ?? ""} onChange={(event) => updateEditorRow(row.client_id, "target_weight_max_g", event.target.value)} /></td>
-                      <td><input className={inputClass} value={row.feed_type_plan} onChange={(event) => updateEditorRow(row.client_id, "feed_type_plan", event.target.value)} /></td>
-                      <td><input className={inputClass} type="time" value={row.light_on_time} onChange={(event) => updateEditorRow(row.client_id, "light_on_time", event.target.value)} /></td>
-                      <td><input className={inputClass} type="time" value={row.light_off_time} onChange={(event) => updateEditorRow(row.client_id, "light_off_time", event.target.value)} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 flex flex-wrap justify-between gap-3">
-              <button className="inline-flex items-center gap-2 rounded-lg border border-sand-200 px-4 py-2 text-sm text-forest-700" onClick={addEditorRow}>
-                <Plus className="h-4 w-4" /> Add row
-              </button>
-              <button className="inline-flex items-center gap-2 rounded-lg bg-forest-900 px-5 py-2 text-sm text-sand-50" onClick={() => void saveTemplate()}>
-                <Save className="h-4 w-4" /> Save as Batch Template
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-    </div>
-  );
-}
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  status,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-  detail: string;
-  status?: WeightStatus;
-}) {
-  return (
-    <article className="rounded-lg border border-sand-200 bg-white/90 p-4 shadow-sm backdrop-blur">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs uppercase tracking-[0.18em] text-forest-500">{label}</p>
-        <span className="rounded-lg bg-sand-50 p-2 text-forest-700"><Icon className="h-4 w-4" /></span>
-      </div>
-      <p className={`mt-3 text-2xl font-semibold ${status ? statusClass(status) : "text-forest-900"} ${status ? "inline-block rounded-full px-2 py-1 text-base" : ""}`}>
-        {value}
-      </p>
-      <p className="mt-2 text-xs text-forest-600">{detail}</p>
-    </article>
-  );
+function WeightDrawer({ task, date, close, reload, announce }: { task: Task; date: string; close: () => void; reload: () => Promise<void>; announce: (value: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null); const [form, setForm] = useState({ recordDate: date, sampleCount: "30", averageWeightG: "", minWeightG: "", maxWeightG: "", uniformityPct: "" }); const [saving, setSaving] = useState(false);
+  useEffect(() => { const previous = document.activeElement as HTMLElement | null; ref.current?.focus(); const key = (event: KeyboardEvent) => { if (event.key === "Escape") close(); if (event.key === "Tab" && ref.current) { const focusable = [...ref.current.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])')]; if (!focusable.length) return; const first = focusable[0], last = focusable.at(-1)!; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } } }; document.addEventListener("keydown", key); return () => { document.removeEventListener("keydown", key); previous?.focus(); }; }, [close]);
+  async function submit(event: React.FormEvent) { event.preventDefault(); setSaving(true); const response = await fetch("/api/feed/weights", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ taskId: task.id, ...form }) }); const body = await response.json(); setSaving(false); if (!response.ok) { announce(body.error); return; } announce("Weight and uniformity sample recorded."); close(); await reload(); }
+  return <div className="fixed inset-0 z-50 flex justify-end bg-black/35" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}><div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="weight-drawer-title" className="h-full w-full max-w-lg overflow-y-auto bg-[#fbf9f4] p-6 shadow-2xl outline-none"><div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.18em] text-[#7e6537]">Shared Feed + Health record</p><h2 id="weight-drawer-title" className="mt-1 text-2xl font-semibold text-[#173225]">Record weight sample</h2></div><button type="button" aria-label="Close weight entry" onClick={close} className="grid size-11 place-items-center rounded-xl hover:bg-stone-200"><X /></button></div><form onSubmit={submit} className="mt-8 grid gap-4 sm:grid-cols-2">{Object.entries({ recordDate: "Record date", sampleCount: "Sample count", averageWeightG: "Average weight (g)", minWeightG: "Minimum weight (g)", maxWeightG: "Maximum weight (g)", uniformityPct: "Uniformity (%)" }).map(([field, label]) => <label key={field} className="text-sm font-medium text-[#4e6253]">{label}<input name={field} type={field === "recordDate" ? "date" : "number"} min={field === "uniformityPct" ? "0" : "1"} max={field === "uniformityPct" ? "100" : undefined} step={field === "recordDate" || field === "sampleCount" ? undefined : ".01"} required value={form[field as keyof typeof form]} onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))} className="mt-1 min-h-11 w-full rounded-xl border border-[#d9ceb9] bg-white px-3" /></label>)}<div className="sm:col-span-2"><p className="text-xs text-[#68766b]">Target: {task.batch_feed_template_rows?.target_weight_min_g ?? "—"}–{task.batch_feed_template_rows?.target_weight_max_g ?? "—"} g for the task’s sample age.</p><button type="submit" disabled={saving} className="mt-5 min-h-11 w-full rounded-xl bg-[#244b35] px-4 font-semibold text-white">{saving ? "Saving…" : "Save shared sample"}</button></div></form></div></div>;
 }
