@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import type { Database } from "@/types/supabase";
@@ -39,6 +40,7 @@ const feedTypeOptions: Array<{ value: FeedType; label: string; description: stri
 const feedTypeLabels = new Map(feedTypeOptions.map((option) => [option.value, option.label]));
 
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+const feedDayKey = (flockId: string, recordDate: string) => `${flockId}:${recordDate}`;
 
 const calculateFlockAge = (
   placementDate: string | null | undefined,
@@ -130,6 +132,7 @@ export default function DailyRecordsPage() {
   const [editAgeSource, setEditAgeSource] = useState<AgeSource | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InventoryUsageItem[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
+  const [closedFeedDayKeys, setClosedFeedDayKeys] = useState<Set<string>>(() => new Set());
   const canCreateRecord = currentRole === "farm_manager";
 
   const parseNumber = (value: FormDataEntryValue | null) => {
@@ -142,11 +145,6 @@ export default function DailyRecordsPage() {
     const parsed = value?.toString().trim();
     return parsed && parsed.length > 0 ? parsed : null;
   };
-  const parseFeedType = (value: FormDataEntryValue | null): FeedType | null => {
-    const parsed = parseText(value);
-    return feedTypeOptions.some((option) => option.value === parsed) ? (parsed as FeedType) : null;
-  };
-
   const loadRows = async () => {
     setLoadingRows(true);
     const supabase = createClient();
@@ -155,6 +153,7 @@ export default function DailyRecordsPage() {
     } = await supabase.auth.getUser();
     if (!user) {
       setRows([]);
+      setClosedFeedDayKeys(new Set());
       setLoadingRows(false);
       return;
     }
@@ -162,6 +161,7 @@ export default function DailyRecordsPage() {
     const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
     if (!profile?.org_id) {
       setRows([]);
+      setClosedFeedDayKeys(new Set());
       setLoadingRows(false);
       return;
     }
@@ -183,6 +183,7 @@ export default function DailyRecordsPage() {
     else if (scopedFlockIds.length > 0) query = query.in("flock_id", scopedFlockIds);
     else if (scope.branchId || scope.farmId || scope.houseId || scope.batchId) {
       setRows([]);
+      setClosedFeedDayKeys(new Set());
       setLoadingRows(false);
       return;
     }
@@ -194,7 +195,24 @@ export default function DailyRecordsPage() {
     }
 
     const { data } = await query;
-    setRows((data ?? []) as DailyRow[]);
+    const dailyRows = (data ?? []) as DailyRow[];
+    setRows(dailyRows);
+
+    if (dailyRows.length === 0) {
+      setClosedFeedDayKeys(new Set());
+    } else {
+      const dates = dailyRows.map((row) => row.record_date).sort();
+      const flockIds = [...new Set(dailyRows.map((row) => row.flock_id))];
+      const { data: closures } = await supabase
+        .from("feed_day_closures")
+        .select("flock_id, record_date")
+        .eq("org_id", profile.org_id)
+        .eq("status", "closed")
+        .in("flock_id", flockIds)
+        .gte("record_date", dates[0])
+        .lte("record_date", dates[dates.length - 1]);
+      setClosedFeedDayKeys(new Set((closures ?? []).map((row) => feedDayKey(row.flock_id, row.record_date))));
+    }
     setLoadingRows(false);
   };
 
@@ -229,7 +247,7 @@ export default function DailyRecordsPage() {
           .from("inventory_items")
           .select("id, name, category, unit, unit_cost")
           .eq("org_id", orgId)
-          .in("category", ["feed", "medicine", "vaccine", "vitamin", "supplement", "packaging"])
+          .in("category", ["medicine", "vaccine", "vitamin", "supplement", "packaging", "miscellaneous"])
           .order("name"),
         warehouseQuery,
       ]);
@@ -418,14 +436,10 @@ export default function DailyRecordsPage() {
     currentLiveBirds && currentLiveBirds > 0 && formDeaths !== ""
       ? Number(((Number(formDeaths) / currentLiveBirds) * 100).toFixed(2))
       : "";
-  const feedInventoryItems = inventoryItems.filter((item) => item.category === "feed");
-  const healthInventoryItems = inventoryItems.filter((item) => item.category !== "feed");
+  const healthInventoryItems = inventoryItems;
   const defaultWarehouseId = warehouses[0]?.id ?? "";
 
   const buildDailyInventoryUsages = (formData: FormData) => {
-    const feedItemId = parseText(formData.get("feed_inventory_item_id"));
-    const feedWarehouseId = parseText(formData.get("feed_warehouse_id")) ?? defaultWarehouseId;
-    const feedIssueQuantity = parseNumber(formData.get("feed_issue_quantity")) ?? 0;
     const healthItemId = parseText(formData.get("health_inventory_item_id"));
     const healthWarehouseId = parseText(formData.get("health_warehouse_id")) ?? defaultWarehouseId;
     const healthIssueQuantity = parseNumber(formData.get("health_issue_quantity")) ?? 0;
@@ -437,18 +451,6 @@ export default function DailyRecordsPage() {
       unit_cost: number;
       notes: string;
     }> = [];
-
-    if (feedIssueQuantity > 0) {
-      if (!feedItemId || !feedWarehouseId) throw new Error("Select feed item and warehouse before issuing feed stock.");
-      const item = inventoryItems.find((candidate) => candidate.id === feedItemId);
-      usages.push({
-        item_id: feedItemId,
-        warehouse_id: feedWarehouseId,
-        quantity: feedIssueQuantity,
-        unit_cost: item?.unit_cost ?? 0,
-        notes: "Daily feed issue",
-      });
-    }
 
     if (healthIssueQuantity > 0) {
       if (!healthItemId || !healthWarehouseId) throw new Error("Select medication, supplement, or vaccine item and warehouse before issuing stock.");
@@ -593,10 +595,7 @@ export default function DailyRecordsPage() {
       record_date: recordDate,
       flock_age_weeks: flockAge.weeks,
       flock_age_days: flockAge.days,
-      feed_intake_grams: parseNumber(formData.get("feed_intake_grams")),
-      feed_intake_quantity: parseNumber(formData.get("feed_intake_quantity")),
       feed_leftover_grams: parseNumber(formData.get("feed_leftover_grams")),
-      feed_type: parseFeedType(formData.get("feed_type")),
       normal_eggs: parseNumber(formData.get("normal_eggs")),
       broken_eggs: parseNumber(formData.get("broken_eggs")),
       total_eggs: totalEggs,
@@ -634,7 +633,7 @@ export default function DailyRecordsPage() {
         daily_record_id: rowId ?? null,
         flock_id: scope.flockId,
         record: payload,
-        usages,
+        usages: rowId && usages.length === 0 ? null : usages,
       }),
     });
     const saveResult = await saveResponse.json();
@@ -674,6 +673,10 @@ export default function DailyRecordsPage() {
   };
 
   const deleteRecord = async (row: DailyRow) => {
+    if (closedFeedDayKeys.has(feedDayKey(row.flock_id, row.record_date))) {
+      setFormError("Reopen the feeding day before deleting its Daily Record.");
+      return;
+    }
     if (!canCreateRecord || !window.confirm(`Delete daily record for ${row.record_date}?`)) return;
     setFormError(null);
     const supabase = createClient();
@@ -712,6 +715,18 @@ export default function DailyRecordsPage() {
       {!canCreateRecord ? (
         <p className="text-sm text-forest-600">View mode: only farm managers can create daily records.</p>
       ) : null}
+
+      <section className="flex flex-col gap-3 rounded-2xl border border-leaf-500/30 bg-leaf-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-forest-900">Feed is managed in Today’s Feeding</p>
+          <p className="mt-1 text-xs leading-5 text-forest-600">
+            Complete the feeding sessions and close the day. The actual total and feed type will appear here automatically and inventory will be issued once.
+          </p>
+        </div>
+        <Link href="/app/feeding-log" className="inline-flex min-h-11 shrink-0 items-center font-semibold text-forest-800 underline underline-offset-4">
+          Open Today’s Feeding
+        </Link>
+      </section>
 
       <section className="rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -850,6 +865,7 @@ export default function DailyRecordsPage() {
                     <th className={spreadsheetHeaderClass} colSpan={2}>Feed Intake Condition</th>
                     <th className={spreadsheetHeaderClass} rowSpan={2}>Feed Leftover</th>
                     <th className={spreadsheetHeaderClass} rowSpan={2}>Feed Type</th>
+                    <th className={spreadsheetHeaderClass} rowSpan={2}>Feed Source</th>
                     <th className={spreadsheetHeaderClass} colSpan={4}>Egg Production</th>
                     <th className={spreadsheetHeaderClass} colSpan={3}>Mortality Rate</th>
                     <th className={spreadsheetHeaderClass} rowSpan={2}>Vaccination Status</th>
@@ -873,11 +889,11 @@ export default function DailyRecordsPage() {
                 <tbody>
                   {loadingRows ? (
                     <tr>
-                      <td className="px-3 py-4 text-forest-600" colSpan={canCreateRecord ? 17 : 16}>Loading records...</td>
+                      <td className="px-3 py-4 text-forest-600" colSpan={canCreateRecord ? 18 : 17}>Loading records...</td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-4 text-forest-600" colSpan={canCreateRecord ? 17 : 16}>No records found for selected filters.</td>
+                      <td className="px-3 py-4 text-forest-600" colSpan={canCreateRecord ? 18 : 17}>No records found for selected filters.</td>
                     </tr>
                   ) : (
                     rows.map((row) => (
@@ -889,6 +905,15 @@ export default function DailyRecordsPage() {
                         <td className="text-forest-700">{row.feed_intake_quantity ?? "-"}</td>
                         <td className="text-forest-700">{row.feed_leftover_grams ?? "-"}</td>
                         <td className="text-forest-700">{row.feed_type ? feedTypeLabels.get(row.feed_type) ?? row.feed_type : "-"}</td>
+                        <td className="text-forest-700">
+                          {closedFeedDayKeys.has(feedDayKey(row.flock_id, row.record_date)) ? (
+                            <span className="rounded-full bg-leaf-500/15 px-2 py-1 text-xs font-semibold text-forest-800">Synced from Feed Control</span>
+                          ) : row.feed_intake_grams !== null || row.feed_intake_quantity !== null || row.feed_type !== null ? (
+                            <span className="rounded-full bg-sand-100 px-2 py-1 text-xs font-semibold text-forest-700">Legacy record</span>
+                          ) : (
+                            <span className="text-xs text-forest-500">Not recorded</span>
+                          )}
+                        </td>
                         <td className="text-forest-700">{row.normal_eggs ?? "-"}</td>
                         <td className="text-forest-700">{row.broken_eggs ?? "-"}</td>
                         <td className="text-forest-700">{row.total_eggs ?? "-"}</td>
@@ -923,7 +948,9 @@ export default function DailyRecordsPage() {
                               </button>
                               <button
                                 type="button"
-                                className="rounded-full border border-ember-500/30 px-3 py-1 text-xs text-ember-600"
+                                disabled={closedFeedDayKeys.has(feedDayKey(row.flock_id, row.record_date))}
+                                title={closedFeedDayKeys.has(feedDayKey(row.flock_id, row.record_date)) ? "Reopen the feeding day before deleting this record." : "Delete daily record"}
+                                className="rounded-full border border-ember-500/30 px-3 py-1 text-xs text-ember-600 disabled:cursor-not-allowed disabled:opacity-40"
                                 onClick={() => void deleteRecord(row)}
                               >
                                 Delete
@@ -1057,59 +1084,18 @@ export default function DailyRecordsPage() {
 
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Intake (grams)
-                  <input name="feed_intake_grams" type="number" min={0} step="0.01" className={inputClass} />
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Intake Quantity
-                  <input name="feed_intake_quantity" type="number" min={0} step="0.01" className={inputClass} />
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Leftover
+                  Feed Leftover (grams)
                   <input name="feed_leftover_grams" type="number" min={0} step="0.01" className={inputClass} />
                 </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Type
-                  <select name="feed_type" className={inputClass}>
-                    <option value="">Select feed type</option>
-                    {feedTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label} - {option.description}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="rounded-xl border border-leaf-500/30 bg-leaf-500/10 p-3 text-sm text-forest-700 md:col-span-3">
+                  Feed intake and feed type will be synchronized after this flock’s feeding day is closed.
+                  <Link href="/app/feeding-log" className="ml-1 font-semibold underline underline-offset-4">Open Today’s Feeding</Link>
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Inventory Item
-                  <select name="feed_inventory_item_id" className={inputClass}>
-                    <option value="">No feed issue</option>
-                    {feedInventoryItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name} ({item.unit})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Warehouse
-                  <select name="feed_warehouse_id" defaultValue={defaultWarehouseId} className={inputClass}>
-                    <option value="">Select warehouse</option>
-                    {warehouses.map((warehouse) => (
-                      <option key={warehouse.id} value={warehouse.id}>
-                        {warehouse.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Issued From Stock
-                  <input name="feed_issue_quantity" type="number" min={0} step="0.01" placeholder="Item unit quantity" className={inputClass} />
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Medicine/Supplement Item
+                  Non-feed Inventory Item
                   <select name="health_inventory_item_id" className={inputClass}>
                     <option value="">No health stock issue</option>
                     {healthInventoryItems.map((item) => (
@@ -1135,7 +1121,7 @@ export default function DailyRecordsPage() {
                   <input name="health_issue_quantity" type="number" min={0} step="0.01" placeholder="Item unit quantity" className={inputClass} />
                 </label>
                 <label className="grid gap-2 text-sm text-forest-700 md:col-span-2">
-                  Health Stock Reason
+                  Usage Reason
                   <input name="health_usage_reason" type="text" placeholder="Treatment, supplement, vaccination..." className={inputClass} />
                 </label>
               </div>
@@ -1281,6 +1267,7 @@ export default function DailyRecordsPage() {
                     name="record_date"
                     type="date"
                     required
+                    readOnly={closedFeedDayKeys.has(feedDayKey(editingRow.flock_id, editingRow.record_date))}
                     value={editRecordDate || editingRow.record_date}
                     onChange={(event) => setEditRecordDate(event.target.value)}
                     className={inputClass}
@@ -1319,60 +1306,35 @@ export default function DailyRecordsPage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
+                <div className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">
+                  <span className="block text-xs text-forest-500">Feed Intake (grams)</span>
+                  <strong>{editingRow.feed_intake_grams ?? "Not recorded"}</strong>
+                </div>
+                <div className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">
+                  <span className="block text-xs text-forest-500">Feed Quantity (kg)</span>
+                  <strong>{editingRow.feed_intake_quantity ?? "Not recorded"}</strong>
+                </div>
+                <div className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">
+                  <span className="block text-xs text-forest-500">Feed Type</span>
+                  <strong>{editingRow.feed_type ? feedTypeLabels.get(editingRow.feed_type) ?? editingRow.feed_type : "Not recorded"}</strong>
+                </div>
+                <div className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">
+                  <span className="block text-xs text-forest-500">Source</span>
+                  <strong>{closedFeedDayKeys.has(feedDayKey(editingRow.flock_id, editingRow.record_date)) ? "Synced from Feed Control" : editingRow.feed_intake_quantity !== null || editingRow.feed_type !== null ? "Legacy record" : "Not recorded"}</strong>
+                </div>
                 <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Intake (grams)
-                  <input name="feed_intake_grams" type="number" min={0} step="0.01" defaultValue={editingRow.feed_intake_grams ?? ""} className={inputClass} />
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Intake Quantity
-                  <input name="feed_intake_quantity" type="number" min={0} step="0.01" defaultValue={editingRow.feed_intake_quantity ?? ""} className={inputClass} />
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Leftover
+                  Feed Leftover (grams)
                   <input name="feed_leftover_grams" type="number" min={0} step="0.01" defaultValue={editingRow.feed_leftover_grams ?? ""} className={inputClass} />
                 </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Type
-                  <select name="feed_type" defaultValue={editingRow.feed_type ?? ""} className={inputClass}>
-                    <option value="">Select feed type</option>
-                    {feedTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="rounded-xl border border-leaf-500/30 bg-leaf-500/10 p-3 text-sm text-forest-700 md:col-span-3">
+                  To correct synchronized feed values, reopen the feeding day, update its sessions, and close it again.
+                  <Link href="/app/feeding-log" className="ml-1 font-semibold underline underline-offset-4">Open Today’s Feeding</Link>
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-4">
                 <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Inventory Item
-                  <select name="feed_inventory_item_id" className={inputClass}>
-                    <option value="">Leave existing feed issue unchanged</option>
-                    {feedInventoryItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name} ({item.unit})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Warehouse
-                  <select name="feed_warehouse_id" defaultValue={defaultWarehouseId} className={inputClass}>
-                    <option value="">Select warehouse</option>
-                    {warehouses.map((warehouse) => (
-                      <option key={warehouse.id} value={warehouse.id}>
-                        {warehouse.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Feed Issued From Stock
-                  <input name="feed_issue_quantity" type="number" min={0} step="0.01" placeholder="Only fill to replace usage issue" className={inputClass} />
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Medicine/Supplement Item
+                  Non-feed Inventory Item
                   <select name="health_inventory_item_id" className={inputClass}>
                     <option value="">Leave existing health issue unchanged</option>
                     {healthInventoryItems.map((item) => (
@@ -1398,7 +1360,7 @@ export default function DailyRecordsPage() {
                   <input name="health_issue_quantity" type="number" min={0} step="0.01" placeholder="Only fill to replace usage issue" className={inputClass} />
                 </label>
                 <label className="grid gap-2 text-sm text-forest-700 md:col-span-2">
-                  Health Stock Reason
+                  Usage Reason
                   <input name="health_usage_reason" type="text" placeholder="Treatment, supplement, vaccination..." className={inputClass} />
                 </label>
               </div>

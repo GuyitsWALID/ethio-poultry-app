@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
 
+import { hasManualFeedInput } from "@/lib/daily-record-input";
 import { getSalesContext, json, supabaseAdmin } from "@/lib/sales";
 import type { Json } from "@/types/supabase";
 
 type DailyRecordResult = {
   daily_record_id: string;
-  usage_count: number;
+  usage_count: number | null;
+  usage_preserved: boolean;
 };
 
 function cleanId(value: unknown) {
@@ -16,6 +18,7 @@ function cleanId(value: unknown) {
 
 function errorStatus(code: string | undefined) {
   if (code === "42501") return 403;
+  if (code === "55000") return 409;
   if (code === "22023" || code === "22P02" || code === "23505" || code === "23514") return 400;
   return 500;
 }
@@ -32,13 +35,18 @@ export async function POST(request: NextRequest) {
     const flockId = cleanId(body.flock_id);
     const dailyRecordId = cleanId(body.daily_record_id);
     const record = body.record;
-    const usages = body.usages;
+    const usages = body.usages ?? null;
 
     if (!flockId) return json({ error: "Flock is required." }, 400);
     if (!record || typeof record !== "object" || Array.isArray(record)) {
       return json({ error: "Daily record payload is required." }, 400);
     }
-    if (!Array.isArray(usages)) return json({ error: "Inventory usages must be an array." }, 400);
+    if (hasManualFeedInput(record as Record<string, unknown>)) {
+      return json({ error: "Record feed intake and feed type in Today’s Feeding, then close the feeding day." }, 400);
+    }
+    if (usages !== null && !Array.isArray(usages)) {
+      return json({ error: "Inventory usages must be an array or null." }, 400);
+    }
 
     const { data, error } = await supabaseAdmin.rpc("save_daily_record_with_usage", {
       p_actor_id: ctx.userId,

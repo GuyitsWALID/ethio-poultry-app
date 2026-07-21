@@ -15,6 +15,8 @@ export async function POST(request: Request) {
   const { data: flock } = await db.from("flocks").select("id").eq("id", flockId).eq("batch_id", batchId).eq("org_id", ctx.orgId).maybeSingle();
   if (!flock) return feedJson({ error: "Flock is not part of the selected batch." }, 400);
   const sessionName = String(body.sessionName ?? "").trim(); const recordDate = String(body.recordDate ?? "");
+  const { data: closure } = await db.from("feed_day_closures").select("id").eq("org_id", ctx.orgId).eq("flock_id", flockId).eq("record_date", recordDate).eq("status", "closed").maybeSingle();
+  if (closure) return feedJson({ error: "Reopen the feeding day before changing its sessions." }, 409);
   const planned = Number(body.plannedFeedKg); const actual = body.actualFeedKg === null || body.actualFeedKg === "" ? null : Number(body.actualFeedKg);
   const feeders = Number(body.feedersCount); const status = String(body.status ?? "planned"); const feedType = String(body.feedType ?? "");
   if (!sessionName || !/^\d{4}-\d{2}-\d{2}$/.test(recordDate) || !Number.isFinite(planned) || planned <= 0 || !Number.isInteger(feeders) || feeders <= 0) return feedJson({ error: "Session name, date, positive plan, and feeder count are required." }, 400);
