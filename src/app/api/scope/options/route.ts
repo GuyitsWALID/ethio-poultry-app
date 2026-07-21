@@ -46,7 +46,7 @@ export async function GET() {
       supabaseAdmin.from("flocks").select("id, flock_code, farm_id, house_id, batch_id, initial_count, current_count, status").eq("org_id", orgId).order("flock_code"),
       supabaseAdmin
         .from("batches")
-        .select("id, batch_code, branch_id, farm_id, house_id, placement_date, age_at_placement_days")
+        .select("id, batch_code, status, branch_id, farm_id, house_id, placement_date, age_at_placement_days")
         .eq("org_id", orgId)
         .order("placement_date", { ascending: false }),
     ]);

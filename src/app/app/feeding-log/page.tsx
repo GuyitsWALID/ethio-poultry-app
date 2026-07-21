@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Check, ChevronDown, Clock3, PackageOpen, RefreshCw, Scale, Wheat, X } from "lucide-react";
 
@@ -57,31 +57,53 @@ function KpiCard({ title, metric, icon }: { title: string; metric: Metric; icon:
 }
 
 export default function FeedControlPage() {
-  const { scope, period, filteredBatches, loading: scopeLoading } = useFarmScope();
+  const { scope, setScope, period, batches, flocks, loading: scopeLoading } = useFarmScope();
   const [data, setData] = useState<FeedData | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const [templateOpen, setTemplateOpen] = useState(false); const [weightTask, setWeightTask] = useState<Task | null>(null);
 
+  const activeBatches = useMemo(() => {
+    const scopedFlock = scope.flockId ? flocks.find((flock) => flock.id === scope.flockId) : null;
+    return batches
+      .filter((batch) => batch.status === "active")
+      .filter((batch) => !scope.branchId || batch.branch_id === scope.branchId)
+      .filter((batch) => !scope.farmId || batch.farm_id === scope.farmId)
+      .filter((batch) => !scope.houseId || batch.house_id === scope.houseId)
+      .filter((batch) => !scopedFlock || scopedFlock.batch_id === batch.id)
+      .sort((left, right) => String(right.placement_date ?? "").localeCompare(String(left.placement_date ?? "")));
+  }, [batches, flocks, scope.branchId, scope.farmId, scope.flockId, scope.houseId]);
+
+  useEffect(() => {
+    if (scopeLoading || activeBatches.length === 0) return;
+    if (activeBatches.some((batch) => batch.id === scope.batchId)) return;
+    setScope((current) => ({ ...current, batchId: activeBatches[0].id }));
+  }, [activeBatches, scope.batchId, scopeLoading, setScope]);
+
   const load = useCallback(async () => {
     if (!scope.batchId) { setData(null); setError(""); return; }
-    setLoading(true); setError("");
+    setLoading(true); setError(""); setData((current) => current?.meta.batchId === scope.batchId ? current : null);
     const params = new URLSearchParams({ batch_id: scope.batchId, date_from: period.dateFrom, date_to: period.dateTo });
     try { const response = await fetch(`/api/feed/control?${params}`, { cache: "no-store" }); const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Feed Control could not load."); setData(body as FeedData); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Feed Control could not load."); } finally { setLoading(false); }
   }, [period.dateFrom, period.dateTo, scope.batchId]);
   useEffect(() => { void load(); }, [load]);
 
+  if (scopeLoading || (!scope.batchId && activeBatches.length > 0)) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10"><LoadingState /></main>;
+
   if (!scope.batchId) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10">
     <section className="rounded-3xl border border-[#ded2bc] bg-[#183324] p-7 text-white shadow-sm sm:p-10">
-      <p className="text-xs font-semibold uppercase tracking-[.25em] text-[#d8c89a]">Feed control</p><h1 className="mt-3 text-3xl font-semibold">Choose a batch to run the daily feed ledger</h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-[#d6dfd8]">Feed execution is flock-specific. Select a batch in Executive Scope Filters; this page will not silently change your persistent scope.</p>
-      <div className="mt-7 flex flex-wrap gap-2">{scopeLoading ? <span>Loading batches…</span> : filteredBatches.length ? filteredBatches.map((batch) => <span key={batch.id} className="rounded-full border border-white/20 px-3 py-1.5 text-xs">{batch.batch_code}</span>) : <span className="text-sm">No active batch is available in the current scope.</span>}</div>
+      <p className="text-xs font-semibold uppercase tracking-[.25em] text-[#d8c89a]">Feed control</p><h1 className="mt-3 text-3xl font-semibold">No active batch is available</h1>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-[#d6dfd8]">Feed Control opens active batches only. Activate or create a batch for the selected farm and house to begin the daily feed ledger.</p>
+      <Link href="/app/batches" className="mt-7 inline-flex min-h-11 items-center rounded-xl border border-white/20 px-4 text-sm font-semibold hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Manage batches</Link>
     </section>
   </main>;
 
   return <main className="mx-auto w-full max-w-[1560px] space-y-6 p-4 sm:p-6 lg:p-10">
     <header className="flex flex-col gap-4 rounded-3xl border border-[#ded2bc] bg-[#183324] p-6 text-white shadow-sm lg:flex-row lg:items-end lg:justify-between">
       <div><p className="text-[11px] font-semibold uppercase tracking-[.25em] text-[#dac99c]">Daily ration ledger</p><h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Feed Control</h1><p className="mt-2 text-sm text-[#d6dfd8]">{data ? `${data.batch.batch_code} · age ${data.batch.ageDays} days · ${data.batch.totalBirds.toLocaleString()} live birds` : "Loading batch context…"}</p></div>
-      <div className="flex flex-wrap items-center gap-2 text-xs"><Status tone={data?.meta.confidence === "Actual" ? "good" : "warning"}>{data?.meta.confidence ?? "Loading"}</Status><span>{period.dateFrom} — {period.dateTo}</span><button type="button" onClick={() => void load()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 px-4 font-semibold hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"><RefreshCw className={`size-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} />Refresh</button></div>
+      <div className="flex flex-wrap items-end gap-2 text-xs">
+        <label className="grid gap-1 text-[#d6dfd8]">Active batch<select value={scope.batchId} onChange={(event) => setScope((current) => ({ ...current, batchId: event.target.value }))} className="min-h-11 min-w-52 rounded-xl border border-white/20 bg-white/10 px-3 font-semibold text-white outline-none focus:ring-2 focus:ring-[#d8c89a]"><option value="" className="text-[#183324]">Select batch</option>{activeBatches.map((batch) => <option key={batch.id} value={batch.id} className="text-[#183324]">{batch.batch_code}</option>)}</select></label>
+        <Status tone={data?.meta.confidence === "Actual" ? "good" : "warning"}>{data?.meta.confidence ?? "Loading"}</Status><span className="pb-3">{period.dateFrom} — {period.dateTo}</span><button type="button" onClick={() => void load()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 px-4 font-semibold hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"><RefreshCw className={`size-4 ${loading ? "animate-spin motion-reduce:animate-none" : ""}`} />Refresh</button>
+      </div>
     </header>
     <div aria-live="polite" className="sr-only">{message || error || (loading ? "Loading Feed Control" : "")}</div>
     {error && <div role="alert" className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><span>{error}</span><button type="button" onClick={() => void load()} className="underline">Retry</button></div>}

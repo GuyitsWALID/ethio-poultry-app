@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { FarmKpiDashboard } from "@/components/farm-kpi-dashboard";
+import { ProductionControlRoom } from "@/components/farm-manager/production-control-room";
 import { useFarmScope } from "@/components/farm-scope-context";
 import { createClient } from "@/utils/supabase/client";
 
@@ -244,15 +244,7 @@ export default function FarmManagerDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-        <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Unified Operations Dashboard</p>
-        <h2 className="mt-2 text-2xl font-semibold text-forest-900">Farm manager command center</h2>
-        <p className="mt-2 text-sm text-forest-600">
-          Farm operations, veterinary monitoring, and inventory control in one workflow.
-        </p>
-      </div>
-
-      <FarmKpiDashboard mode="operations" />
+      <ProductionControlRoom />
 
       <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-forest-900">Schedule Compliance</h3>

@@ -23,6 +23,7 @@ type Flock = { id: string; flock_code: string; farm_id: string; house_id: string
 type Batch = {
   id: string;
   batch_code: string;
+  status: string;
   branch_id: string;
   farm_id: string;
   house_id: string;
@@ -227,7 +228,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
           supabase.from("flocks").select("id, flock_code, farm_id, house_id, batch_id, initial_count, current_count").in("farm_id", farmIds).order("flock_code"),
           supabase
             .from("batches")
-            .select("id, batch_code, branch_id, farm_id, house_id, placement_date, age_at_placement_days")
+            .select("id, batch_code, status, branch_id, farm_id, house_id, placement_date, age_at_placement_days")
             .in("farm_id", farmIds)
             .order("placement_date", { ascending: false }),
         ]);
