@@ -32,8 +32,8 @@ type SlotRow = {
   current_count: number;
 };
 
-export default function BatchesPage() {
-  const { scope, filteredFarms, filteredHouses, filteredFlocks } = useFarmScope();
+export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
+  const { role, loading: scopeLoading, scope, setScope, branches, filteredFarms, filteredHouses, filteredFlocks } = useFarmScope();
   const [rows, setRows] = useState<BatchRow[]>([]);
   const [slotRows, setSlotRows] = useState<SlotRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -206,10 +206,15 @@ export default function BatchesPage() {
   };
 
   useEffect(() => {
+    if (scopeLoading) return;
+    if (role === "farm_manager" && !scope.branchId && branches.length > 0) {
+      setScope((current) => ({ ...current, branchId: branches[0].id, farmId: "", houseId: "", flockId: "", batchId: "" }));
+      return;
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope.branchId, scope.farmId, scope.houseId, scope.flockId, filteredFarms]);
+  }, [scopeLoading, role, scope.branchId, scope.farmId, scope.houseId, scope.flockId, filteredFarms, branches]);
 
   const onCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -306,16 +311,27 @@ export default function BatchesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      {!embedded ? <div>
         <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Batches</p>
         <h2 className="text-2xl font-semibold text-forest-900">Batch Management</h2>
-      </div>
+      </div> : null}
 
       <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
         <h3 className="text-lg font-semibold text-forest-900">Create Branch Batch Cycle</h3>
         <p className="mt-1 text-sm text-forest-600">
           Scope selected: {scope.branchId ? "Branch set" : "Branch missing"}. Existing active flock slots in this branch will be archived and recreated under the new batch code.
         </p>
+        <label className="mt-4 grid max-w-md gap-2 text-sm text-forest-700">
+          Branch for this cycle
+          <select
+            value={scope.branchId}
+            onChange={(event) => setScope({ branchId: event.target.value, farmId: "", houseId: "", flockId: "", batchId: "" })}
+            className="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
+          >
+            <option value="">Select branch</option>
+            {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+          </select>
+        </label>
         <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={onCreate}>
           <input name="batch_code" required placeholder="Batch code" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <select name="source" className="h-11 rounded-xl border border-sand-200 px-3 text-sm">
@@ -472,4 +488,8 @@ export default function BatchesPage() {
       </section>
     </div>
   );
+}
+
+export default function BatchesPage() {
+  return <BatchManagement />;
 }
