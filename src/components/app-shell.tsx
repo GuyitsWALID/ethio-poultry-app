@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <AppSidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-[100] border-b border-sand-200 bg-white/95 shadow-[0_1px_0_rgba(29,42,31,.04)] backdrop-blur-xl">
+          <header className="sticky top-0 z-40 border-b border-sand-200 bg-white/95 shadow-[0_1px_0_rgba(29,42,31,.04)] backdrop-blur-xl">
             <div className="flex min-h-[76px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
               <div className="flex min-w-0 items-center gap-3">
                 <button type="button" onClick={() => setMobileNavOpen(true)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-sand-200 text-forest-800 transition hover:bg-sand-50 focus:outline-none focus:ring-2 focus:ring-forest-500 lg:hidden" aria-label="Open navigation"><Menu className="h-5 w-5" aria-hidden="true" /></button>

@@ -3,6 +3,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  CalendarCheck2,
+  CheckCircle2,
+  ClipboardCheck,
+  Ellipsis,
+  Eraser,
+  HeartPulse,
+  RefreshCw,
+  Scale,
+  ShieldCheck,
+  Syringe,
+  X,
+} from "lucide-react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import { createClient } from "@/utils/supabase/client";
@@ -43,11 +57,35 @@ type ActionMenuState = {
   left: number;
 };
 
+const addisToday = () => {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Addis_Ababa", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+};
+
+const addDays = (date: string, days: number) => {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+};
+
+const formatDate = (date: string, includeYear = false) =>
+  new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: includeYear ? "numeric" : undefined, timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
+
+const scheduleTypeLabel = (type: ScheduleItem["type"]) => type === "vaccination" ? "Vaccination" : type === "cleanup" ? "Biosecurity" : "Weight check";
+
+const ScheduleTypeIcon = ({ type, className = "h-4 w-4" }: { type: ScheduleItem["type"]; className?: string }) => {
+  const Icon = type === "vaccination" ? Syringe : type === "cleanup" ? Eraser : Scale;
+  return <Icon className={className} aria-hidden="true" />;
+};
+
 export default function HealthPage() {
   const { scope, filteredFarms, filteredHouses, filteredFlocks, batches } = useFarmScope();
   const [healthFarmId, setHealthFarmId] = useState("");
   const [healthHouseId, setHealthHouseId] = useState("");
   const [healthFlockId, setHealthFlockId] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | ScheduleItem["status"]>("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | ScheduleItem["type"]>("all");
   const [vaccFarmId, setVaccFarmId] = useState("");
   const [vaccHouseId, setVaccHouseId] = useState("");
   const [vaccFlockId, setVaccFlockId] = useState("");
@@ -100,9 +138,6 @@ export default function HealthPage() {
     route: "water",
   });
 
-  const farmName = useMemo(() => filteredFarms.find((f) => f.id === healthFarmId)?.name ?? null, [filteredFarms, healthFarmId]);
-  const houseName = useMemo(() => filteredHouses.find((h) => h.id === healthHouseId)?.name ?? null, [filteredHouses, healthHouseId]);
-  const flockCode = useMemo(() => filteredFlocks.find((f) => f.id === healthFlockId)?.flock_code ?? null, [filteredFlocks, healthFlockId]);
   const farmNameById = useMemo(() => new Map(filteredFarms.map((f) => [f.id, f.name])), [filteredFarms]);
   const houseNameById = useMemo(() => new Map(filteredHouses.map((h) => [h.id, h.name])), [filteredHouses]);
   const flockCodeById = useMemo(() => new Map(filteredFlocks.map((f) => [f.id, f.flock_code])), [filteredFlocks]);
@@ -809,219 +844,150 @@ export default function HealthPage() {
       if (healthFarmId && item.farmId !== healthFarmId) return false;
       if (healthHouseId && item.houseId !== healthHouseId) return false;
       if (healthFlockId && item.flockId !== healthFlockId) return false;
+      if (statusFilter !== "all" && item.status !== statusFilter) return false;
+      if (typeFilter !== "all" && item.type !== typeFilter) return false;
       return true;
     });
-  }, [schedules, scope.farmId, scope.houseId, scope.flockId, healthFarmId, healthHouseId, healthFlockId]);
+  }, [schedules, scope.farmId, scope.houseId, scope.flockId, healthFarmId, healthHouseId, healthFlockId, statusFilter, typeFilter]);
+
+  const healthSummary = useMemo(() => {
+    const today = addisToday();
+    const nextSeven = addDays(today, 7);
+    const scoped = schedules.filter((item) => {
+      if (scope.farmId && item.farmId !== scope.farmId) return false;
+      if (scope.houseId && item.houseId !== scope.houseId) return false;
+      if (scope.flockId && item.flockId !== scope.flockId) return false;
+      if (healthFarmId && item.farmId !== healthFarmId) return false;
+      if (healthHouseId && item.houseId !== healthHouseId) return false;
+      if (healthFlockId && item.flockId !== healthFlockId) return false;
+      return true;
+    });
+    const resolved = scoped.filter((item) => item.status === "completed" || item.status === "missed");
+    return {
+      total: scoped.length,
+      overdue: scoped.filter((item) => item.status === "overdue").length,
+      dueSeven: scoped.filter((item) => item.status === "scheduled" && item.date >= today && item.date <= nextSeven).length,
+      completed: scoped.filter((item) => item.status === "completed").length,
+      missed: scoped.filter((item) => item.status === "missed").length,
+      completionPct: resolved.length ? (scoped.filter((item) => item.status === "completed").length / resolved.length) * 100 : null,
+      untargeted: scoped.filter((item) => !item.farmId || (item.type === "vaccination" && !item.flockId)).length,
+      scoped,
+    };
+  }, [healthFarmId, healthFlockId, healthHouseId, schedules, scope.farmId, scope.flockId, scope.houseId]);
+
+  const runway = useMemo(() => {
+    const today = addisToday();
+    return Array.from({ length: 14 }, (_, index) => {
+      const date = addDays(today, index);
+      return { date, items: healthSummary.scoped.filter((item) => item.date === date && item.status !== "completed" && item.status !== "missed") };
+    });
+  }, [healthSummary.scoped]);
+
+  const priorityItems = useMemo(() => {
+    const today = addisToday();
+    const nextSeven = addDays(today, 7);
+    const rank: Record<ScheduleItem["status"], number> = { overdue: 0, missed: 1, scheduled: 2, completed: 3 };
+    return healthSummary.scoped
+      .filter((item) => item.status === "overdue" || item.status === "missed" || (item.status === "scheduled" && item.date <= nextSeven))
+      .sort((a, b) => rank[a.status] - rank[b.status] || a.date.localeCompare(b.date))
+      .slice(0, 6);
+  }, [healthSummary.scoped]);
 
   const badgeClass = (status: ScheduleItem["status"]) => {
-    if (status === "completed") return "bg-leaf-500/15 text-leaf-600 border border-leaf-500/30";
-    if (status === "missed") return "bg-ember-500/15 text-ember-600 border border-ember-500/30";
+    if (status === "completed") return "bg-leaf-500/15 text-leaf-500 border border-leaf-500/30";
+    if (status === "missed") return "bg-ember-500/15 text-ember-500 border border-ember-500/30";
     if (status === "overdue") return "bg-amber-500/15 text-amber-700 border border-amber-500/30";
     return "bg-amber-500/10 text-amber-700 border border-amber-500/20";
   };
 
+  const targetLabel = (item: ScheduleItem) => ({
+    farm: item.farmId ? farmNameById.get(item.farmId) ?? "Assigned farm" : "Farm-wide",
+    house: item.houseId ? houseNameById.get(item.houseId) ?? "Assigned house" : "All houses",
+    flock: item.flockId ? flockCodeById.get(item.flockId) ?? "Assigned flock" : "All flocks",
+  });
+
+  const openActionMenu = (event: React.MouseEvent<HTMLButtonElement>, item: ScheduleItem) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const isSameItemOpen = actionMenu.open && actionMenu.item?.id === item.id;
+    setActionMenu(isSameItemOpen ? { open: false, item: null, top: 0, left: 0 } : { open: true, item, top: rect.bottom + 6, left: rect.right - 160 });
+  };
+
+  const scheduleActions = (item: ScheduleItem) => (
+    <div className="flex items-center gap-2">
+      <button type="button" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-leaf-500/35 px-3 text-[11px] font-semibold text-forest-700 transition hover:bg-leaf-500/10 disabled:cursor-not-allowed disabled:opacity-40" disabled={saving || (item.status === "completed" && item.type !== "weight")} onClick={() => void markSchedule(item, "completed")}>
+        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />{item.type === "weight" ? "Record" : "Complete"}
+      </button>
+      {item.status !== "completed" ? <>
+        <button type="button" aria-label={`Mark ${scheduleTypeLabel(item.type)} missed`} className="grid h-9 w-9 place-items-center rounded-lg border border-ember-500/30 text-ember-500 transition hover:bg-ember-500/10 disabled:opacity-40" disabled={saving || item.status === "missed"} onClick={() => setMissModal({ open: true, item })}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
+        <button type="button" aria-label={`More actions for ${scheduleTypeLabel(item.type)}`} className="grid h-9 w-9 place-items-center rounded-lg border border-sand-200 text-forest-700 transition hover:border-forest-400 hover:bg-sand-50" onClick={(event) => openActionMenu(event, item)}><Ellipsis className="h-4 w-4" aria-hidden="true" /></button>
+      </> : null}
+    </div>
+  );
+
+  const filterClass = "h-11 min-w-0 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900 outline-none focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20";
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Health Module</p>
-          <h2 className="text-2xl font-semibold text-forest-900">Scheduled Health Operations</h2>
-          <p className="mt-1 text-sm text-forest-600">
-            Plan vaccination and cleanup, then track completion against schedule.
-          </p>
+    <div className="mx-auto w-full max-w-[1500px] min-w-0 space-y-5">
+      <header className="relative overflow-hidden rounded-3xl border border-forest-700 bg-forest-900 p-5 text-white shadow-sm sm:p-7">
+        <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full border-[42px] border-leaf-500/10" aria-hidden="true" />
+        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.22em] text-amber-300"><HeartPulse className="h-4 w-4" aria-hidden="true" />Flock health protection desk</div><h1 className="mt-3 font-display text-3xl font-semibold leading-tight sm:text-4xl">Keep every preventive action on the runway</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100">Plan vaccination, biosecurity and weight checks in one clinical operations view. Overdue work rises first, upcoming work stays visible, and every completion leaves an auditable flock record.</p></div>
+          <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[520px]">
+            <button type="button" onClick={() => setShowVaccineModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sand-50 px-4 text-xs font-semibold text-forest-900 transition hover:bg-white"><Syringe className="h-4 w-4" aria-hidden="true" />Vaccination</button>
+            <button type="button" onClick={() => setShowCleanupModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Eraser className="h-4 w-4" aria-hidden="true" />Biosecurity</button>
+            <button type="button" onClick={() => setShowWeightModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Scale className="h-4 w-4" aria-hidden="true" />Weight check</button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
-            onClick={() => setShowWeightModal(true)}
-          >
-            Schedule weight check
-          </button>
-          <button
-            type="button"
-            className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
-            onClick={() => setShowCleanupModal(true)}
-          >
-            Schedule cleanup
-          </button>
-          <button
-            type="button"
-            className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50"
-            onClick={() => setShowVaccineModal(true)}
-          >
-            Schedule vaccination
-          </button>
-        </div>
+      </header>
+
+      {error ? <div role="alert" className="flex items-start gap-3 rounded-2xl border border-ember-500/30 bg-ember-500/10 p-4 text-sm text-ember-500"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><div><p className="font-semibold">Health schedule needs attention</p><p className="mt-1">{error}</p></div></div> : null}
+      {success ? <div role="status" className="flex items-start gap-3 rounded-2xl border border-leaf-500/30 bg-leaf-500/10 p-4 text-sm text-forest-700"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-leaf-500" aria-hidden="true" /><p>{success}</p></div> : null}
+
+      <section className="grid overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm sm:grid-cols-2 xl:grid-cols-6">
+        <article className="border-b border-sand-200 p-4 sm:border-r xl:border-b-0"><ClipboardCheck className="h-4 w-4 text-forest-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Schedules in scope</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.total}</p><p className="mt-1 text-[11px] text-forest-600">Across all loaded health work</p></article>
+        <article className="border-b border-sand-200 p-4 xl:border-b-0 xl:border-r"><AlertTriangle className="h-4 w-4 text-ember-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Overdue</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.overdue}</p><p className="mt-1 text-[11px] text-forest-600">Requires immediate disposition</p></article>
+        <article className="border-b border-sand-200 p-4 sm:border-r xl:border-b-0"><CalendarCheck2 className="h-4 w-4 text-forest-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Due next 7 days</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.dueSeven}</p><p className="mt-1 text-[11px] text-forest-600">Scheduled preventive work</p></article>
+        <article className="border-b border-sand-200 p-4 xl:border-b-0 xl:border-r"><CheckCircle2 className="h-4 w-4 text-leaf-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Completed</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.completed}</p><p className="mt-1 text-[11px] text-forest-600">Documented in loaded history</p></article>
+        <article className="border-b border-sand-200 p-4 sm:border-b-0 sm:border-r"><ShieldCheck className="h-4 w-4 text-forest-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Completion quality</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.completionPct === null ? "Unavailable" : `${healthSummary.completionPct.toFixed(0)}%`}</p><p className="mt-1 text-[11px] text-forest-600">Completed among resolved work</p></article>
+        <article className="p-4"><AlertTriangle className={`h-4 w-4 ${healthSummary.untargeted ? "text-amber-500" : "text-leaf-500"}`} aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Target gaps</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.untargeted}</p><p className="mt-1 text-[11px] text-forest-600">Work missing required farm/flock context</p></article>
+      </section>
+
+      <section className="max-w-full min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Forward schedule</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">14-day health runway</h2><p className="mt-1 text-xs text-forest-600">Each lane is one Addis Ababa calendar day. Scroll inside this card to inspect the full runway.</p></div><div className="flex flex-wrap gap-3 text-[10px] text-forest-600"><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-leaf-500" />Vaccination</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />Biosecurity</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />Weight</span></div></div>
+        <div className="mt-5 max-w-full overflow-x-auto pb-2"><div className="grid min-w-[1260px] grid-cols-14 gap-2">{runway.map((day, index) => <article key={day.date} className={`min-h-36 rounded-xl border p-3 ${index === 0 ? "border-forest-700 bg-forest-900 text-white" : day.items.length ? "border-sand-300 bg-sand-50" : "border-sand-200 bg-white"}`}><p className={`text-[9px] font-semibold uppercase tracking-[.12em] ${index === 0 ? "text-amber-300" : "text-forest-500"}`}>{index === 0 ? "Today" : new Intl.DateTimeFormat("en", { weekday: "short", timeZone: "UTC" }).format(new Date(`${day.date}T00:00:00Z`))}</p><p className={`mt-1 font-display text-lg font-semibold ${index === 0 ? "text-white" : "text-forest-900"}`}>{formatDate(day.date)}</p><div className="mt-4 space-y-2">{day.items.slice(0, 3).map((item) => <div key={`${item.type}-${item.id}`} title={item.scheduleReason ?? scheduleTypeLabel(item.type)} className={`flex items-center gap-1.5 text-[10px] ${index === 0 ? "text-sand-100" : "text-forest-700"}`}><span className={`h-2 w-2 shrink-0 rounded-full ${item.type === "vaccination" ? "bg-leaf-500" : item.type === "cleanup" ? "bg-amber-500" : "bg-sky-500"}`} /><span className="truncate">{item.flockId ? flockCodeById.get(item.flockId) ?? scheduleTypeLabel(item.type) : scheduleTypeLabel(item.type)}</span></div>)}{day.items.length === 0 ? <p className={`text-[10px] ${index === 0 ? "text-sand-300" : "text-forest-400"}`}>No work</p> : null}{day.items.length > 3 ? <p className="text-[10px] font-semibold text-forest-500">+{day.items.length - 3} more</p> : null}</div></article>)}</div></div>
+      </section>
+
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[.9fr_1.1fr]">
+        <section className="rounded-2xl border border-sand-200 bg-sand-50 p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Clinical priority</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">Needs action</h2></div><span className="rounded-full bg-forest-900 px-2.5 py-1 text-xs font-semibold text-white">{priorityItems.length}</span></div><div className="mt-4 grid gap-3">{priorityItems.map((item) => { const target = targetLabel(item); return <article key={`priority-${item.type}-${item.id}`} className="rounded-xl border border-sand-200 bg-white p-4"><div className="flex items-start gap-3"><div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${item.status === "overdue" || item.status === "missed" ? "bg-ember-500/10 text-ember-500" : "bg-leaf-500/10 text-forest-700"}`}><ScheduleTypeIcon type={item.type} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-forest-900">{item.scheduleReason ?? scheduleTypeLabel(item.type)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${badgeClass(item.status)}`}>{item.status}</span></div><p className="mt-1 text-[11px] text-forest-500">{formatDate(item.date, true)} · {target.farm} · {target.flock}</p></div></div><div className="mt-3 border-t border-sand-100 pt-3">{scheduleActions(item)}</div></article>; })}{!loading && priorityItems.length === 0 ? <div className="rounded-xl border border-dashed border-sand-300 bg-white p-6 text-center"><CheckCircle2 className="mx-auto h-6 w-6 text-leaf-500" aria-hidden="true" /><p className="mt-3 text-sm font-semibold text-forest-900">No immediate health exceptions</p><p className="mt-1 text-xs text-forest-600">The next seven days are clear in this scope.</p></div> : null}</div></section>
+
+        <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-4"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Protection mix</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">Workload by intervention</h2></div><ShieldCheck className="h-5 w-5 text-forest-500" aria-hidden="true" /></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{(["vaccination", "cleanup", "weight"] as const).map((type) => { const count = healthSummary.scoped.filter((item) => item.type === type).length; const openCount = healthSummary.scoped.filter((item) => item.type === type && (item.status === "scheduled" || item.status === "overdue")).length; return <button key={type} type="button" onClick={() => setTypeFilter(typeFilter === type ? "all" : type)} aria-pressed={typeFilter === type} className={`rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-forest-500 ${typeFilter === type ? "border-forest-700 bg-forest-900 text-white" : "border-sand-200 bg-sand-50 text-forest-900 hover:border-forest-400"}`}><ScheduleTypeIcon type={type} className={`h-5 w-5 ${typeFilter === type ? "text-amber-300" : "text-forest-500"}`} /><p className={`mt-4 text-[10px] font-semibold uppercase tracking-[.12em] ${typeFilter === type ? "text-sand-200" : "text-forest-500"}`}>{scheduleTypeLabel(type)}</p><p className="mt-1 font-display text-2xl font-semibold">{count}</p><p className={`mt-1 text-[11px] ${typeFilter === type ? "text-sand-200" : "text-forest-600"}`}>{openCount} open</p></button>; })}</div><div className="mt-5 rounded-xl border border-sand-200 p-4"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-forest-900">Resolved-work completion</span><span className="text-sm font-semibold text-forest-900">{healthSummary.completionPct === null ? "Unavailable" : `${healthSummary.completionPct.toFixed(0)}%`}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-sand-100"><div className="h-full rounded-full bg-leaf-500" style={{ width: `${Math.min(100, healthSummary.completionPct ?? 0)}%` }} /></div><p className="mt-2 text-[11px] leading-4 text-forest-600">Missed work remains visible so the rate reflects execution quality rather than only planned volume.</p></div></section>
       </div>
 
-      <div className="rounded-2xl border border-sand-200 bg-white p-4">
-        <p className="text-xs text-forest-600">
-          Current scope: {farmName ?? "No farm selected"} · {houseName ?? "No house selected"} ·{" "}
-          {flockCode ?? "No flock selected"}
-        </p>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <select
-            className="h-10 rounded-xl border border-sand-200 px-3 text-sm"
-            value={healthFarmId}
-            onChange={(e) => {
-              setHealthFarmId(e.target.value);
-              setHealthHouseId("");
-              setHealthFlockId("");
-            }}
-          >
-            <option value="">All Farms</option>
-            {filteredFarms.map((f) => (
-              <option key={f.id} value={f.id}>{f.name}</option>
-            ))}
-          </select>
-          <select
-            className="h-10 rounded-xl border border-sand-200 px-3 text-sm"
-            value={healthHouseId}
-            onChange={(e) => {
-              setHealthHouseId(e.target.value);
-              setHealthFlockId("");
-            }}
-          >
-            <option value="">All Houses</option>
-            {filteredHouses
-              .filter((h) => !healthFarmId || h.farm_id === healthFarmId)
-              .map((h) => (
-                <option key={h.id} value={h.id}>{h.name}</option>
-              ))}
-          </select>
-          <select
-            className="h-10 rounded-xl border border-sand-200 px-3 text-sm"
-            value={healthFlockId}
-            onChange={(e) => setHealthFlockId(e.target.value)}
-          >
-            <option value="">All Flocks</option>
-            {filteredFlocks
-              .filter((f) => (!healthFarmId || f.farm_id === healthFarmId) && (!healthHouseId || f.house_id === healthHouseId))
-              .map((f) => (
-                <option key={f.id} value={f.id}>{f.flock_code}</option>
-              ))}
-          </select>
+      <section className="max-w-full min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
+        <div className="border-b border-sand-200 p-5"><div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Schedule register</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">Health work ledger</h2><p className="mt-1 text-xs text-forest-600">Filter by operating location, intervention, or execution status.</p></div><button type="button" onClick={() => void loadSchedules()} disabled={loading} className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-xl border border-sand-200 px-4 text-xs font-semibold text-forest-700 hover:border-forest-400 hover:bg-sand-50 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />Refresh</button></div>
+          <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">Farm<select className={filterClass} value={healthFarmId} onChange={(event) => { setHealthFarmId(event.target.value); setHealthHouseId(""); setHealthFlockId(""); }}><option value="">All farms</option>{filteredFarms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">House<select className={filterClass} value={healthHouseId} onChange={(event) => { setHealthHouseId(event.target.value); setHealthFlockId(""); }}><option value="">All houses</option>{filteredHouses.filter((item) => !healthFarmId || item.farm_id === healthFarmId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">Flock<select className={filterClass} value={healthFlockId} onChange={(event) => setHealthFlockId(event.target.value)}><option value="">All flocks</option>{filteredFlocks.filter((item) => (!healthFarmId || item.farm_id === healthFarmId) && (!healthHouseId || item.house_id === healthHouseId)).map((item) => <option key={item.id} value={item.id}>{item.flock_code}</option>)}</select></label>
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">Intervention<select className={filterClass} value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | ScheduleItem["type"])}><option value="all">All interventions</option><option value="vaccination">Vaccination</option><option value="cleanup">Biosecurity</option><option value="weight">Weight check</option></select></label>
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">Status<select className={filterClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | ScheduleItem["status"])}><option value="all">All statuses</option><option value="overdue">Overdue</option><option value="scheduled">Scheduled</option><option value="completed">Completed</option><option value="missed">Missed</option></select></label>
+          </div>
         </div>
-      </div>
 
-      {error ? (
-        <p className="rounded-xl border border-ember-500/40 bg-ember-500/10 px-3 py-2 text-sm text-ember-500">
-          {error}
-        </p>
-      ) : null}
-      {success ? (
-        <p className="rounded-xl border border-leaf-500/40 bg-leaf-500/10 px-3 py-2 text-sm text-leaf-500">
-          {success}
-        </p>
-      ) : null}
+        <div className="grid gap-3 p-4 md:hidden">{loading ? <div className="h-36 animate-pulse rounded-xl bg-sand-100" /> : healthFilteredSchedules.map((item) => { const target = targetLabel(item); return <article key={`mobile-${item.type}-${item.id}`} className="rounded-2xl border border-sand-200 p-4"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sand-50 text-forest-600"><ScheduleTypeIcon type={item.type} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-forest-900">{item.scheduleReason ?? scheduleTypeLabel(item.type)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${badgeClass(item.status)}`}>{item.status}</span></div><p className="mt-1 text-xs text-forest-500">{formatDate(item.date, true)} · {target.farm}</p><p className="mt-1 text-[11px] text-forest-500">{target.house} · {target.flock}</p></div></div>{item.reason ? <p className="mt-3 rounded-xl bg-sand-50 p-3 text-xs leading-5 text-forest-600">{item.reason}</p> : null}<div className="mt-4 border-t border-sand-100 pt-3">{scheduleActions(item)}</div></article>; })}{!loading && healthFilteredSchedules.length === 0 ? <div className="rounded-2xl border border-dashed border-sand-300 bg-sand-50 p-8 text-center"><CalendarCheck2 className="mx-auto h-6 w-6 text-forest-400" aria-hidden="true" /><p className="mt-3 text-sm font-semibold text-forest-900">No health work matches these filters</p><p className="mt-1 text-xs text-forest-600">Broaden the scope or schedule the next intervention.</p></div> : null}</div>
 
-      <section className="rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
-        <h3 className="text-base font-semibold text-forest-900">Schedules</h3>
-        <div className="mt-3 overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b border-sand-200 text-left text-xs uppercase tracking-[0.12em] text-forest-600">
-                <th className="px-2 py-2">Date</th>
-                <th className="px-2 py-2">Type</th>
-                <th className="px-2 py-2">Farm</th>
-                <th className="px-2 py-2">House</th>
-                <th className="px-2 py-2">Flock</th>
-                <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Reason</th>
-                <th className="px-2 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-2 py-4 text-forest-600">Loading schedules...</td>
-                </tr>
-              ) : healthFilteredSchedules.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-2 py-4 text-forest-600">No schedules found.</td>
-                </tr>
-              ) : (
-                healthFilteredSchedules.map((item) => (
-                  <tr key={`${item.type}-${item.id}`} className="border-b border-sand-100">
-                    <td className="px-2 py-2">{item.date}</td>
-                    <td className="px-2 py-2 capitalize">{item.type}</td>
-                    <td className="px-2 py-2">
-                      {item.farmId ? (farmNameById.get(item.farmId) ?? flockById.get(item.flockId ?? "")?.farm_id ?? item.farmId) : "-"}
-                    </td>
-                    <td className="px-2 py-2">
-                      {item.houseId ? (houseNameById.get(item.houseId) ?? flockById.get(item.flockId ?? "")?.house_id ?? item.houseId) : "-"}
-                    </td>
-                    <td className="px-2 py-2">{item.flockId ? (flockCodeById.get(item.flockId) ?? item.flockId) : "-"}</td>
-                    <td className="px-2 py-2">
-                      <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium capitalize ${badgeClass(item.status)}`}>
-                        {item.status}
-                      </span>
-                    </td>
-                    <td className="px-2 py-2">{item.reason ?? item.scheduleReason ?? "-"}</td>
-                    <td className="px-2 py-2">
-                      <div className="relative flex gap-2">
-                        <button
-                          type="button"
-                          className="rounded-full border border-leaf-500/40 px-2 py-1 text-xs text-leaf-600 disabled:opacity-50"
-                          disabled={saving || (item.status === "completed" && item.type !== "weight")}
-                          onClick={() => void markSchedule(item, "completed")}
-                        >
-                          {item.type === "weight" ? "Record" : "✓"}
-                        </button>
-                        {item.status !== "completed" ? (
-                          <>
-                            <button
-                              type="button"
-                              className="rounded-full border border-ember-500/40 px-2 py-1 text-xs text-ember-600 disabled:opacity-50"
-                              disabled={saving || item.status === "missed"}
-                              onClick={() => setMissModal({ open: true, item })}
-                            >
-                              ✕
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-full border border-sand-300 px-2 py-1 text-xs text-forest-700"
-                              onClick={(e) => {
-                                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                                const isSameItemOpen = actionMenu.open && actionMenu.item?.id === item.id;
-                                if (isSameItemOpen) {
-                                  setActionMenu({ open: false, item: null, top: 0, left: 0 });
-                                  return;
-                                }
-                                setActionMenu({
-                                  open: true,
-                                  item,
-                                  top: rect.bottom + 6,
-                                  left: rect.right - 140,
-                                });
-                              }}
-                            >
-                              ⋯
-                            </button>
-                          </>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <div className="hidden max-w-full overflow-x-auto md:block"><table className="min-w-[1120px] w-full text-left text-sm"><thead><tr className="border-b border-sand-200 bg-sand-50 text-[10px] uppercase tracking-[.12em] text-forest-500"><th className="px-5 py-3">Due date</th><th className="px-4 py-3">Intervention</th><th className="px-4 py-3">Farm / house</th><th className="px-4 py-3">Flock</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Clinical context</th><th className="px-5 py-3">Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan={7} className="px-5 py-10 text-center text-forest-600">Loading the health work ledger…</td></tr> : healthFilteredSchedules.length === 0 ? <tr><td colSpan={7} className="px-5 py-12 text-center"><CalendarCheck2 className="mx-auto h-6 w-6 text-forest-400" aria-hidden="true" /><p className="mt-3 font-semibold text-forest-900">No health work matches these filters</p><p className="mt-1 text-xs text-forest-600">Broaden the scope or schedule the next intervention.</p></td></tr> : healthFilteredSchedules.map((item) => { const target = targetLabel(item); return <tr key={`${item.type}-${item.id}`} className="border-b border-sand-100 align-top last:border-0 hover:bg-sand-50/50"><td className="px-5 py-4"><p className="font-semibold text-forest-900">{formatDate(item.date, true)}</p><p className="mt-1 text-[11px] text-forest-500">{item.date === addisToday() ? "Due today" : item.date < addisToday() && item.status !== "completed" ? "Past due" : "Scheduled date"}</p></td><td className="px-4 py-4"><div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-sand-50 text-forest-600"><ScheduleTypeIcon type={item.type} /></span><span className="font-medium text-forest-900">{scheduleTypeLabel(item.type)}</span></div></td><td className="px-4 py-4"><p className="text-forest-900">{target.farm}</p><p className="mt-1 text-[11px] text-forest-500">{target.house}</p></td><td className="px-4 py-4 font-medium text-forest-900">{target.flock}</td><td className="px-4 py-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.06em] ${badgeClass(item.status)}`}>{item.status}</span></td><td className="max-w-[330px] px-4 py-4"><p className="text-xs leading-5 text-forest-800">{item.scheduleReason ?? "No schedule description"}</p>{item.reason ? <p className="mt-1 text-[11px] leading-4 text-forest-500">Outcome: {item.reason}</p> : null}</td><td className="px-5 py-4">{scheduleActions(item)}</td></tr>; })}</tbody></table></div>
       </section>
 
       {showWeightModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6">
-            <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-forest-900">Schedule Weight Check</h4>
-              <button type="button" className="text-sm text-forest-600" onClick={() => setShowWeightModal(false)}>
-                Close
-              </button>
+        <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="weight-schedule-title" className="mx-auto my-4 w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Scale className="h-5 w-5" aria-hidden="true" /></span><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-amber-300">Growth surveillance</p><h4 id="weight-schedule-title" className="mt-1 font-display text-xl font-semibold">Schedule weight check</h4><p className="mt-1 text-xs text-sand-200">Assign one batch and flock to a defined age week.</p></div></div>
+              <button type="button" aria-label="Close weight schedule" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 hover:bg-white/10" onClick={() => setShowWeightModal(false)}><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
-            <form className="mt-4 grid gap-3" onSubmit={submitWeightSchedule}>
+            <form className="grid gap-3 p-5" onSubmit={submitWeightSchedule}>
               <select
+                aria-label="Farm"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={weightFarmId}
                 onChange={(e) => {
@@ -1038,6 +1004,7 @@ export default function HealthPage() {
                 ))}
               </select>
               <select
+                aria-label="House"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={weightHouseId}
                 onChange={(e) => {
@@ -1055,6 +1022,7 @@ export default function HealthPage() {
                   ))}
               </select>
               <select
+                aria-label="Flock"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={weightFlockId}
                 onChange={(e) => {
@@ -1072,6 +1040,7 @@ export default function HealthPage() {
                   ))}
               </select>
               <select
+                aria-label="Batch"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={weightBatchId}
                 onChange={(e) => setWeightBatchId(e.target.value)}
@@ -1084,9 +1053,9 @@ export default function HealthPage() {
                     <option key={batch.id} value={batch.id}>{batch.batch_code}</option>
                   ))}
               </select>
-              <input name="due_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-              <input name="due_week_number" type="number" min={0} required placeholder="Chick age week" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-              <button type="submit" disabled={saving} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
+              <label className="grid gap-1 text-xs font-medium text-forest-600">Due date<input name="due_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">Age week<input name="due_week_number" type="number" min={0} required placeholder="Chick age week" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <button type="submit" disabled={saving} className="mt-2 min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 disabled:opacity-60">
                 {saving ? "Saving..." : "Schedule Weight Check"}
               </button>
             </form>
@@ -1095,16 +1064,14 @@ export default function HealthPage() {
       ) : null}
 
       {showVaccineModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6">
-            <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-forest-900">Schedule Vaccination</h4>
-              <button type="button" className="text-sm text-forest-600" onClick={() => setShowVaccineModal(false)}>
-                Close
-              </button>
+        <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="vaccine-schedule-title" className="mx-auto my-4 w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Syringe className="h-5 w-5" aria-hidden="true" /></span><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-amber-300">Preventive medicine</p><h4 id="vaccine-schedule-title" className="mt-1 font-display text-xl font-semibold">Schedule vaccination</h4><p className="mt-1 text-xs text-sand-200">Define the flock, product, dosage and administration route.</p></div></div>
+              <button type="button" aria-label="Close vaccination schedule" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 hover:bg-white/10" onClick={() => setShowVaccineModal(false)}><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
-            <form className="mt-4 grid gap-3" onSubmit={submitVaccinationSchedule}>
+            <form className="grid gap-3 p-5" onSubmit={submitVaccinationSchedule}>
               <select
+                aria-label="Farm"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={vaccFarmId}
                 onChange={(e) => {
@@ -1120,6 +1087,7 @@ export default function HealthPage() {
                 ))}
               </select>
               <select
+                aria-label="House"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={vaccHouseId}
                 onChange={(e) => {
@@ -1136,6 +1104,7 @@ export default function HealthPage() {
                   ))}
               </select>
               <select
+                aria-label="Flock"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={vaccFlockId}
                 onChange={(e) => setVaccFlockId(e.target.value)}
@@ -1148,10 +1117,11 @@ export default function HealthPage() {
                     <option key={f.id} value={f.id}>{f.flock_code}</option>
                   ))}
               </select>
-              <input name="planned_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-              <input name="vaccine_name" placeholder="Vaccine name" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-              <input name="dosage" placeholder="Dosage" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+              <label className="grid gap-1 text-xs font-medium text-forest-600">Planned date<input name="planned_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">Vaccine<input name="vaccine_name" placeholder="Vaccine name" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">Dosage<input name="dosage" placeholder="Dosage" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
               <select
+                aria-label="Administration route"
                 name="route"
                 required
                 defaultValue=""
@@ -1163,7 +1133,7 @@ export default function HealthPage() {
                 <option value="spray">Spray</option>
                 <option value="eye_drop">Eye Drop</option>
               </select>
-              <button type="submit" disabled={saving} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
+              <button type="submit" disabled={saving} className="mt-2 min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 disabled:opacity-60">
                 {saving ? "Saving..." : "Create Schedule"}
               </button>
             </form>
@@ -1172,16 +1142,14 @@ export default function HealthPage() {
       ) : null}
 
       {showCleanupModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6">
-            <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-forest-900">Schedule Farm Cleanup</h4>
-              <button type="button" className="text-sm text-forest-600" onClick={() => setShowCleanupModal(false)}>
-                Close
-              </button>
+        <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="cleanup-schedule-title" className="mx-auto my-4 w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Eraser className="h-5 w-5" aria-hidden="true" /></span><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-amber-300">Biosecurity control</p><h4 id="cleanup-schedule-title" className="mt-1 font-display text-xl font-semibold">Schedule farm cleanup</h4><p className="mt-1 text-xs text-sand-200">Assign the cleaning work at farm, house or flock level.</p></div></div>
+              <button type="button" aria-label="Close cleanup schedule" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 hover:bg-white/10" onClick={() => setShowCleanupModal(false)}><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
-            <form className="mt-4 grid gap-3" onSubmit={submitCleanupSchedule}>
+            <form className="grid gap-3 p-5" onSubmit={submitCleanupSchedule}>
               <select
+                aria-label="Farm"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={cleanFarmId}
                 onChange={(e) => {
@@ -1197,6 +1165,7 @@ export default function HealthPage() {
                 ))}
               </select>
               <select
+                aria-label="House"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={cleanHouseId}
                 onChange={(e) => {
@@ -1212,6 +1181,7 @@ export default function HealthPage() {
                   ))}
               </select>
               <select
+                aria-label="Flock"
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={cleanFlockId}
                 onChange={(e) => setCleanFlockId(e.target.value)}
@@ -1223,10 +1193,10 @@ export default function HealthPage() {
                     <option key={f.id} value={f.id}>{f.flock_code}</option>
                   ))}
               </select>
-              <input name="checklist_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-              <input name="cleanup_type" placeholder="Cleanup type" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-              <textarea name="notes" placeholder="Optional notes" className="min-h-[90px] rounded-xl border border-sand-200 px-3 py-2 text-sm" />
-              <button type="submit" disabled={saving} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
+              <label className="grid gap-1 text-xs font-medium text-forest-600">Checklist date<input name="checklist_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">Cleanup type<input name="cleanup_type" placeholder="Disinfection, litter removal…" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">Notes<textarea name="notes" placeholder="Optional execution notes" className="min-h-[90px] rounded-xl border border-sand-200 px-3 py-2 text-sm" /></label>
+              <button type="submit" disabled={saving} className="mt-2 min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 disabled:opacity-60">
                 {saving ? "Saving..." : "Create Schedule"}
               </button>
             </form>
