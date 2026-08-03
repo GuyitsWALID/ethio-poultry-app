@@ -1,0 +1,96 @@
+"use client";
+
+import { CalendarDays, Menu, MapPin, PanelsTopLeft } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+
+import { AppSidebar } from "@/components/app-sidebar";
+import { FarmScopeFilters } from "@/components/farm-scope-filters";
+import { useFarmScope } from "@/components/farm-scope-context";
+import { HeaderAlertBell } from "@/components/header-alert-bell";
+import { HeaderOrgBrand } from "@/components/header-org-brand";
+import { SignOutButton } from "@/components/sign-out-button";
+
+const routeTitles = [
+  ["/app/farm-manager", "Manager dashboard", "Farm operations"],
+  ["/app/ceo/setup", "Branch network", "Executive oversight"],
+  ["/app/ceo", "Command center", "Executive oversight"],
+  ["/app/daily-records", "Daily Records", "Farm operations"],
+  ["/app/feeding-log", "Feed Control", "Farm operations"],
+  ["/app/mortality", "Mortality", "Farm operations"],
+  ["/app/farms", "Farm Monitoring", "Farm operations"],
+  ["/app/flocks", "Flocks & Batches", "Farm operations"],
+  ["/app/analytics", "Operations Analytics", "Branch intelligence"],
+  ["/app/reports", "Branch Reports", "Branch intelligence"],
+  ["/app/health", "Health Log", "Support functions"],
+  ["/app/inventory", "Inventory Log", "Support functions"],
+  ["/app/sales", "Sales", "Support functions"],
+  ["/app/alerts", "Alerts", "Operations attention"],
+] as const;
+
+function addisDateLabel() {
+  return new Intl.DateTimeFormat("en", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "Africa/Addis_Ababa",
+  }).format(new Date());
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { loading, scope, branches, farms, houses, flocks } = useFarmScope();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [mobileNavOpen]);
+
+  const route = routeTitles.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  const pageTitle = route?.[1] ?? "Operations workspace";
+  const pageGroup = route?.[2] ?? "Poultry management";
+  const scopeLabel = useMemo(() => {
+    if (loading) return "Loading scope…";
+    if (scope.flockId) return flocks.find((item) => item.id === scope.flockId)?.flock_code ?? "Selected flock";
+    if (scope.houseId) return houses.find((item) => item.id === scope.houseId)?.name ?? "Selected house";
+    if (scope.farmId) return farms.find((item) => item.id === scope.farmId)?.name ?? "Selected farm";
+    if (scope.branchId) return branches.find((item) => item.id === scope.branchId)?.name ?? "Selected branch";
+    return "All assigned operations";
+  }, [branches, farms, flocks, houses, loading, scope.branchId, scope.farmId, scope.flockId, scope.houseId]);
+
+  return (
+    <div className="min-h-screen bg-sand-50">
+      <div className="flex min-h-screen">
+        <AppSidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-[100] border-b border-sand-200 bg-white/95 shadow-[0_1px_0_rgba(29,42,31,.04)] backdrop-blur-xl">
+            <div className="flex min-h-[76px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+              <div className="flex min-w-0 items-center gap-3">
+                <button type="button" onClick={() => setMobileNavOpen(true)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-sand-200 text-forest-800 transition hover:bg-sand-50 focus:outline-none focus:ring-2 focus:ring-forest-500 lg:hidden" aria-label="Open navigation"><Menu className="h-5 w-5" aria-hidden="true" /></button>
+                <div className="hidden h-10 w-10 shrink-0 place-items-center rounded-xl bg-forest-900 text-sand-50 sm:grid"><PanelsTopLeft className="h-5 w-5" aria-hidden="true" /></div>
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-2 text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500"><span className="truncate">{pageGroup}</span><span className="h-1 w-1 shrink-0 rounded-full bg-amber-500" /><HeaderOrgBrand className="truncate normal-case tracking-normal text-forest-500" /></div>
+                  <h1 className="mt-0.5 truncate font-display text-xl font-semibold text-forest-900 sm:text-2xl">{pageTitle}</h1>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                <div className="hidden items-center gap-2 rounded-xl border border-sand-200 bg-sand-50 px-3 py-2 xl:flex"><MapPin className="h-3.5 w-3.5 text-forest-500" aria-hidden="true" /><div><p className="text-[9px] font-semibold uppercase tracking-[.12em] text-forest-500">Viewing</p><p className="max-w-[180px] truncate text-xs font-semibold text-forest-800">{scopeLabel}</p></div></div>
+                <div className="hidden items-center gap-2 px-2 text-xs text-forest-600 md:flex"><CalendarDays className="h-4 w-4" aria-hidden="true" /><span>{addisDateLabel()}</span><span className="hidden text-forest-400 xl:inline">· Addis Ababa</span></div>
+                <HeaderAlertBell />
+                <SignOutButton compact />
+              </div>
+            </div>
+          </header>
+
+          <div className="px-4 pt-5 sm:px-6 lg:px-8"><FarmScopeFilters /></div>
+          <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        </div>
+      </div>
+    </div>
+  );
+}

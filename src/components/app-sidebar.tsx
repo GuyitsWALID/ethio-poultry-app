@@ -19,6 +19,7 @@ import {
   PanelLeftOpen,
   Package,
   Stethoscope,
+  X,
   Warehouse,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -113,7 +114,7 @@ const farmManagerNavSections: NavSection[] = [
   },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
   const pathname = usePathname();
   const [role, setRole] = useState<AppRole>("ceo");
   const [orgName, setOrgName] = useState("Organization");
@@ -136,6 +137,13 @@ export function AppSidebar() {
 
     void resolveRole();
   }, []);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onMobileClose?.(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileOpen, onMobileClose]);
 
   const navSections = useMemo<NavSection[]>(() => {
     if (role === "farm_manager") return farmManagerNavSections;
@@ -173,44 +181,44 @@ export function AppSidebar() {
   );
   const isActive = (href: string) =>
     pathname === href || (href !== "/app" && pathname.startsWith(`${href}/`));
+  const compactSidebar = collapsed && !mobileOpen;
 
   return (
+    <>
+    {mobileOpen ? <button type="button" aria-label="Close navigation" onClick={onMobileClose} className="fixed inset-0 z-[119] bg-forest-900/55 backdrop-blur-sm lg:hidden" /> : null}
     <aside
-      className={`hidden flex-col border-r border-sand-200 bg-forest-900 text-sand-50 lg:flex ${
-        collapsed ? "w-20" : "w-64"
-      } transition-[width] duration-300`}
+      className={`fixed inset-y-0 left-0 z-[120] flex h-screen w-72 shrink-0 flex-col border-r border-white/10 bg-forest-900 text-sand-50 shadow-2xl transition-[width,transform] duration-300 lg:sticky lg:top-0 lg:z-50 lg:translate-x-0 lg:shadow-none ${mobileOpen ? "translate-x-0" : "-translate-x-full"} ${compactSidebar ? "lg:w-20" : "lg:w-72"}`}
     >
       <div
-        className={`border-b border-sand-200/10 ${
-          collapsed
-            ? "flex flex-col items-center gap-3 px-3 py-4"
+        className={`border-b border-white/10 ${
+          compactSidebar
+            ? "flex items-center justify-between gap-3 px-4 py-4 lg:flex-col lg:px-3"
             : "flex items-center justify-between gap-3 px-4 py-4"
         }`}
       >
         <Link
           href="/app"
-          className={`flex items-center rounded-xl text-sand-50 transition hover:bg-forest-800 focus-visible:ring-2 focus-visible:ring-sand-50 ${
-            collapsed ? "h-10 w-10 justify-center" : "min-w-0 flex-1 gap-3 px-2 py-2"
+          className={`flex min-w-0 items-center rounded-xl text-sand-50 transition hover:bg-white/[.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
+            compactSidebar ? "flex-1 gap-3 px-2 py-2 lg:h-11 lg:w-11 lg:flex-none lg:justify-center lg:px-0" : "flex-1 gap-3 px-2 py-2"
           }`}
           aria-label="Dashboard"
-          title={collapsed ? "Dashboard" : undefined}
+          title={compactSidebar ? "Dashboard" : undefined}
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sand-50 text-forest-900">
             <Egg aria-hidden="true" className="h-5 w-5" />
           </span>
-          {!collapsed ? (
-            <span className="min-w-0">
-              <span className="block truncate text-xs uppercase tracking-[0.3em] text-sand-200">
+          <span className={`min-w-0 ${compactSidebar ? "lg:hidden" : ""}`}>
+              <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-300">
                 {orgName}
               </span>
-              <span className="block text-sm font-semibold">Poultry Farms</span>
+              <span className="mt-0.5 block font-display text-base font-semibold">Poultry Farms</span>
             </span>
-          ) : null}
         </Link>
+        <button type="button" onClick={onMobileClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 transition hover:bg-white/10 lg:hidden" aria-label="Close navigation"><X className="h-4 w-4" aria-hidden="true" /></button>
         <button
           type="button"
           onClick={() => setCollapsed((prev) => !prev)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sand-200/20 text-sand-100 transition hover:border-sand-200/40 hover:bg-forest-800 focus-visible:ring-2 focus-visible:ring-sand-50"
+          className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 text-sand-100 transition hover:border-white/30 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-amber-300 lg:flex"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
@@ -222,8 +230,8 @@ export function AppSidebar() {
         </button>
       </div>
 
-      <nav className={`${collapsed ? "space-y-2 px-3" : "space-y-5 px-4"} flex-1 overflow-y-auto py-5 text-sm`}>
-        {collapsed
+      <nav aria-label="Primary navigation" className={`${compactSidebar ? "space-y-2 px-3" : "space-y-5 px-4"} flex-1 overflow-y-auto py-5 text-sm [scrollbar-color:rgba(239,233,221,.25)_transparent]`}>
+        {compactSidebar
           ? collapsedItems.map((item) => {
               const Icon = itemIcons[item.label] ?? ChevronRight;
               const active = isActive(item.href);
@@ -232,10 +240,11 @@ export function AppSidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition focus-visible:ring-2 focus-visible:ring-sand-50 ${
+                  onClick={onMobileClose}
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                     active
-                      ? "bg-sand-50 text-forest-900"
-                      : "text-sand-100 hover:bg-forest-800 hover:text-white"
+                      ? "bg-sand-50 text-forest-900 shadow-sm"
+                      : "text-sand-100 hover:bg-white/10 hover:text-white"
                   }`}
                   aria-label={item.label}
                   title={item.label}
@@ -256,10 +265,10 @@ export function AppSidebar() {
                         [section.title]: !isOpen,
                       }))
                     }
-                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sand-100 transition hover:bg-forest-800 focus-visible:ring-2 focus-visible:ring-sand-50"
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sand-200 transition hover:bg-white/[.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                     aria-expanded={isOpen}
                   >
-                    <span className="text-xs uppercase tracking-[0.25em]">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.22em]">
                       {section.title}
                     </span>
                     {isOpen ? (
@@ -278,10 +287,12 @@ export function AppSidebar() {
                           <Link
                             key={item.href}
                             href={item.href}
-                            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 transition focus-visible:ring-2 focus-visible:ring-sand-50 ${
+                            onClick={onMobileClose}
+                            aria-current={active ? "page" : undefined}
+                            className={`relative flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
                               active
-                                ? "bg-sand-50 text-forest-900"
-                                : "text-sand-100 hover:bg-forest-800 hover:text-white"
+                                ? "bg-sand-50 font-semibold text-forest-900 shadow-sm before:absolute before:-left-1 before:h-6 before:w-1 before:rounded-full before:bg-amber-500"
+                                : "text-sand-100 hover:bg-white/[.07] hover:text-white"
                             }`}
                           >
                             <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
@@ -295,18 +306,16 @@ export function AppSidebar() {
               );
             })}
       </nav>
-      <div className={`mt-auto border-t border-sand-200/10 ${collapsed ? "px-3 py-4" : "px-6 py-4"}`}>
-        {!collapsed ? (
+      <div className={`mt-auto border-t border-white/10 bg-forest-800/40 ${compactSidebar ? "px-3 py-4" : "px-5 py-4"}`}>
+        <div className={compactSidebar ? "lg:hidden" : ""}>
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-sand-200">
-              <span>{footer}</span>
-              <SignOutButton />
-            </div>
+            <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-sand-200">{footer}</p>
+            <SignOutButton tone="dark" />
           </div>
-        ) : (
-          <SignOutButton iconOnly />
-        )}
+        </div>
+        {compactSidebar ? <div className="hidden justify-center lg:flex"><SignOutButton iconOnly tone="dark" /></div> : null}
       </div>
     </aside>
+    </>
   );
 }

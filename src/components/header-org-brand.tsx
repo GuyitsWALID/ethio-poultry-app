@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-export function HeaderOrgBrand() {
+export function HeaderOrgBrand({ className = "text-lg font-semibold text-forest-900" }: { className?: string }) {
   const [orgName, setOrgName] = useState("Operations Hub");
 
   useEffect(() => {
@@ -16,5 +16,5 @@ export function HeaderOrgBrand() {
     void load();
   }, []);
 
-  return <p className="text-lg font-semibold text-forest-900">{orgName}</p>;
+  return <span className={className}>{orgName}</span>;
 }
