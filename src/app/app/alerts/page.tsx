@@ -1,183 +1,31 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowRight, BellRing, CheckCircle2, Clock3, RefreshCw, Search, ShieldAlert } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
-type CurrentAlert = {
-  id: string;
-  title: string;
-  severity: "high" | "medium" | "low";
-  source: "Alert Rule" | "Inventory" | "Mortality" | "Daily Records" | "Health" | "Production";
-  context: string;
-  route: string;
-  createdAt: string;
-};
+type Alert={id:string;title:string;severity:"high"|"medium"|"low";source:"Alert Rule"|"Inventory"|"Mortality"|"Daily Records"|"Health"|"Production";context:string;route:string;createdAt:string};
+const rank={high:3,medium:2,low:1};
+const tone={high:"border-red-200 bg-red-50 text-red-700",medium:"border-amber-200 bg-amber-50 text-amber-800",low:"border-sand-200 bg-sand-50 text-forest-700"};
+function age(value:string,reference:number){const timestamp=new Date(value).getTime();if(!Number.isFinite(timestamp))return "Time unavailable";const hours=Math.max(0,Math.floor((reference-timestamp)/3600000));if(hours<1)return "Less than 1 hour ago";if(hours<24)return `${hours}h ago`;return `${Math.floor(hours/24)}d ago`}
 
-const severityClass: Record<CurrentAlert["severity"], string> = {
-  high: "border-ember-500/30 bg-ember-500/10 text-ember-700",
-  medium: "border-amber-500/30 bg-amber-500/10 text-amber-800",
-  low: "border-leaf-500/30 bg-leaf-500/10 text-leaf-700",
-};
-
-function formatTimestamp(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
-
-export default function AlertsPage() {
-  const [alerts, setAlerts] = useState<CurrentAlert[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [severityFilter, setSeverityFilter] = useState<"all" | CurrentAlert["severity"]>("all");
-  const [sourceFilter, setSourceFilter] = useState<"all" | CurrentAlert["source"]>("all");
-
-  useEffect(() => {
-    const loadAlerts = async () => {
-      setLoading(true);
-      setError(null);
-      const response = await fetch("/api/alerts/header", { method: "GET" });
-      if (!response.ok) {
-        setError("Could not load current alerts.");
-        setLoading(false);
-        return;
-      }
-      const data = await response.json();
-      setAlerts((data?.alerts ?? []) as CurrentAlert[]);
-      setLoading(false);
-    };
-
-    void loadAlerts().catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : "Could not load current alerts.");
-      setLoading(false);
-    });
-  }, []);
-
-  const sources = useMemo(
-    () => Array.from(new Set(alerts.map((alert) => alert.source))).sort(),
-    [alerts]
-  );
-
-  const filteredAlerts = alerts.filter((alert) => {
-    if (severityFilter !== "all" && alert.severity !== severityFilter) return false;
-    if (sourceFilter !== "all" && alert.source !== sourceFilter) return false;
-    return true;
-  });
-
-  const counts = {
-    high: alerts.filter((alert) => alert.severity === "high").length,
-    medium: alerts.filter((alert) => alert.severity === "medium").length,
-    low: alerts.filter((alert) => alert.severity === "low").length,
-  };
-
-  return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Alerts</p>
-          <h2 className="text-2xl font-semibold text-forest-900">Operational Alerts Console</h2>
-          <p className="mt-2 text-sm text-forest-600">
-            Current inventory, mortality, health schedule, KPI, and daily-record alerts.
-          </p>
-        </div>
-        <Link href="/app" className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700">
-          Back to dashboard
-        </Link>
-      </div>
-
-      <section className="grid gap-3 md:grid-cols-3">
-        {(["high", "medium", "low"] as const).map((severity) => (
-          <button
-            key={severity}
-            type="button"
-            onClick={() => setSeverityFilter((prev) => (prev === severity ? "all" : severity))}
-            className={`rounded-xl border p-4 text-left transition ${severityClass[severity]} ${
-              severityFilter === severity ? "ring-2 ring-forest-900/20" : ""
-            }`}
-          >
-            <p className="text-xs uppercase tracking-[0.18em]">{severity}</p>
-            <p className="mt-2 text-3xl font-semibold">{counts[severity]}</p>
-          </button>
-        ))}
-      </section>
-
-      <section className="rounded-2xl border border-sand-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-forest-900">Current Alerts</h3>
-            <p className="text-sm text-forest-600">
-              {loading ? "Refreshing alert sources..." : `${filteredAlerts.length} of ${alerts.length} alert(s) shown`}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={severityFilter}
-              onChange={(event) => setSeverityFilter(event.target.value as typeof severityFilter)}
-              className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
-            >
-              <option value="all">All severities</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-            <select
-              value={sourceFilter}
-              onChange={(event) => setSourceFilter(event.target.value as typeof sourceFilter)}
-              className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900"
-            >
-              <option value="all">All sources</option>
-              {sources.map((source) => (
-                <option key={source} value={source}>
-                  {source}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {error ? (
-          <div className="mt-4 rounded-xl border border-ember-500/30 bg-ember-500/10 p-4 text-sm text-ember-700">
-            {error}
-          </div>
-        ) : null}
-
-        <div className="mt-4 overflow-hidden rounded-xl border border-sand-100">
-          {loading ? (
-            <p className="p-4 text-sm text-forest-600">Loading alerts...</p>
-          ) : filteredAlerts.length === 0 ? (
-            <p className="p-4 text-sm text-forest-600">No current alerts match these filters.</p>
-          ) : (
-            <div className="divide-y divide-sand-100">
-              {filteredAlerts.map((alert) => (
-                <article key={alert.id} className="grid gap-3 p-4 md:grid-cols-[1fr_auto]">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className={`rounded-full border px-2.5 py-1 text-xs capitalize ${severityClass[alert.severity]}`}>
-                        {alert.severity}
-                      </span>
-                      <span className="rounded-full bg-sand-100 px-2.5 py-1 text-xs text-forest-700">
-                        {alert.source}
-                      </span>
-                      <span className="text-xs text-forest-500">{formatTimestamp(alert.createdAt)}</span>
-                    </div>
-                    <h4 className="mt-3 text-base font-semibold text-forest-900">{alert.title}</h4>
-                    <p className="mt-1 text-sm text-forest-600">{alert.context}</p>
-                  </div>
-                  <Link
-                    href={alert.route}
-                    className="self-center rounded-full bg-forest-900 px-4 py-2 text-center text-sm text-sand-50"
-                  >
-                    Open source
-                  </Link>
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
+export default function AlertsPage(){
+  const [alerts,setAlerts]=useState<Alert[]>([]);const [loading,setLoading]=useState(true);const [error,setError]=useState("");const [severity,setSeverity]=useState<"all"|Alert["severity"]>("all");const [source,setSource]=useState("all");const [query,setQuery]=useState("");
+  const [referenceTime]=useState(()=>Date.now());
+  const load=useCallback(async()=>{setLoading(true);setError("");try{const response=await fetch("/api/alerts/header");const data=await response.json();if(!response.ok)throw new Error(data?.error??"Could not load current alerts.");setAlerts((data?.alerts??[]) as Alert[])}catch(value){setError(value instanceof Error?value.message:"Could not load current alerts.")}finally{setLoading(false)}},[]);
+  useEffect(()=>{void load()},[load]);
+  const sources=useMemo(()=>[...new Set(alerts.map((item)=>item.source))].sort(),[alerts]);
+  const counts={high:alerts.filter((item)=>item.severity==="high").length,medium:alerts.filter((item)=>item.severity==="medium").length,low:alerts.filter((item)=>item.severity==="low").length};
+  const visible=alerts.filter((item)=>(severity==="all"||item.severity===severity)&&(source==="all"||item.source===source)&&(!query.trim()||`${item.title} ${item.context} ${item.source}`.toLowerCase().includes(query.trim().toLowerCase()))).sort((a,b)=>rank[b.severity]-rank[a.severity]||b.createdAt.localeCompare(a.createdAt));
+  const stale=alerts.filter((item)=>referenceTime-new Date(item.createdAt).getTime()>24*3600000).length;
+  return <main className="space-y-5 pb-8">
+    <section className="relative overflow-hidden rounded-[28px] bg-forest-900 px-6 py-7 text-sand-50 sm:px-8 lg:px-10 lg:py-9"><div className="absolute -right-16 -top-24 h-64 w-64 rounded-full border-[44px] border-ember-500/10"/><div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between"><div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.24em] text-amber-500"><BellRing className="h-4 w-4"/>Management attention desk</div><h1 className="mt-3 max-w-3xl font-display text-3xl font-semibold sm:text-4xl">Turn operational warnings into assigned action.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100/80">The most severe exceptions appear first. Open the source page to investigate, correct the record, or complete the overdue work.</p></div><button type="button" onClick={()=>void load()} disabled={loading} className="inline-flex h-11 items-center gap-2 self-start rounded-xl bg-sand-50 px-4 text-sm font-semibold text-forest-900 xl:self-auto"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>Refresh alerts</button></div></section>
+    {error?<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>:null}
+    <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><div className="grid divide-y divide-sand-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">{([["Urgent",counts.high,ShieldAlert,"text-ember-500"],["Needs review",counts.medium,AlertTriangle,"text-amber-600"],["Advisory",counts.low,CheckCircle2,"text-forest-500"],["Open over 24h",stale,Clock3,"text-sky-600"]] as Array<[string,number,LucideIcon,string]>).map(([label,value,Icon,color])=><div key={label} className="p-5"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">{label}</p><Icon className={`h-4 w-4 ${color}`}/></div><p className="mt-2 font-display text-3xl font-semibold text-forest-900">{loading?"—":value}</p></div>)}</div></section>
+    <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-sand-200 p-5 lg:flex-row lg:items-end lg:justify-between sm:p-6"><div><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-forest-500">Open exceptions</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Prioritized action queue</h2><p className="mt-1 text-sm text-forest-600">{loading?"Refreshing sources…":`${visible.length} of ${alerts.length} alerts shown`}</p></div><div className="grid gap-2 sm:grid-cols-3"><label className="relative"><span className="sr-only">Search alerts</span><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-forest-500"/><input value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search alerts" className="h-11 rounded-xl border border-sand-200 pl-9 pr-3 text-sm"/></label><select aria-label="Filter severity" value={severity} onChange={(event)=>setSeverity(event.target.value as typeof severity)} className="h-11 rounded-xl border border-sand-200 px-3 text-sm"><option value="all">All severities</option><option value="high">Urgent</option><option value="medium">Needs review</option><option value="low">Advisory</option></select><select aria-label="Filter source" value={source} onChange={(event)=>setSource(event.target.value)} className="h-11 rounded-xl border border-sand-200 px-3 text-sm"><option value="all">All sources</option>{sources.map((item)=><option key={item}>{item}</option>)}</select></div></div>
+      <div className="divide-y divide-sand-100">{loading?<div className="p-10 text-center text-sm text-forest-600">Collecting operational alerts…</div>:visible.length?visible.map((item)=><Link key={item.id} href={item.route} className="group grid gap-3 p-5 transition hover:bg-sand-50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"><span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${tone[item.severity]}`}>{item.severity==="high"?"Urgent":item.severity==="medium"?"Review":"Advisory"}</span><span className="min-w-0"><strong className="block text-sm text-forest-900">{item.title}</strong><span className="mt-1 block text-xs leading-5 text-forest-600">{item.source} · {item.context} · {age(item.createdAt,referenceTime)}</span></span><span className="inline-flex items-center gap-1 text-xs font-semibold text-forest-700">Investigate<ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5"/></span></Link>):<div className="p-10 text-center"><CheckCircle2 className="mx-auto h-7 w-7 text-leaf-500"/><p className="mt-2 font-semibold text-forest-900">No alerts match this view</p><p className="mt-1 text-sm text-forest-600">Clear the filters or continue normal operations.</p></div>}</div>
+    </section>
+  </main>;
 }

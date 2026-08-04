@@ -114,7 +114,7 @@ export function FarmScopeFilters() {
           <select
             className={selectClass}
             value={scope.batchId}
-            onChange={(e) => setScope((prev) => ({ ...prev, batchId: e.target.value }))}
+            onChange={(e) => setScope((prev) => ({ ...prev, batchId: e.target.value, flockId: "" }))}
           >
             <option value="">All Batches</option>
             {filteredBatches.map((b) => (
@@ -131,7 +131,7 @@ export function FarmScopeFilters() {
             className={selectClass}
             value={scope.houseId}
             onChange={(e) =>
-              setScope((prev) => ({ ...prev, houseId: e.target.value, flockId: "" }))
+              setScope((prev) => ({ ...prev, houseId: e.target.value, batchId: "", flockId: "" }))
             }
           >
             <option value="">All Houses</option>

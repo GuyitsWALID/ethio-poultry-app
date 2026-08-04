@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { AlertTriangle, Bird, Boxes, CalendarDays, CheckCircle2, Layers3, MoreHorizontal, PackageOpen, RefreshCw } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 
 import { useFarmScope } from "@/components/farm-scope-context";
@@ -310,17 +311,15 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
   };
 
   return (
-    <div className="space-y-6">
-      {!embedded ? <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Batches</p>
-        <h2 className="text-2xl font-semibold text-forest-900">Batch Management</h2>
-      </div> : null}
+    <div className="space-y-5 pb-8">
+      {!embedded ? <><section className="relative overflow-hidden rounded-[28px] bg-forest-900 px-6 py-7 text-sand-50 sm:px-8 lg:px-10"><div className="absolute -right-20 -top-24 h-64 w-64 rounded-full border-[44px] border-amber-500/10"/><div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.24em] text-amber-500"><Layers3 className="h-4 w-4"/>Bird-cycle control</div><h1 className="mt-3 max-w-3xl font-display text-3xl font-semibold sm:text-4xl">Start the next batch without losing the lineage of the last.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100/80">A new branch cycle archives current flock slots and recreates them under one traceable intake and cost record. Review every count before committing.</p></div><button type="button" onClick={()=>void loadRows()} disabled={loading} className="inline-flex h-11 items-center gap-2 self-start rounded-xl border border-white/20 px-4 text-sm font-semibold hover:bg-white/10"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>Refresh</button></div></section><section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><div className="grid divide-y divide-sand-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">{([["Batch cycles",rows.length,Boxes],["Active cycles",rows.filter((row)=>row.status.toLowerCase()==="active").length,CheckCircle2],["Linked flocks",rows.reduce((sum,row)=>sum+row.flock_total,0),Bird],["Birds in latest cycles",rows.reduce((sum,row)=>sum+row.total_chicks,0),PackageOpen]] as Array<[string,number,LucideIcon]>).map(([label,value,Icon])=><div key={label} className="p-5"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[.17em] text-forest-500">{label}</p><Icon className="h-4 w-4 text-forest-500"/></div><p className="mt-2 font-display text-3xl font-semibold text-forest-900">{value.toLocaleString()}</p></div>)}</div></section></> : null}
 
-      <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-forest-900">Create Branch Batch Cycle</h3>
-        <p className="mt-1 text-sm text-forest-600">
+      <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm sm:p-6">
+        <p className="text-[10px] font-semibold uppercase tracking-[.2em] text-forest-500">Controlled cycle change</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Create a branch batch cycle</h2>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-forest-600">
           Scope selected: {scope.branchId ? "Branch set" : "Branch missing"}. Existing active flock slots in this branch will be archived and recreated under the new batch code.
         </p>
+        <div className="mt-4 flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0"/><p><strong>This changes active operations.</strong> Current active flock slots in the branch are archived and replacement flock records are created with the new counts below.</p></div>
         <label className="mt-4 grid max-w-md gap-2 text-sm text-forest-700">
           Branch for this cycle
           <select
@@ -394,18 +393,18 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
           <textarea name="notes" placeholder="Notes" className="md:col-span-2 min-h-[90px] rounded-xl border border-sand-200 px-3 py-2 text-sm" />
           {error ? <p className="md:col-span-2 rounded-xl border border-ember-500/40 bg-ember-500/10 px-3 py-2 text-sm text-ember-500">{error}</p> : null}
           {success ? <p className="md:col-span-2 rounded-xl border border-leaf-500/40 bg-leaf-500/10 px-3 py-2 text-sm text-leaf-500">{success}</p> : null}
-          <button type="submit" disabled={loading} className="md:col-span-2 rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
+          <button type="submit" disabled={loading} className="md:col-span-2 min-h-11 rounded-xl bg-forest-900 px-4 py-2 text-sm font-semibold text-sand-50 disabled:opacity-60">
             {loading ? "Saving..." : "Create Batch"}
           </button>
         </form>
       </section>
 
-      <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-forest-900">Recent Batches</h3>
-        <div className="mt-3">
-          <table className="min-w-full text-sm">
+      <section className="min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
+        <div className="border-b border-sand-200 p-5 sm:p-6"><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-forest-500">Cycle register</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Recent batch cycles</h2><p className="mt-1 text-sm text-forest-600">Placement, source, flock distribution, and lifecycle status.</p></div>
+        <div className="overflow-x-auto">
+          <table className="min-w-[900px] w-full text-sm">
             <thead>
-              <tr className="border-b border-sand-200 text-left text-xs uppercase tracking-[0.1em] text-forest-600">
+              <tr className="border-b border-sand-200 bg-sand-50 text-left text-[10px] uppercase tracking-[0.16em] text-forest-600">
                 <th className="px-2 py-2">Batch</th>
                 <th className="px-2 py-2">Placement</th>
                 <th className="px-2 py-2">Source</th>
@@ -419,7 +418,7 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
               {rows.map((row) => (
                 <tr key={row.id} className="border-b border-sand-100">
                   <td className="px-2 py-2 font-medium text-forest-900">{row.batch_code}</td>
-                  <td className="px-2 py-2 text-forest-700">{row.placement_date}</td>
+                  <td className="px-2 py-2 text-forest-700"><span className="inline-flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5"/>{row.placement_date}</span></td>
                   <td className="px-2 py-2 text-forest-700">{row.source}</td>
                   <td className="px-2 py-2 text-forest-700">{row.flock_total}</td>
                   <td className="px-2 py-2 text-forest-700">{row.total_chicks}</td>

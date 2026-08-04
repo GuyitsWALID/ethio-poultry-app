@@ -276,9 +276,8 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
     const scopedBatchIds = new Set(filteredFlocks.map((f) => f.batch_id).filter((id): id is string => Boolean(id)));
     if (scope.farmId || scope.houseId) items = items.filter((b) => scopedBatchIds.has(b.id));
     if (scope.flockId) items = items.filter((b) => flocks.some((f) => f.id === scope.flockId && f.batch_id === b.id));
-    if (scope.batchId) items = items.filter((b) => b.id === scope.batchId);
     return items;
-  }, [batches, filteredFlocks, flocks, scope.branchId, scope.farmId, scope.houseId, scope.flockId, scope.batchId]);
+  }, [batches, filteredFlocks, flocks, scope.branchId, scope.farmId, scope.houseId, scope.flockId]);
 
   return (
     <ScopeContext.Provider

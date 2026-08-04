@@ -87,6 +87,11 @@ export async function GET() {
 
     const rows: Array<{
       key: string;
+      branchId: string;
+      farmId: string | null;
+      houseId: string | null;
+      flockId: string | null;
+      batchId: string | null;
       branchName: string;
       branchLocation: string;
       farmName: string;
@@ -101,6 +106,7 @@ export async function GET() {
       if (branchFarms.length === 0) {
         rows.push({
           key: `branch-${branch.id}`,
+          branchId: branch.id, farmId: null, houseId: null, flockId: null, batchId: null,
           branchName: branch.name,
           branchLocation: branch.location ?? "-",
           farmName: "-",
@@ -117,6 +123,7 @@ export async function GET() {
         if (farmHouses.length === 0) {
           rows.push({
             key: `farm-${farm.id}`,
+            branchId: branch.id, farmId: farm.id, houseId: null, flockId: null, batchId: null,
             branchName: branch.name,
             branchLocation: branch.location ?? "-",
             farmName: farm.name,
@@ -133,6 +140,7 @@ export async function GET() {
           if (houseFlocks.length === 0) {
             rows.push({
               key: `house-${house.id}`,
+              branchId: branch.id, farmId: farm.id, houseId: house.id, flockId: null, batchId: null,
               branchName: branch.name,
               branchLocation: branch.location ?? "-",
               farmName: farm.name,
@@ -149,6 +157,7 @@ export async function GET() {
             if (!flockBatch) {
               rows.push({
                 key: `flock-${flock.id}`,
+                branchId: branch.id, farmId: farm.id, houseId: house.id, flockId: flock.id, batchId: null,
                 branchName: branch.name,
                 branchLocation: branch.location ?? "-",
                 farmName: farm.name,
@@ -162,6 +171,7 @@ export async function GET() {
 
             rows.push({
               key: `batch-${flockBatch.id}-${flock.id}`,
+              branchId: branch.id, farmId: farm.id, houseId: house.id, flockId: flock.id, batchId: flockBatch.id,
               branchName: branch.name,
               branchLocation: branch.location ?? "-",
               farmName: farm.name,

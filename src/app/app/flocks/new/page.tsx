@@ -1,17 +1,43 @@
-export default function NewFlockPage() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs uppercase tracking-[0.3em] text-forest-500">
-          New batch
-        </p>
-        <h2 className="text-2xl font-semibold text-forest-900">
-          Create flock and batch
-        </h2>
-        <p className="mt-2 text-sm text-forest-600">
-          Register batch details, house assignment, and starting inventory.
-        </p>
-      </div>
-    </div>
-  );
-}
+/* eslint-disable react-hooks/set-state-in-effect */
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Bird, CircleDollarSign, Home, Layers3, Loader2, Save, ShieldCheck } from "lucide-react";
+
+import { useFarmScope } from "@/components/farm-scope-context";
+import type { Database } from "@/types/supabase";
+import { createClient } from "@/utils/supabase/client";
+
+type Breed={id:string;name:string};
+type FlockType=Database["public"]["Enums"]["flock_type"];type Source=Database["public"]["Enums"]["flock_source"];
+const field="h-11 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900 outline-none focus:ring-2 focus:ring-forest-500";
+
+export default function NewFlockPage(){
+  const router=useRouter();const {role,branches,farms,houses,batches,scope}=useFarmScope();const [orgId,setOrgId]=useState("");const [breeds,setBreeds]=useState<Breed[]>([]);const [saving,setSaving]=useState(false);const [error,setError]=useState("");
+  const [branchId,setBranchId]=useState(scope.branchId);const [farmId,setFarmId]=useState(scope.farmId);const [houseId,setHouseId]=useState(scope.houseId);const [batchId,setBatchId]=useState(scope.batchId);const [code,setCode]=useState("");const [type,setType]=useState<FlockType>("broiler");const [source,setSource]=useState<Source>("external_purchase");const [placement,setPlacement]=useState(new Date().toLocaleDateString("en-CA",{timeZone:"Africa/Addis_Ababa"}));const [age,setAge]=useState("0");const [count,setCount]=useState("");const [breedId,setBreedId]=useState("");const [cost,setCost]=useState("");const [notes,setNotes]=useState("");
+  useEffect(()=>{const load=async()=>{const context=await fetch("/api/me/context").then((response)=>response.json());const nextOrg=String(context?.orgId??"");setOrgId(nextOrg);if(nextOrg){const {data}=await createClient().from("breeds").select("id,name").eq("org_id",nextOrg).order("name");setBreeds((data??[]) as Breed[])}};void load()},[]);
+  useEffect(()=>{const params=new URLSearchParams(window.location.search);const requestedFarm=params.get("farm_id")??"";const requestedHouse=params.get("house_id")??"";if(requestedFarm){setFarmId(requestedFarm);setBranchId(farms.find((item)=>item.id===requestedFarm)?.branch_id??"")}if(requestedHouse)setHouseId(requestedHouse)},[farms]);
+  const visibleFarms=farms.filter((item)=>!branchId||item.branch_id===branchId);const visibleHouses=houses.filter((item)=>!farmId||item.farm_id===farmId);const visibleBatches=batches.filter((item)=>(!branchId||item.branch_id===branchId)&&(!farmId||item.farm_id===farmId));
+  const selectedHouse=houses.find((item)=>item.id===houseId);const population=Number(count)||0;const unitCost=Number(cost)||0;const placementCost=population*unitCost;const canCreate=["ceo","farm_manager","system_admin","super_admin"].includes(role??"");
+  const valid=Boolean(orgId&&branchId&&farmId&&houseId&&code.trim()&&placement&&population>0&&canCreate);
+  const save=async()=>{if(!valid)return;setSaving(true);setError("");const supabase=createClient();const {data,error:insertError}=await supabase.from("flocks").insert({org_id:orgId,farm_id:farmId,house_id:houseId,batch_id:batchId||null,flock_code:code.trim(),flock_type:type,source,placement_date:placement,age_at_placement_days:Number(age)||0,initial_count:population,current_count:population,breed_id:breedId||null,purchase_cost_per_bird:unitCost||null,notes:notes.trim()||null,status:"active"}).select("id").single();setSaving(false);if(insertError){setError(insertError.message);return}router.push(`/app/flocks/${data.id}`);router.refresh()};
+  const capacitySignal=useMemo(()=>selectedHouse?`Selected house: ${selectedHouse.name}`:"Choose the house that will physically hold this flock.",[selectedHouse]);
+  return <main className="space-y-5 pb-8">
+    <section className="relative overflow-hidden rounded-[28px] bg-forest-900 px-6 py-7 text-sand-50 sm:px-8 lg:px-10"><div className="absolute -right-20 -top-24 h-64 w-64 rounded-full border-[44px] border-amber-500/10"/><div className="relative"><Link href="/app/flocks" className="inline-flex items-center gap-1 text-xs font-semibold text-sand-100/80"><ArrowLeft className="h-4 w-4"/>Back to flocks</Link><p className="mt-5 text-[10px] font-semibold uppercase tracking-[.22em] text-amber-500">Placement registration</p><h1 className="mt-2 max-w-3xl font-display text-3xl font-semibold sm:text-4xl">Create the operational identity birds will carry every day.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100/80">Place the flock in the correct branch, farm, house, and batch lineage before daily production records begin.</p></div></section>
+    {!canCreate?<div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Your role can view flock profiles but cannot create a flock.</div>:null}{error?<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>:null}
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,.75fr)]"><section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm sm:p-6"><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-forest-500">Flock register</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Placement and identity</h2><div className="mt-5 grid gap-4 md:grid-cols-2">
+      <label className="grid gap-1 text-xs font-medium text-forest-600">Branch<select className={field} value={branchId} onChange={(e)=>{setBranchId(e.target.value);setFarmId("");setHouseId("");setBatchId("")}}><option value="">Select branch</option>{branches.map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-forest-600">Farm<select className={field} value={farmId} onChange={(e)=>{setFarmId(e.target.value);setHouseId("");setBatchId("")}}><option value="">Select farm</option>{visibleFarms.map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-forest-600">House<select className={field} value={houseId} onChange={(e)=>setHouseId(e.target.value)}><option value="">Select house</option>{visibleHouses.map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-forest-600">Batch lineage<select className={field} value={batchId} onChange={(e)=>setBatchId(e.target.value)}><option value="">No batch assigned</option>{visibleBatches.map((item)=><option key={item.id} value={item.id}>{item.batch_code}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-forest-600">Flock code<input className={field} value={code} onChange={(e)=>setCode(e.target.value)} placeholder="e.g. FLK-2026-08-A"/></label>
+      <label className="grid gap-1 text-xs font-medium text-forest-600">Flock type<select className={field} value={type} onChange={(e)=>setType(e.target.value as FlockType)}><option value="broiler">Broiler</option><option value="layer">Layer</option><option value="rearing">Rearing</option><option value="parent_stock">Parent stock</option></select></label>
+      <label className="grid gap-1 text-xs font-medium text-forest-600">Source<select className={field} value={source} onChange={(e)=>setSource(e.target.value as Source)}><option value="external_purchase">External purchase</option><option value="internal_transfer">Internal transfer</option></select></label>
+      <label className="grid gap-1 text-xs font-medium text-forest-600">Breed<select className={field} value={breedId} onChange={(e)=>setBreedId(e.target.value)}><option value="">Breed unavailable / not set</option>{breeds.map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="grid gap-1 text-xs font-medium text-forest-600">Placement date<input className={field} type="date" value={placement} onChange={(e)=>setPlacement(e.target.value)}/></label><label className="grid gap-1 text-xs font-medium text-forest-600">Age at placement (days)<input className={field} type="number" min={0} value={age} onChange={(e)=>setAge(e.target.value)}/></label><label className="grid gap-1 text-xs font-medium text-forest-600">Starting bird count<input className={field} type="number" min={1} value={count} onChange={(e)=>setCount(e.target.value)}/></label><label className="grid gap-1 text-xs font-medium text-forest-600">Purchase cost per bird (ETB)<input className={field} type="number" min={0} step="0.01" value={cost} onChange={(e)=>setCost(e.target.value)}/></label><label className="grid gap-1 text-xs font-medium text-forest-600 md:col-span-2">Placement notes<textarea className="min-h-24 rounded-xl border border-sand-200 px-3 py-2 text-sm" value={notes} onChange={(e)=>setNotes(e.target.value)} placeholder="Supplier, transport condition, sex split, or placement observations"/></label>
+    </div><button type="button" onClick={()=>void save()} disabled={!valid||saving} className="mt-5 inline-flex h-11 items-center gap-2 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50">{saving?<Loader2 className="h-4 w-4 animate-spin"/>:<Save className="h-4 w-4"/>}{saving?"Creating flock…":"Create active flock"}</button></section>
+    <aside className="space-y-4"><section className="rounded-2xl border border-sand-200 bg-sand-50 p-5"><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-forest-500">Placement preview</p><div className="mt-4 space-y-4"><Preview icon={Bird} label="Flock" value={code||"Code not entered"}/><Preview icon={Home} label="Location" value={capacitySignal}/><Preview icon={Layers3} label="Lineage" value={batchId?visibleBatches.find((item)=>item.id===batchId)?.batch_code??"Selected batch":"No batch assigned"}/><Preview icon={CircleDollarSign} label="Acquisition value" value={unitCost>0&&population>0?`${placementCost.toLocaleString()} ETB`:"Unavailable"}/></div></section><section className="rounded-2xl border border-leaf-400/40 bg-green-50 p-5"><div className="flex gap-3"><ShieldCheck className="h-5 w-5 text-leaf-500"/><div><h2 className="font-semibold text-forest-900">What happens next</h2><p className="mt-1 text-sm leading-6 text-forest-600">The flock becomes available in Daily Records, Feed Control, mortality, health, and production comparisons immediately.</p></div></div></section></aside></div>
+  </main>}
+function Preview({icon:Icon,label,value}:{icon:React.ElementType;label:string;value:string}){return <div className="flex gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-forest-700"><Icon className="h-4 w-4"/></span><div><p className="text-xs text-forest-500">{label}</p><p className="mt-0.5 text-sm font-semibold text-forest-900">{value}</p></div></div>}
