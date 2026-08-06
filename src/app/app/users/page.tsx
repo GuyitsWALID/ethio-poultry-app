@@ -26,23 +26,16 @@ type BranchRow = {
   name: string;
 };
 
-type BranchAccessRow = {
-  profile_id: string;
-  branch_id: string;
-};
-
 type FarmAccessRow = {
   profile_id: string;
   farm_id: string;
 };
+type WarehouseRow={id:string;name:string};
+type WarehouseAccessRow={profile_id:string;warehouse_id:string};
 
 const roleOptions: Array<{ value: AppRole; label: string }> = [
   { value: "ceo", label: "CEO" },
   { value: "farm_manager", label: "Farm Manager" },
-  { value: "veterinarian", label: "Veterinarian" },
-  { value: "store_keeper", label: "Store Keeper" },
-  { value: "system_admin", label: "System Admin" },
-  { value: "super_admin", label: "Super Admin" },
 ];
 
 export default function UsersPage() {
@@ -53,15 +46,18 @@ export default function UsersPage() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [branches, setBranches] = useState<BranchRow[]>([]);
   const [farms, setFarms] = useState<FarmRow[]>([]);
-  const [branchAccess, setBranchAccess] = useState<BranchAccessRow[]>([]);
   const [farmAccess, setFarmAccess] = useState<FarmAccessRow[]>([]);
+  const [warehouses,setWarehouses]=useState<WarehouseRow[]>([]);
+  const [warehouseAccess,setWarehouseAccess]=useState<WarehouseAccessRow[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState("");
   const [selectedFarmId, setSelectedFarmId] = useState("");
+  const [selectedWarehouseId,setSelectedWarehouseId]=useState("");
+  const [expiresAt,setExpiresAt]=useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const canManage = currentRole === "ceo" || currentRole === "system_admin" || currentRole === "super_admin";
+  const canManage = currentRole === "ceo";
   const branchNameMap = useMemo(() => new Map(branches.map((branch) => [branch.id, branch.name])), [branches]);
   const farmNameMap = useMemo(() => new Map(farms.map((farm) => [farm.id, farm.name])), [farms]);
 
@@ -79,20 +75,22 @@ export default function UsersPage() {
     }
 
     const supabase = createClient();
-    const [profilesRes, branchesRes, farmsRes, branchAccessRes, farmAccessRes] = await Promise.all([
+    const [profilesRes, branchesRes, farmsRes, farmAccessRes,warehousesRes,assignmentRes] = await Promise.all([
       supabase.from("profiles").select("id, full_name, phone, role, is_active").eq("org_id", nextOrgId).order("full_name"),
       supabase.from("branches").select("id, name").eq("org_id", nextOrgId).order("name"),
       supabase.from("farms").select("id, name, branch_id").eq("org_id", nextOrgId).order("name"),
-      supabase.from("user_branch_access").select("profile_id, branch_id"),
       supabase.from("user_farm_access").select("profile_id, farm_id").eq("org_id", nextOrgId),
+      supabase.from("warehouses").select("id,name").eq("org_id",nextOrgId).order("name"),
+      fetch("/api/governance/assignments",{cache:"no-store"}),
     ]);
-    const firstError = profilesRes.error ?? branchesRes.error ?? farmsRes.error ?? branchAccessRes.error ?? farmAccessRes.error;
+    const firstError = profilesRes.error ?? branchesRes.error ?? farmsRes.error ?? farmAccessRes.error ?? warehousesRes.error;
     if (firstError) setError(firstError.message);
     setProfiles((profilesRes.data ?? []) as ProfileRow[]);
     setBranches((branchesRes.data ?? []) as BranchRow[]);
     setFarms((farmsRes.data ?? []) as FarmRow[]);
-    setBranchAccess((branchAccessRes.data ?? []) as unknown as BranchAccessRow[]);
     setFarmAccess((farmAccessRes.data ?? []) as FarmAccessRow[]);
+    setWarehouses((warehousesRes.data??[]) as WarehouseRow[]);
+    if(assignmentRes.ok){const payload=await assignmentRes.json();setWarehouseAccess(payload.warehouseAssignments??[]);setFarmAccess(payload.farmAssignments??[])}
     setLoading(false);
   };
 
@@ -106,10 +104,9 @@ export default function UsersPage() {
     setSaving(true);
     setError(null);
     setSuccess(null);
-    const supabase = createClient();
-    const { error: updateError } = await supabase.from("profiles").update(updates).eq("id", profileId);
-    if (updateError) {
-      setError(updateError.message);
+    const response=await fetch(`/api/governance/users/${profileId}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(updates)});const payload=await response.json();
+    if (!response.ok) {
+      setError(payload.error??"User update failed.");
       setSaving(false);
       return;
     }
@@ -118,34 +115,14 @@ export default function UsersPage() {
     await load();
   };
 
-  const addBranchAccess = async () => {
-    if (!canManage || !selectedProfileId || !selectedBranchId) return;
+  const addAssignment = async (scopeType:"farm"|"warehouse") => {
+    const scopeId=scopeType==="farm"?selectedFarmId:selectedWarehouseId;
+    if (!canManage || !orgId || !selectedProfileId || !scopeId) return;
     setSaving(true);
     setError(null);
-    const supabase = createClient();
-    // @ts-expect-error generated Supabase types are missing this migrated table.
-    const { error: insertError } = await supabase.from("user_branch_access").upsert({
-      profile_id: selectedProfileId,
-      branch_id: selectedBranchId,
-    }, { onConflict: "profile_id,branch_id" });
-    if (insertError) setError(insertError.message);
-    else setSuccess("Branch access assigned.");
-    setSaving(false);
-    await load();
-  };
-
-  const addFarmAccess = async () => {
-    if (!canManage || !orgId || !selectedProfileId || !selectedFarmId) return;
-    setSaving(true);
-    setError(null);
-    const supabase = createClient();
-    const { error: insertError } = await supabase.from("user_farm_access").upsert({
-      org_id: orgId,
-      profile_id: selectedProfileId,
-      farm_id: selectedFarmId,
-    }, { onConflict: "profile_id,farm_id" });
-    if (insertError) setError(insertError.message);
-    else setSuccess("Farm access assigned.");
+    const response=await fetch("/api/governance/assignments",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:selectedProfileId,scope_type:scopeType,scope_id:scopeId,expires_at:expiresAt||null})});const payload=await response.json();
+    if (!response.ok) setError(payload.error??"Assignment failed.");
+    else setSuccess(`${scopeType==="farm"?"Farm":"Warehouse"} access assigned and audited.`);
     setSaving(false);
     await load();
   };
@@ -167,7 +144,7 @@ export default function UsersPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-semibold text-forest-900">Assign Scope Access</h3>
-            <p className="text-sm text-forest-600">Use branch access for broad manager scope, or farm access for tighter assignments.</p>
+            <p className="text-sm text-forest-600">Assign managers directly to the farms they operate. Branch selection is only a filter.</p>
           </div>
           {!canManage ? <p className="text-sm text-forest-600">View mode: CEO/system admin required for edits.</p> : null}
         </div>
@@ -178,14 +155,14 @@ export default function UsersPage() {
               <option key={profile.id} value={profile.id}>{profile.full_name ?? profile.id} · {profile.role}</option>
             ))}
           </select>
-          <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)}>
+          <select disabled className="h-11 rounded-xl border border-sand-200 px-3 text-sm opacity-60" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)}>
             <option value="">Select branch</option>
             {branches.map((branch) => (
               <option key={branch.id} value={branch.id}>{branch.name}</option>
             ))}
           </select>
-          <button type="button" disabled={saving || !canManage} onClick={() => void addBranchAccess()} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
-            Add Branch Access
+          <button type="button" disabled className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
+            Branch access retired
           </button>
           <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm md:col-span-2" value={selectedFarmId} onChange={(event) => setSelectedFarmId(event.target.value)}>
             <option value="">Select farm</option>
@@ -193,9 +170,12 @@ export default function UsersPage() {
               <option key={farm.id} value={farm.id}>{farm.name} · {branchNameMap.get(farm.branch_id) ?? "Branch"}</option>
             ))}
           </select>
-          <button type="button" disabled={saving || !canManage} onClick={() => void addFarmAccess()} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
+          <button type="button" disabled={saving || !canManage} onClick={() => void addAssignment("farm")} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
             Add Farm Access
           </button>
+          <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={selectedWarehouseId} onChange={(event)=>setSelectedWarehouseId(event.target.value)}><option value="">Select warehouse</option>{warehouses.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select>
+          <input type="datetime-local" aria-label="Assignment expiry" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={expiresAt} onChange={(event)=>setExpiresAt(event.target.value)}/>
+          <button type="button" disabled={saving||!canManage} onClick={()=>void addAssignment("warehouse")} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">Add Warehouse Access</button>
         </div>
       </section>
 
@@ -211,16 +191,17 @@ export default function UsersPage() {
                 <th className="px-2 py-2">Status</th>
                 <th className="px-2 py-2">Branches</th>
                 <th className="px-2 py-2">Farms</th>
+                <th className="px-2 py-2">Warehouses</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td className="px-2 py-4 text-forest-600" colSpan={6}>Loading users...</td></tr>
+                <tr><td className="px-2 py-4 text-forest-600" colSpan={7}>Loading users...</td></tr>
               ) : profiles.length === 0 ? (
-                <tr><td className="px-2 py-4 text-forest-600" colSpan={6}>No users found.</td></tr>
+                <tr><td className="px-2 py-4 text-forest-600" colSpan={7}>No users found.</td></tr>
               ) : profiles.map((profile) => {
-                const userBranches = branchAccess.filter((access) => access.profile_id === profile.id).map((access) => branchNameMap.get(access.branch_id) ?? access.branch_id);
                 const userFarms = farmAccess.filter((access) => access.profile_id === profile.id).map((access) => farmNameMap.get(access.farm_id) ?? access.farm_id);
+                const userWarehouses=warehouseAccess.filter(access=>access.profile_id===profile.id).map(access=>warehouses.find(row=>row.id===access.warehouse_id)?.name??access.warehouse_id);
                 return (
                   <tr key={profile.id} className="border-b border-sand-100 align-top">
                     <td className="px-2 py-2 font-medium text-forest-900">{profile.full_name ?? profile.id}</td>
@@ -245,8 +226,9 @@ export default function UsersPage() {
                         {profile.is_active ? "Active" : "Inactive"}
                       </button>
                     </td>
-                    <td className="max-w-[220px] px-2 py-2 text-forest-700">{userBranches.join(", ") || "-"}</td>
+                    <td className="max-w-[220px] px-2 py-2 text-forest-500">Not authoritative</td>
                     <td className="max-w-[260px] px-2 py-2 text-forest-700">{userFarms.join(", ") || "-"}</td>
+                    <td className="max-w-[260px] px-2 py-2 text-forest-700">{userWarehouses.join(", ")||"-"}</td>
                   </tr>
                 );
               })}

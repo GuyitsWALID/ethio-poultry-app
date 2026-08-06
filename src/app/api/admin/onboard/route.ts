@@ -3,8 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 
 import { normalizeRole } from "@/lib/roles";
 import { createClient as createAuthedClient } from "@/utils/supabase/server";
+import { passwordPolicyError } from "@/lib/password-policy";
 
-const adminRoles = new Set(["system_admin", "super_admin"]);
+const adminRoles = new Set(["system_admin"]);
 
 type OnboardPayload = {
   organization: {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   const metadataRole = normalizeRole(user.user_metadata?.role);
   let normalizedRole = metadataRole;
 
-  if (!adminRoles.has(metadataRole)) {
+  if (!metadataRole || !adminRoles.has(metadataRole)) {
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     normalizedRole = normalizeRole(profile?.role);
   }
 
-  if (!adminRoles.has(normalizedRole)) {
+  if (!normalizedRole || !adminRoles.has(normalizedRole)) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
   if (!payload?.organization?.name || !payload.admin?.email || !payload.admin?.password) {
     return NextResponse.json({ message: "Missing required fields." }, { status: 400 });
   }
+  const passwordError=passwordPolicyError(payload.admin.password);if(passwordError)return NextResponse.json({message:passwordError},{status:400});
 
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

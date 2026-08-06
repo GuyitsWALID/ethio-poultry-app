@@ -701,45 +701,8 @@ export default function HealthPage() {
     setSuccess(null);
     setSaving(true);
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unable to verify your session.");
-      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-      if (!profile?.org_id) throw new Error("Organization context not found.");
-
-      if (item.type === "weight") {
-        const db = supabase as any;
-        const { error: delError } = await db.from("batch_weight_check_tasks").delete().eq("id", item.id);
-        if (delError) throw new Error(delError.message);
-        setSuccess("Weight check removed.");
-        await loadSchedules();
-        return;
-      }
-
-      if (item.type === "cleanup") {
-        const { error: delError } = await supabase.from("biosecurity_checks").delete().eq("id", item.id);
-        if (delError) throw new Error(delError.message);
-      } else {
-        const { error: delError } = await supabase.from("vaccination_events").delete().eq("id", item.id);
-        if (delError) throw new Error(delError.message);
-      }
-
-      const { error: deleteTargetError } = await supabase
-        .from("health_events")
-        .delete()
-        .eq("org_id", profile.org_id)
-        .like("description", `SCHEDULE_TARGET|${item.id}|%`);
-      if (deleteTargetError) throw new Error(deleteTargetError.message);
-      const { error: deleteStatusError } = await supabase
-        .from("health_events")
-        .delete()
-        .eq("org_id", profile.org_id)
-        .like("description", `SCHEDULE_STATUS|${item.id}|%`);
-      if (deleteStatusError) throw new Error(deleteStatusError.message);
-
-      setSuccess("Schedule removed.");
+      const reason=window.prompt("Enter the reason for voiding this schedule record:")?.trim();if(!reason)return;const table=item.type==="weight"?"batch_weight_check_tasks":item.type==="cleanup"?"biosecurity_checks":"vaccination_events";const response=await fetch("/api/governance/void",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({table,id:item.id,reason})});const payload=await response.json();if(!response.ok)throw new Error(payload.error??"Unable to void schedule.");
+      setSuccess("Schedule voided; the original record remains auditable.");
       await loadSchedules();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to remove schedule.");

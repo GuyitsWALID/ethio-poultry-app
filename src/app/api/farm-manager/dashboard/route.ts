@@ -16,7 +16,7 @@ import {
   type ManagerDailyRow,
   type WeightSample,
 } from "@/lib/farm-manager-dashboard";
-import { createClient as createAuthedClient } from "@/utils/supabase/server";
+import { getAccessContext,isAccessResponse } from "@/lib/access-context";
 
 type DbError = { message: string } | null;
 type Row = Record<string, unknown>;
@@ -58,30 +58,26 @@ function emptyResponse(asOf: string, scopeLabel: string): FarmManagerDashboardRe
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await createAuthedClient();
-    const { data: { user } } = await auth.auth.getUser();
-    if (!user) return json({ error: "Unauthorized" }, 401);
+    const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return access;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceKey) return json({ error: "Supabase server configuration is missing." }, 500);
     const admin = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
-    const { data: profile } = await admin.from("profiles").select("org_id,role").eq("id", user.id).maybeSingle();
-    if (!profile?.org_id || String(profile.role) !== "farm_manager") return json({ error: "Farm manager access required." }, 403);
-    const orgId = profile.org_id;
+    if(access.role!=="farm_manager"&&!access.supportSessionId)return json({error:"Farm manager access required."},403);const orgId=access.orgId;const user={id:access.userId};
 
-    const [farms, houses, flocks, branchAccess, farmAccess] = await Promise.all([
+    const now = new Date().toISOString();
+    const [farms, houses, flocks, farmAccess] = await Promise.all([
       allRows<Row>((a, b) => admin.from("farms").select("id,name,branch_id").eq("org_id", orgId).range(a, b)),
       allRows<Row>((a, b) => admin.from("houses").select("id,name,farm_id").eq("org_id", orgId).range(a, b)),
       allRows<Row>((a, b) => admin.from("flocks").select("id,flock_code,flock_type,farm_id,house_id,batch_id,current_count,status,placement_date,age_at_placement_days,breed_id").eq("org_id", orgId).range(a, b)),
-      allRows<{ branch_id: string }>((a, b) => admin.from("user_branch_access").select("branch_id").eq("profile_id", user.id).range(a, b)),
-      allRows<{ farm_id: string }>((a, b) => admin.from("user_farm_access").select("farm_id").eq("profile_id", user.id).range(a, b)),
+      access.supportSessionId?allRows<Row>((a,b)=>admin.from("farms").select("id").eq("org_id",orgId).range(a,b)):allRows<Row>((a, b) => admin.from("user_farm_access").select("farm_id").eq("profile_id", user.id).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`).range(a, b)),
     ]);
 
     const permittedFarmIds = authorizedFarmIds(
       farms.map((row) => ({ id: String(row.id), branch_id: String(row.branch_id) })),
-      branchAccess.map((row) => row.branch_id), farmAccess.map((row) => row.farm_id)
+      [], farmAccess.map((row) => String(row.farm_id??row.id))
     );
     const p = request.nextUrl.searchParams;
     const requestedFarm = p.get("farm_id") ?? "";
@@ -113,7 +109,7 @@ export async function GET(request: NextRequest) {
     const next14 = addDays(asOf, 14);
 
     const [dailyRows, closures, standards, weights, settingsRes, inventoryItems, stockRows, vaccinations, weightTasks] = await Promise.all([
-      allRows<ManagerDailyRow>((a, b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,updated_at").eq("org_id", orgId).in("flock_id", flockIds).gte("record_date", from).lte("record_date", asOf).range(a, b)),
+      allRows<ManagerDailyRow>((a, b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,updated_at").eq("org_id", orgId).is("voided_at",null).in("flock_id", flockIds).gte("record_date", from).lte("record_date", asOf).range(a, b)),
       allRows<Row>((a, b) => admin.from("feed_day_closures").select("flock_id,record_date,status").eq("org_id", orgId).in("flock_id", flockIds).gte("record_date", yesterday).lte("record_date", asOf).range(a, b)),
       breedIds.length ? allRows<Row>((a, b) => admin.from("breed_standards").select("breed_id,week_number,target_hdep_pct,target_mortality_pct,target_feed_g,target_weight_g").eq("org_id", orgId).in("breed_id", breedIds).range(a, b)) : Promise.resolve([]),
       allRows<Row>((a, b) => admin.from("weight_records").select("flock_id,record_date,average_weight_g,uniformity_pct").eq("org_id", orgId).in("flock_id", flockIds).lte("record_date", asOf).order("record_date", { ascending: false }).range(a, b)),

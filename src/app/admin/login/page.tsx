@@ -45,7 +45,7 @@ export default function AdminLoginPage() {
       return;
     }
 
-    if (metadataRole !== "system_admin" && metadataRole !== "super_admin") {
+    if (metadataRole !== "system_admin") {
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
@@ -55,7 +55,7 @@ export default function AdminLoginPage() {
       normalizedRole = normalizeRole(profile?.role);
     }
 
-    if (normalizedRole !== "system_admin" && normalizedRole !== "super_admin") {
+    if (normalizedRole !== "system_admin") {
       await supabase.auth.signOut();
       setError("This account does not have system admin access.");
       setIsLoading(false);

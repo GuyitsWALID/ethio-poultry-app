@@ -284,8 +284,7 @@ export function authorizedFarmIds(
   branchIds: Iterable<string>,
   farmIds: Iterable<string>
 ) {
-  const allowedBranches = new Set(branchIds);
+  void branchIds;
   const allowedFarms = new Set(farmIds);
-  return new Set(farms.filter((farm) => allowedFarms.has(farm.id) || allowedBranches.has(farm.branch_id)).map((farm) => farm.id));
+  return new Set(farms.filter((farm) => allowedFarms.has(farm.id)).map((farm) => farm.id));
 }
-

@@ -13,6 +13,7 @@ type OnboardResult = {
   organizationId: string;
   adminUserId: string;
 };
+type SupportRequest={id:string;target_org_id:string;status:string;reason:string;ticket_reference:string;requested_minutes:number;expires_at:string|null};
 
 export default function AdminDashboardPage() {
   const [metrics, setMetrics] = useState<OverviewMetrics | null>(null);
@@ -23,6 +24,8 @@ export default function AdminDashboardPage() {
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<OnboardResult | null>(null);
+  const [supportRequests,setSupportRequests]=useState<SupportRequest[]>([]);
+  const [supportMessage,setSupportMessage]=useState<string|null>(null);
 
   const loadMetrics = async () => {
     setLoading(true);
@@ -40,8 +43,11 @@ export default function AdminDashboardPage() {
     }
     const data = (await response.json()) as OverviewMetrics;
     setMetrics(data);
+    const supportResponse=await fetch("/api/admin/break-glass",{cache:"no-store"});if(supportResponse.ok)setSupportRequests((await supportResponse.json()).requests??[]);
     setLoading(false);
   };
+
+  const requestSupport=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setSupportMessage(null);const form=new FormData(event.currentTarget);const response=await fetch("/api/admin/break-glass",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target_org_id:form.get("target_org_id"),ticket_reference:form.get("ticket_reference"),reason:form.get("reason"),requested_minutes:Number(form.get("requested_minutes"))})});const payload=await response.json();setSupportMessage(response.ok?"Support access request sent to the tenant CEO.":payload.error??"Unable to request access.");if(response.ok){event.currentTarget.reset();await loadMetrics()}};
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -127,6 +133,8 @@ export default function AdminDashboardPage() {
             <p className="md:col-span-4 text-sm text-ember-500">{error}</p>
           ) : null}
         </section>
+
+        <section className="rounded-2xl border border-ember-300 bg-ember-50 p-6 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[.2em] text-ember-700">CEO-approved support</p><h2 className="mt-2 text-lg font-semibold text-forest-900">Request break-glass tenant access</h2><p className="mt-2 text-sm text-forest-600">Access is tenant-specific, fully audited, and automatically expires in no more than four hours.</p>{supportMessage?<p role="status" className="mt-3 text-sm font-semibold text-forest-800">{supportMessage}</p>:null}<form onSubmit={requestSupport} className="mt-5 grid gap-3 md:grid-cols-2"><input name="target_org_id" required placeholder="Target organization ID" className="h-11 rounded-xl border border-sand-200 px-3 text-sm"/><input name="ticket_reference" required placeholder="Support ticket reference" className="h-11 rounded-xl border border-sand-200 px-3 text-sm"/><input name="requested_minutes" required type="number" min={1} max={240} defaultValue={60} className="h-11 rounded-xl border border-sand-200 px-3 text-sm"/><textarea name="reason" required minLength={12} placeholder="Specific support purpose" className="min-h-24 rounded-xl border border-sand-200 p-3 text-sm md:col-span-2"/><button className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-white">Request CEO approval</button></form><div className="mt-5 space-y-2">{supportRequests.slice(0,8).map(row=><div key={row.id} className="flex flex-wrap justify-between gap-2 rounded-xl bg-white p-3 text-sm"><div><p className="font-semibold">{row.ticket_reference} · {row.status}</p><p className="text-xs text-forest-600">{row.target_org_id} · {row.requested_minutes} minutes</p></div>{row.status==="approved"&&row.expires_at?<a href="/app" className="rounded-lg bg-ember-600 px-3 py-2 text-xs font-semibold text-white">Enter audited tenant session</a>:null}</div>)}</div></section>
 
         <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-forest-900">Onboard a new organization</h2>
@@ -256,7 +264,7 @@ export default function AdminDashboardPage() {
                 id="admin-password"
                 name="admin_password"
                 type="password"
-                minLength={8}
+                minLength={12}
                 className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
                 required
               />

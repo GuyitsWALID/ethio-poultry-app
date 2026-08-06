@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getSalesContext();
     if (ctx instanceof Response) return ctx;
-    if (ctx.role !== "farm_manager") {
+    if (!ctx.canMutate) {
       return json({ error: "Only farm managers can save daily records and inventory usage." }, 403);
     }
 

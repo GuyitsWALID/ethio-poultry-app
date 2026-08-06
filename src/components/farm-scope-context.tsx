@@ -189,22 +189,13 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Farm manager: access-limited scope
-      const [{ data: branchAccessRows }, { data: farmAccessRows }] = await Promise.all([
-        supabase.from("user_branch_access").select("branch_id").eq("profile_id", userId),
-        supabase.from("user_farm_access").select("farm_id").eq("profile_id", userId),
-      ]);
-
-      const allowedBranchIds = (branchAccessRows ?? []).map((row) => row.branch_id);
+      const now = new Date().toISOString();
+      const { data: farmAccessRows } = await supabase.from("user_farm_access").select("farm_id").eq("profile_id", userId).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`);
       const allowedFarmIds = (farmAccessRows ?? []).map((row) => row.farm_id);
 
       let farmsQuery = supabase.from("farms").select("id, name, branch_id").eq("org_id", orgId);
 
-      if (allowedBranchIds.length > 0 || allowedFarmIds.length > 0) {
-        const orFilters: string[] = [];
-        if (allowedBranchIds.length > 0) orFilters.push(`branch_id.in.(${allowedBranchIds.join(",")})`);
-        if (allowedFarmIds.length > 0) orFilters.push(`id.in.(${allowedFarmIds.join(",")})`);
-        farmsQuery = farmsQuery.or(orFilters.join(","));
-      }
+      farmsQuery = allowedFarmIds.length > 0 ? farmsQuery.in("id", allowedFarmIds) : farmsQuery.in("id", ["00000000-0000-0000-0000-000000000000"]);
 
       const { data: farmRows } = await farmsQuery.order("name");
       const effectiveFarms = (farmRows ?? []) as Farm[];

@@ -67,8 +67,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getSalesContext();
     if (ctx instanceof Response) return ctx;
-    if (!["ceo", "system_admin", "super_admin"].includes(ctx.role)) {
-      return json({ error: "Only CEO or system roles can reconcile monthly profit periods." }, 403);
+    if (ctx.role !== "ceo") {
+      return json({ error: "Only the organization CEO can reconcile monthly profit periods." }, 403);
     }
 
     const body = await request.json();
@@ -209,6 +209,7 @@ export async function POST(request: NextRequest) {
         .from("daily_farm_records")
         .select("normal_eggs, broken_eggs, total_eggs, flock_id")
         .eq("org_id", ctx.orgId)
+        .is("voided_at",null)
         .gte("record_date", periodStart)
         .lte("record_date", periodEnd)
         .limit(10000),
@@ -216,6 +217,7 @@ export async function POST(request: NextRequest) {
         .from("daily_sales_records")
         .select("gross_amount, paid_amount, balance_due, quantity, product_category, branch_id, farm_id, house_id, flock_id, batch_id")
         .eq("org_id", ctx.orgId)
+        .is("voided_at",null)
         .gte("sale_date", periodStart)
         .lte("sale_date", periodEnd)
         .limit(10000),

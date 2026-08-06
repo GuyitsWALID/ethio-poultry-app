@@ -220,6 +220,7 @@ export default function DailyRecordsPage() {
         "id, record_date, flock_id, flock_age_weeks, flock_age_days, feed_intake_grams, feed_intake_quantity, feed_leftover_grams, feed_type, normal_eggs, broken_eggs, dirty_eggs, average_egg_weight_g, total_eggs, production_percentage, deaths, mortality_percentage, deaths_cause, vaccination_status, medication_vitamins, opening_birds, closing_birds, culls, transfers_in, transfers_out, other_removals, water_consumed_liters"
       )
       .eq("org_id", profile.org_id)
+      .is("voided_at",null)
       .order("record_date", { ascending: false })
       .limit(200);
 
@@ -763,15 +764,14 @@ export default function DailyRecordsPage() {
       setFormError("Reopen the feeding day before deleting its Daily Record.");
       return;
     }
-    if (!canCreateRecord || !window.confirm(`Delete daily record for ${row.record_date}?`)) return;
+    if (!canCreateRecord) return;const reason=window.prompt(`Void daily record for ${row.record_date}? Enter the reason:`)?.trim();if(!reason)return;
     setFormError(null);
-    const supabase = createClient();
-    const { error } = await supabase.from("daily_farm_records").delete().eq("id", row.id);
-    if (error) {
-      setFormError(error.message);
+    const response=await fetch("/api/governance/void",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({table:"daily_farm_records",id:row.id,reason})});const payload=await response.json();
+    if (!response.ok) {
+      setFormError(payload.error??"Unable to void record.");
       return;
     }
-    setFormSuccess("Daily record deleted successfully.");
+    setFormSuccess("Daily record voided. Its original values remain in the audit history.");
     await loadRows();
   };
 

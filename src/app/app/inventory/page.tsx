@@ -202,9 +202,9 @@ export default function InventoryPage() {
   const [stockCategory, setStockCategory] = useState("all");
   const [stockRisk, setStockRisk] = useState<"all" | "attention" | "healthy" | "unrated">("all");
 
-  const canManageStock = ["store_keeper", "farm_manager", "ceo", "system_admin", "super_admin"].includes(currentRole);
-  const canRecordCosts = ["store_keeper", "ceo", "system_admin", "super_admin"].includes(currentRole);
-  const canReconcile = ["ceo", "system_admin", "super_admin"].includes(currentRole);
+  const canManageStock = currentRole === "farm_manager";
+  const canRecordCosts = currentRole === "farm_manager";
+  const canReconcile = currentRole === "ceo";
 
   const scopedFlockIds = useMemo(
     () =>

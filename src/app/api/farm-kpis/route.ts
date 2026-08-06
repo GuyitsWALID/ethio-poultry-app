@@ -1,9 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest } from "next/server";
 
-import { normalizeRole } from "@/lib/roles";
+import { getAccessContext,isAccessResponse } from "@/lib/access-context";
 import type { Database } from "@/types/supabase";
-import { createClient as createAuthedClient } from "@/utils/supabase/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -67,29 +66,7 @@ function stockSignedQuantity(row: StockLedgerRow) {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createAuthedClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    }
-
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("org_id, role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (!profile?.org_id) {
-      return new Response(JSON.stringify({ error: "Profile is missing organization access." }), {
-        status: 403,
-      });
-    }
-
-    const orgId = profile.org_id;
-    const role = normalizeRole(profile.role);
+    const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return access;const orgId=access.orgId;const role=access.role;const user={id:access.userId};
     const params = request.nextUrl.searchParams;
     const today = new Date();
     const defaultFrom = new Date(today);
@@ -108,7 +85,6 @@ export async function GET(request: NextRequest) {
       housesRes,
       flocksRes,
       batchesRes,
-      branchAccessRes,
       farmAccessRes,
       inventoryRes,
       stockRes,
@@ -125,10 +101,7 @@ export async function GET(request: NextRequest) {
         .select("id, batch_code, branch_id, farm_id, house_id, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
         .eq("org_id", orgId),
       role === "farm_manager"
-        ? supabaseAdmin.from("user_branch_access").select("branch_id").eq("profile_id", user.id)
-        : Promise.resolve({ data: [] as Array<{ branch_id: string }> }),
-      role === "farm_manager"
-        ? supabaseAdmin.from("user_farm_access").select("farm_id").eq("profile_id", user.id)
+        ? supabaseAdmin.from("user_farm_access").select("farm_id").eq("profile_id", user.id).is("revoked_at",null).lte("starts_at",new Date().toISOString()).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
         : Promise.resolve({ data: [] as Array<{ farm_id: string }> }),
       supabaseAdmin.from("inventory_items").select("id, name, reorder_level, category, unit_cost").eq("org_id", orgId).limit(500),
       supabaseAdmin.from("stock_ledger").select("item_id, quantity, transaction_type, unit_cost, flock_id").eq("org_id", orgId).limit(5000),
@@ -143,16 +116,13 @@ export async function GET(request: NextRequest) {
     const farms = (farmsRes.data ?? []) as FarmRow[];
     const houses = (housesRes.data ?? []) as HouseRow[];
     const batches = (batchesRes.data ?? []) as BatchRow[];
-    const allowedBranchIds = new Set((branchAccessRes.data ?? []).map((row) => row.branch_id));
     const allowedFarmIds = new Set((farmAccessRes.data ?? []).map((row) => row.farm_id));
     const farmById = new Map(farms.map((farm) => [farm.id, farm]));
     const houseById = new Map(houses.map((house) => [house.id, house]));
     let scopedFlocks = ((flocksRes.data ?? []) as FlockRow[]).filter((flock) => {
       const farm = farmById.get(flock.farm_id);
       if (!farm) return false;
-      if (role === "farm_manager" && allowedBranchIds.size + allowedFarmIds.size > 0) {
-        if (!allowedFarmIds.has(flock.farm_id) && !allowedBranchIds.has(farm.branch_id)) return false;
-      }
+      if (role === "farm_manager" && !allowedFarmIds.has(flock.farm_id)) return false;
       if (branchId && farm.branch_id !== branchId) return false;
       if (farmId && flock.farm_id !== farmId) return false;
       if (houseId && flock.house_id !== houseId) return false;
@@ -161,7 +131,7 @@ export async function GET(request: NextRequest) {
       return true;
     });
 
-    if (role === "farm_manager" && allowedBranchIds.size + allowedFarmIds.size === 0) {
+    if (role === "farm_manager" && allowedFarmIds.size === 0) {
       scopedFlocks = [];
     }
 
@@ -172,6 +142,7 @@ export async function GET(request: NextRequest) {
         .from("daily_farm_records")
         .select("*")
         .eq("org_id", orgId)
+        .is("voided_at",null)
         .gte("record_date", dateFrom)
         .lte("record_date", dateTo)
         .in("flock_id", scopedFlockIds)

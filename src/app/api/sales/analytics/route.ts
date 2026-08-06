@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
         .from("daily_sales_records")
         .select("*")
         .eq("org_id", ctx.orgId)
+        .is("voided_at",null)
         .gte("sale_date", dateFrom)
         .lte("sale_date", dateTo)
         .order("sale_date", { ascending: true })
@@ -101,6 +102,7 @@ export async function GET(request: NextRequest) {
         .from("daily_farm_records")
         .select("record_date, flock_id, normal_eggs, broken_eggs, total_eggs, feed_intake_grams")
         .eq("org_id", ctx.orgId)
+        .is("voided_at",null)
         .gte("record_date", dateFrom)
         .lte("record_date", dateTo)
         .limit(10000),

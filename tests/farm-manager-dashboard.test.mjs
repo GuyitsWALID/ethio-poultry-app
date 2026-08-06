@@ -56,11 +56,10 @@ test("missing daily records remain unavailable and actionable", () => {
   assert.equal(result.dataStatus, "missing");
 });
 
-test("farm access combines direct farm and branch assignments", () => {
+test("branch membership never grants operational farm access", () => {
   const ids = authorizedFarmIds(
     [{ id: "farm-a", branch_id: "branch-a" }, { id: "farm-b", branch_id: "branch-b" }, { id: "farm-c", branch_id: "branch-c" }],
     ["branch-a"], ["farm-b"]
   );
-  assert.deepEqual([...ids].sort(), ["farm-a", "farm-b"]);
+  assert.deepEqual([...ids].sort(), ["farm-b"]);
 });
-

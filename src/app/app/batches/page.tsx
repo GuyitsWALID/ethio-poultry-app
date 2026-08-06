@@ -21,6 +21,7 @@ type BatchRow = {
   total_chicks: number;
   chicks_per_flock: number;
   status: string;
+  updated_at:string;
 };
 
 type SlotRow = {
@@ -56,7 +57,7 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
 
     let q = supabase
       .from("batches")
-      .select("id, batch_code, branch_id, farm_id, house_id, placement_date, source, total_count, status")
+      .select("id, batch_code, branch_id, farm_id, house_id, placement_date, source, total_count, status, updated_at")
       .eq("org_id", profile.org_id)
       .order("placement_date", { ascending: false })
       .limit(50);
@@ -74,6 +75,7 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
       source: "internal_transfer" | "external_purchase";
       total_count: number;
       status: string;
+      updated_at:string;
     }>;
 
     const batchIds = batchRows.map((row) => row.id);
@@ -138,16 +140,11 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
     setActionLoadingId(row.id);
     setError(null);
     setSuccess(null);
-    const supabase = createClient();
-    const { error: updateError } = await supabase
-      .from("batches")
-      .update({ batch_code: nextCode })
-      .eq("id", row.id);
-    if (updateError) {
-      setError(updateError.message);
+    const response=await fetch("/api/governance/requests",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({request_type:"locked_correction",farm_id:row.farm_id,source_table:"batches",source_id:row.id,source_version:row.updated_at,changed_fields:["batch_code"],proposed_values:{batch_code:nextCode},reason:`Correct batch code from ${row.batch_code} to ${nextCode}.`})});const payload=await response.json();
+    if (!response.ok) {
+      setError(payload.error??"Unable to submit batch correction.");
     } else {
-      setSuccess("Batch updated.");
-      await loadRows();
+      setSuccess("Batch correction submitted for CEO approval.");
     }
     setActionLoadingId(null);
     setMenuOpenId(null);
@@ -161,38 +158,18 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
     setActionLoadingId(row.id);
     setError(null);
     setSuccess(null);
-    const supabase = createClient();
-    const { error: archiveError } = await supabase.from("batches").update({ status: "archived" }).eq("id", row.id);
-    const { error: flockArchiveError } = await supabase.from("flocks").update({ status: "archived" }).eq("batch_id", row.id).eq("status", "active");
-    if (archiveError || flockArchiveError) {
-      setError(archiveError?.message ?? flockArchiveError?.message ?? "Failed to archive batch.");
+    const response=await fetch("/api/governance/requests",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({request_type:"batch_archive",farm_id:row.farm_id,source_table:"batches",source_id:row.id,source_version:row.updated_at,changed_fields:["status"],proposed_values:{status:"archived"},reason:`Archive completed batch cycle ${row.batch_code}.`})});const payload=await response.json();
+    if (!response.ok) {
+      setError(payload.error??"Failed to submit archive proposal.");
     } else {
-      setSuccess("Batch archived.");
-      await loadRows();
+      setSuccess("Batch archive submitted for CEO approval.");
     }
     setActionLoadingId(null);
     setMenuOpenId(null);
   };
 
   const onDeleteBatch = async (row: BatchRow) => {
-    const ok = window.confirm(`Delete batch ${row.batch_code}? This cannot be undone.`);
-    if (!ok) {
-      setMenuOpenId(null);
-      return;
-    }
-    setActionLoadingId(row.id);
-    setError(null);
-    setSuccess(null);
-    const supabase = createClient();
-    const { error: deleteError } = await supabase.from("batches").delete().eq("id", row.id);
-    if (deleteError) {
-      setError(deleteError.message);
-    } else {
-      setSuccess("Batch deleted.");
-      await loadRows();
-    }
-    setActionLoadingId(null);
-    setMenuOpenId(null);
+    setMenuOpenId(null);setError(`${row.batch_code} cannot be deleted. Use Archive batch to submit a governed lifecycle proposal.`);
   };
 
   const toggleMenu = (rowId: string, button: HTMLButtonElement) => {

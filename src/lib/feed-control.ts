@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { normalizeRole, type AppRole } from "@/lib/roles";
+import { hasCapability } from "@/lib/permissions";
+import { type AppRole } from "@/lib/roles";
+import { getAccessContext,isAccessResponse } from "@/lib/access-context";
 import type { Database } from "@/types/supabase";
-import { createClient as createAuthedClient } from "@/utils/supabase/server";
 
 export { calculateFeedPerBirdDay, calculateGrowthFcr, calculateInventoryCover, calculateLayerFcr, roundFeed } from "@/lib/feed-calculations";
 
@@ -18,7 +19,7 @@ export type FeedContext = {
   role: AppRole;
   canManage: boolean;
   allowedFarmIds: Set<string>;
-  allowedBranchIds: Set<string>;
+  supportSessionId:string|null;
 };
 
 export type FeedTemplateInputRow = {
@@ -54,29 +55,21 @@ export function dateDays(start: string, end: string) {
 }
 
 export async function getFeedContext(): Promise<FeedContext | Response> {
-  const auth = await createAuthedClient();
-  const { data: { user } } = await auth.auth.getUser();
-  if (!user) return feedJson({ error: "Unauthorized" }, 401);
-  const { data: profile, error } = await feedAdmin.from("profiles").select("org_id,role").eq("id", user.id).maybeSingle();
-  if (error) return feedJson({ error: error.message }, 500);
-  if (!profile?.org_id) return feedJson({ error: "Profile is missing organization access." }, 403);
-  const role = normalizeRole(profile.role);
-  if (!["farm_manager", "veterinarian", "store_keeper", "ceo", "system_admin", "super_admin"].includes(role)) {
+  const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return access;const role=access.role;const support=Boolean(access.supportSessionId);
+  if (!support&&!hasCapability(role, "tenant:view")) {
     return feedJson({ error: "Feed Control access is required." }, 403);
   }
-  const [farms, branches] = role === "farm_manager"
-    ? await Promise.all([
-        feedAdmin.from("user_farm_access").select("farm_id").eq("profile_id", user.id),
-        feedAdmin.from("user_branch_access").select("branch_id").eq("profile_id", user.id),
-      ])
-    : [{ data: [] }, { data: [] }];
+  const now = new Date().toISOString();
+  const farms = role === "farm_manager"
+    ? await feedAdmin.from("user_farm_access").select("farm_id").eq("profile_id", access.userId).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`)
+    : support?await feedAdmin.from("farms").select("id").eq("org_id",access.orgId):{ data: [] };
   return {
-    userId: user.id,
-    orgId: profile.org_id,
+    userId: access.userId,
+    orgId: access.orgId,
     role,
-    canManage: ["farm_manager", "ceo", "system_admin", "super_admin"].includes(role),
-    allowedFarmIds: new Set((farms.data ?? []).map((row) => row.farm_id)),
-    allowedBranchIds: new Set((branches.data ?? []).map((row) => row.branch_id)),
+    canManage: support||hasCapability(role, "farm:operate"),
+    allowedFarmIds: new Set((farms.data ?? []).map((row) => "farm_id" in row?row.farm_id:row.id)),
+    supportSessionId:access.supportSessionId,
   };
 }
 
@@ -86,7 +79,7 @@ export async function resolveFeedBatch(ctx: FeedContext, batchId: string) {
     .eq("id", batchId).eq("org_id", ctx.orgId).maybeSingle();
   if (error) return { error: error.message };
   if (!data) return { error: "Batch is not available in this organization." };
-  if (ctx.role === "farm_manager" && !ctx.allowedFarmIds.has(data.farm_id) && !ctx.allowedBranchIds.has(data.branch_id)) {
+  if (ctx.role === "farm_manager" && !ctx.allowedFarmIds.has(data.farm_id)) {
     return { error: "You do not have access to this batch." };
   }
   return { batch: data };

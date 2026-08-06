@@ -27,7 +27,7 @@ export async function GET() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("org_id, role")
+      .select("org_id, role, is_active")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -41,14 +41,24 @@ export async function GET() {
       return org?.name ?? null;
     };
 
-    if (profile?.org_id) {
-      const orgName = await getOrgName(profile.org_id);
+    if (profile?.org_id && profile.is_active && normalizeRole(profile.role)) {
+      let effectiveOrgId = profile.org_id;
+      let supportSession: { id: string; target_org_id: string; expires_at: string } | null = null;
+      if (normalizeRole(profile.role) === "system_admin") {
+        const now = new Date().toISOString();
+        const { data } = await supabaseAdmin.from("break_glass_sessions").select("id,target_org_id,expires_at").eq("administrator_id", user.id).is("revoked_at", null).lte("started_at", now).gt("expires_at", now).order("expires_at", { ascending: false }).limit(1).maybeSingle();
+        supportSession = data;
+        if (data) effectiveOrgId = data.target_org_id;
+      }
+      const orgName = await getOrgName(effectiveOrgId);
       return new Response(
         JSON.stringify({
           userId: user.id,
-          orgId: profile.org_id,
+          orgId: effectiveOrgId,
           orgName,
           role: normalizeRole(profile.role),
+          supportSessionId: supportSession?.id ?? null,
+          supportExpiresAt: supportSession?.expires_at ?? null,
         }),
         { status: 200 }
       );
@@ -56,7 +66,7 @@ export async function GET() {
 
     const { data: adminProfile, error: adminProfileError } = await supabaseAdmin
       .from("profiles")
-      .select("org_id, role")
+      .select("org_id, role, is_active")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -70,7 +80,7 @@ export async function GET() {
         userId: user.id,
         orgId: adminProfile?.org_id ?? null,
         orgName,
-        role: normalizeRole(adminProfile?.role),
+        role: adminProfile?.is_active ? normalizeRole(adminProfile?.role) : null,
       }),
       { status: 200 }
     );

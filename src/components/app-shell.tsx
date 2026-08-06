@@ -26,6 +26,7 @@ const routeTitles = [
   ["/app/inventory", "Inventory Log", "Support functions"],
   ["/app/sales", "Sales", "Support functions"],
   ["/app/alerts", "Alerts", "Operations attention"],
+  ["/app/governance", "Governance", "Controlled change"],
 ] as const;
 
 function addisDateLabel() {
@@ -41,6 +42,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { loading, scope, branches, farms, houses, flocks } = useFarmScope();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [support, setSupport] = useState<{ expiresAt: string; orgName: string } | null>(null);
+
+  useEffect(() => {
+    void fetch("/api/me/context", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((data) => {
+      if (data?.supportSessionId && data?.supportExpiresAt) setSupport({ expiresAt: String(data.supportExpiresAt), orgName: String(data.orgName ?? "tenant") });
+    });
+  }, []);
 
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -67,6 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <AppSidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
 
         <div className="flex min-w-0 flex-1 flex-col">
+          {support ? <div role="status" className="sticky top-0 z-[60] flex items-center justify-center gap-2 bg-ember-600 px-4 py-2 text-center text-xs font-semibold text-white">Support access active for {support.orgName}. Every read and change is audited. Expires {new Date(support.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</div> : null}
           <header className="sticky top-0 z-40 border-b border-sand-200 bg-white/95 shadow-[0_1px_0_rgba(29,42,31,.04)] backdrop-blur-xl">
             <div className="flex min-h-[76px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
               <div className="flex min-w-0 items-center gap-3">

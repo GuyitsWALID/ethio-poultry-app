@@ -19,8 +19,7 @@ import {
   type OperationsAnalyticsResponse,
   type PeriodSummary,
 } from "@/lib/operational-analytics";
-import { normalizeRole } from "@/lib/roles";
-import { createClient as createAuthedClient } from "@/utils/supabase/server";
+import { getAccessContext,isAccessResponse } from "@/lib/access-context";
 
 type DbError = { message: string } | null;
 type Row = Record<string, unknown>;
@@ -130,20 +129,14 @@ function flockType(value: unknown): FlockType {
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await createAuthedClient();
-    const { data: { user } } = await auth.auth.getUser();
-    if (!user) return json({ error: "Unauthorized" }, 401);
+    const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return access;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceKey) return json({ error: "Supabase server configuration is missing." }, 500);
     const db = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
-    const { data: profile } = await db.from("profiles").select("org_id,role").eq("id", user.id).maybeSingle();
-    if (!profile?.org_id) return json({ error: "Profile is missing organization access." }, 403);
-    const role = normalizeRole(profile.role);
-    if (role !== "ceo" && role !== "farm_manager") return json({ error: "Management analytics access required." }, 403);
-    const orgId = profile.org_id;
+    const role=access.role;if(role!=="ceo"&&role!=="farm_manager"&&!access.supportSessionId)return json({error:"Management analytics access required."},403);const orgId=access.orgId;const user={id:access.userId};
 
     const params = request.nextUrl.searchParams;
     const dateTo = params.get("date_to") || addisDate();
@@ -152,17 +145,16 @@ export async function GET(request: NextRequest) {
     const prior = previousPeriod(dateFrom, dateTo);
     if (prior.days > 366) return json({ error: "Analytics ranges are limited to 366 days." }, 400);
 
-    const [farms, houses, flockRows, branchAccess, farmAccess] = await Promise.all([
+    const [farms, houses, flockRows, farmAccess] = await Promise.all([
       allRows<Row>((from, to) => db.from("farms").select("id,name,branch_id").eq("org_id", orgId).range(from, to)),
       allRows<Row>((from, to) => db.from("houses").select("id,name,farm_id").eq("org_id", orgId).range(from, to)),
       allRows<Row>((from, to) => db.from("flocks").select("id,flock_code,flock_type,farm_id,house_id,batch_id,current_count,status,placement_date,age_at_placement_days,breed_id").eq("org_id", orgId).range(from, to)),
-      role === "farm_manager" ? allRows<{ branch_id: string }>((from, to) => db.from("user_branch_access").select("branch_id").eq("profile_id", user.id).range(from, to)) : Promise.resolve([]),
-      role === "farm_manager" ? allRows<{ farm_id: string }>((from, to) => db.from("user_farm_access").select("farm_id").eq("profile_id", user.id).range(from, to)) : Promise.resolve([]),
+      role === "farm_manager" ? allRows<{ farm_id: string }>((from, to) => db.from("user_farm_access").select("farm_id").eq("profile_id", user.id).is("revoked_at",null).lte("starts_at",new Date().toISOString()).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).range(from, to)) : Promise.resolve([]),
     ]);
 
     const allFarmIds = new Set(farms.map((farm) => String(farm.id)));
     const permittedFarmIds = role === "farm_manager"
-      ? authorizedFarmIds(farms.map((farm) => ({ id: String(farm.id), branch_id: String(farm.branch_id) })), branchAccess.map((row) => row.branch_id), farmAccess.map((row) => row.farm_id))
+      ? authorizedFarmIds(farms.map((farm) => ({ id: String(farm.id), branch_id: String(farm.branch_id) })), [], farmAccess.map((row) => row.farm_id))
       : allFarmIds;
     const requestedBranch = params.get("branch_id") ?? "";
     const requestedFarm = params.get("farm_id") ?? "";
@@ -209,7 +201,7 @@ export async function GET(request: NextRequest) {
     const flockIds = scopedFlocks.map((flock) => flock.id);
     const breedIds = [...new Set(scopedFlocks.map((flock) => flock.breedId).filter((value): value is string => Boolean(value)))];
     const [allDailyRows, weightRows, standardRows, settingsResult, inventoryRows, stockRows] = await Promise.all([
-      allRows<AnalyticsDailyRow>((from, to) => db.from("daily_farm_records").select("id,record_date,flock_id,opening_birds,closing_birds,deaths,deaths_cause,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_type,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", orgId).in("flock_id", flockIds).gte("record_date", prior.previousFrom).lte("record_date", dateTo).order("record_date").range(from, to)),
+      allRows<AnalyticsDailyRow>((from, to) => db.from("daily_farm_records").select("id,record_date,flock_id,opening_birds,closing_birds,deaths,deaths_cause,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_type,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", orgId).is("voided_at",null).in("flock_id", flockIds).gte("record_date", prior.previousFrom).lte("record_date", dateTo).order("record_date").range(from, to)),
       allRows<Row>((from, to) => db.from("weight_records").select("flock_id,record_date,average_weight_g,uniformity_pct").eq("org_id", orgId).in("flock_id", flockIds).lte("record_date", dateTo).order("record_date", { ascending: false }).range(from, to)),
       breedIds.length ? allRows<Row>((from, to) => db.from("breed_standards").select("breed_id,week_number,target_hdep_pct,target_mortality_pct,target_feed_g,target_weight_g").eq("org_id", orgId).in("breed_id", breedIds).range(from, to)) : Promise.resolve([]),
       db.from("feed_control_settings").select("warning_variance_pct,critical_variance_pct").eq("org_id", orgId).maybeSingle(),

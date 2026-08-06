@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
       .from("daily_sales_records")
       .select("*")
       .eq("org_id", ctx.orgId)
+      .is("voided_at",null)
       .order("sale_date", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(500);
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
       house_id: cleanText(body.house_id),
       flock_id: cleanText(body.flock_id),
       batch_id: cleanText(body.batch_id),
-      require_farm: productCategory === "egg" || productCategory === "bird",
+      require_farm: true,
     });
     if ("error" in scope) return json({ error: scope.error }, 400);
 

@@ -8,6 +8,7 @@ import {
   supabaseAdmin,
   type DailySalesRecord,
 } from "@/lib/sales";
+import { governanceAdmin } from "@/lib/access-context";
 
 const VALID_CATEGORIES = new Set(["egg", "bird", "training", "equipment_medicine", "consultancy", "package"]);
 
@@ -28,6 +29,7 @@ async function getExistingRecord(ctx: Awaited<ReturnType<typeof getSalesContext>
   const { data, error } = await supabaseAdmin
     .from("daily_sales_records")
     .select("*")
+    .is("voided_at",null)
     .eq("id", id)
     .eq("org_id", ctx.orgId)
     .maybeSingle();
@@ -73,7 +75,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       house_id: cleanText(body.house_id) ?? existing.record.house_id,
       flock_id: cleanText(body.flock_id) ?? existing.record.flock_id,
       batch_id: cleanText(body.batch_id) ?? existing.record.batch_id,
-      require_farm: productCategory === "egg" || productCategory === "bird",
+      require_farm: true,
     });
     if ("error" in scope) return json({ error: scope.error }, 400);
 
@@ -108,25 +110,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await getSalesContext();
     if (ctx instanceof Response) return ctx;
     if (!ctx.canView) return json({ error: "You do not have access to sales records." }, 403);
-    if (!ctx.canMutate) return json({ error: "Only farm managers can delete daily sales records." }, 403);
+    if (!ctx.canMutate) return json({ error: "Only farm managers can void daily sales records." }, 403);
 
     const { id } = await params;
     const existing = await getExistingRecord(ctx, id);
     if (existing.response) return existing.response;
 
-    const { error } = await supabaseAdmin
-      .from("daily_sales_records")
-      .delete()
-      .eq("id", id)
-      .eq("org_id", ctx.orgId);
-
-    if (error) return json({ error: error.message }, 500);
-    return json({ ok: true });
+    const body=await request.json().catch(()=>null) as {reason?:string}|null;const reason=String(body?.reason??"").trim();if(reason.length<8)return json({error:"A void reason of at least eight characters is required."},400);
+    const now=new Date().toISOString();const {data,error}=await governanceAdmin.from("daily_sales_records").update({voided_at:now,voided_by:ctx.userId,void_reason:reason}).eq("id",id).eq("org_id",ctx.orgId).select("*").single();if(error)return json({error:error.message},400);await governanceAdmin.from("governance_audit_events").insert({org_id:ctx.orgId,actor_id:ctx.userId,actor_role:ctx.role,event_type:"business_record.voided",entity_table:"daily_sales_records",entity_id:id,reason,before_values:existing.record,after_values:data});return json({voided:true});
   } catch (error: unknown) {
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
   }

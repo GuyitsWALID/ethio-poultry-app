@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     }
 
     const role = normalizeRole(profile?.role);
-    if (!["ceo", "system_admin", "super_admin"].includes(role)) {
+    if (role !== "ceo") {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
     }
 
@@ -134,8 +134,8 @@ export async function POST(req: Request) {
     }
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error?.message ?? "Unknown error" }), {
+  } catch (error: unknown) {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
       status: 500,
     });
   }

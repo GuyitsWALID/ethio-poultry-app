@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest } from "next/server";
 
 import { calculateProduction, previousPeriod, round, summarizeSales, type ExecutiveDailyRow } from "@/lib/executive-dashboard";
-import { createClient as createAuthedClient } from "@/utils/supabase/server";
+import { getAccessContext,isAccessResponse } from "@/lib/access-context";
 
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
 type DbError = { message: string } | null;
@@ -25,11 +25,7 @@ const matches = (row: { branch_id?: string | null; farm_id?: string | null; hous
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await createAuthedClient();
-    const { data: { user } } = await auth.auth.getUser();
-    if (!user) return json({ error: "Unauthorized" }, 401);
-    const { data: profile } = await admin.from("profiles").select("org_id, role").eq("id", user.id).maybeSingle();
-    if (!profile?.org_id || !["ceo", "system_admin", "super_admin"].includes(String(profile.role))) return json({ error: "Executive access required" }, 403);
+    const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return access;if(access.role!=="ceo"&&!access.supportSessionId)return json({error:"Executive access required"},403);const profile={org_id:access.orgId};
     const p = request.nextUrl.searchParams;
     const today = addisDate();
     const dateTo = p.get("date_to") ?? today;
@@ -44,12 +40,12 @@ export async function GET(request: NextRequest) {
       allRows<Record<string, unknown>>((a,b) => admin.from("houses").select("id,name,farm_id,branch_id,capacity").eq("org_id", profile.org_id).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("batches").select("id,batch_code,branch_id,farm_id,house_id,placement_date,age_at_placement_days,total_count,source,status").eq("org_id", profile.org_id).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("flocks").select("id,flock_code,flock_type,farm_id,house_id,batch_id,initial_count,current_count,status,breed_id").eq("org_id", profile.org_id).range(a,b)),
-      allRows<ExecutiveDailyRow>((a,b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", profile.org_id).gte("record_date",dateFrom).lte("record_date",dateTo).range(a,b)),
-      allRows<ExecutiveDailyRow>((a,b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", profile.org_id).gte("record_date",previous.dateFrom).lte("record_date",previous.dateTo).range(a,b)),
-      allRows<ExecutiveDailyRow>((a,b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", profile.org_id).eq("record_date",today).range(a,b)),
+      allRows<ExecutiveDailyRow>((a,b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", profile.org_id).is("voided_at",null).gte("record_date",dateFrom).lte("record_date",dateTo).range(a,b)),
+      allRows<ExecutiveDailyRow>((a,b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", profile.org_id).is("voided_at",null).gte("record_date",previous.dateFrom).lte("record_date",previous.dateTo).range(a,b)),
+      allRows<ExecutiveDailyRow>((a,b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", profile.org_id).is("voided_at",null).eq("record_date",today).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("feed_day_closures").select("flock_id,batch_id,record_date,status").eq("org_id", profile.org_id).eq("record_date",today).range(a,b)),
-      allRows<Record<string, unknown>>((a,b) => admin.from("daily_sales_records").select("sale_date,gross_amount,paid_amount,balance_due,product_category,branch_id,farm_id,house_id,flock_id,batch_id").eq("org_id", profile.org_id).gte("sale_date",dateFrom).lte("sale_date",dateTo).range(a,b)),
-      allRows<Record<string, unknown>>((a,b) => admin.from("daily_sales_records").select("sale_date,gross_amount,paid_amount,balance_due,product_category,branch_id,farm_id,house_id,flock_id,batch_id").eq("org_id", profile.org_id).gte("sale_date",previous.dateFrom).lte("sale_date",previous.dateTo).range(a,b)),
+      allRows<Record<string, unknown>>((a,b) => admin.from("daily_sales_records").select("sale_date,gross_amount,paid_amount,balance_due,product_category,branch_id,farm_id,house_id,flock_id,batch_id").eq("org_id", profile.org_id).is("voided_at",null).gte("sale_date",dateFrom).lte("sale_date",dateTo).range(a,b)),
+      allRows<Record<string, unknown>>((a,b) => admin.from("daily_sales_records").select("sale_date,gross_amount,paid_amount,balance_due,product_category,branch_id,farm_id,house_id,flock_id,batch_id").eq("org_id", profile.org_id).is("voided_at",null).gte("sale_date",previous.dateFrom).lte("sale_date",previous.dateTo).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("stock_ledger").select("item_id,quantity,transaction_type,unit_cost,transaction_date,branch_id,farm_id,house_id,flock_id,batch_id,expiry_date").eq("org_id",profile.org_id).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("inventory_items").select("id,name,category,reorder_level,unit").eq("org_id",profile.org_id).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("cost_entries").select("amount,entry_date,branch_id,farm_id,house_id,flock_id,batch_id").eq("org_id",profile.org_id).gte("entry_date",dateFrom).lte("entry_date",dateTo).range(a,b)),

@@ -135,11 +135,11 @@ export async function POST(req: Request) {
       }),
       { status: 200 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (createdAuthUserId) {
       await supabaseAdmin.auth.admin.deleteUser(createdAuthUserId);
     }
 
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown setup error" }), { status: 500 });
   }
 }

@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { normalizeRole } from "@/lib/roles";
 import { createClient as createAuthedClient } from "@/utils/supabase/server";
 
-const adminRoles = new Set(["system_admin", "super_admin"]);
+const adminRoles = new Set(["system_admin"]);
 
 export async function GET() {
   try {
@@ -21,7 +21,7 @@ export async function GET() {
     const metadataRole = normalizeRole(user.user_metadata?.role);
     let normalizedRole = metadataRole;
 
-    if (!adminRoles.has(metadataRole)) {
+    if (!metadataRole || !adminRoles.has(metadataRole)) {
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
@@ -35,7 +35,7 @@ export async function GET() {
       normalizedRole = normalizeRole(profile?.role);
     }
 
-    if (!adminRoles.has(normalizedRole)) {
+    if (!normalizedRole || !adminRoles.has(normalizedRole)) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 

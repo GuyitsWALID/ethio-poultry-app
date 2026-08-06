@@ -21,6 +21,7 @@ import {
   Stethoscope,
   X,
   Warehouse,
+  ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -53,6 +54,8 @@ const itemIcons: Record<string, LucideIcon> = {
   "Branch Reports": ClipboardList,
   "Health Log": Stethoscope,
   "Inventory Log": Package,
+  Governance: ShieldCheck,
+  Requests: ShieldCheck,
 };
 
 const ceoNavSections: NavSection[] = [
@@ -63,6 +66,7 @@ const ceoNavSections: NavSection[] = [
       { label: "Branch Network", href: "/app/ceo/setup" },
       { label: "Analytics", href: "/app/analytics" },
       { label: "Reports", href: "/app/reports" },
+      { label: "Governance", href: "/app/governance" },
     ],
   },
   {
@@ -70,6 +74,7 @@ const ceoNavSections: NavSection[] = [
     items: [
       { label: "Farm Network", href: "/app/farms" },
       { label: "Flocks & Batches", href: "/app/flocks" },
+      { label: "Requests", href: "/app/governance" },
       { label: "Daily Records", href: "/app/daily-records" },
       { label: "Feed", href: "/app/feeding-log" },
       { label: "Mortality", href: "/app/mortality" },
@@ -130,7 +135,8 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
       }
 
       const data = await response.json();
-      setRole(normalizeRole(data?.role) as AppRole);
+      const resolvedRole = normalizeRole(data?.role);
+      if (resolvedRole) setRole(resolvedRole);
       const nextOrgName = String(data?.orgName ?? "").trim();
       if (nextOrgName) setOrgName(nextOrgName);
     };
@@ -147,27 +153,6 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
 
   const navSections = useMemo<NavSection[]>(() => {
     if (role === "farm_manager") return farmManagerNavSections;
-    if (role === "veterinarian") {
-      return [
-        {
-          title: "Veterinary",
-          items: [
-            { label: "Mortality", href: "/app/mortality" },
-            { label: "Health", href: "/app/health" },
-          ],
-        },
-      ];
-    }
-    if (role === "store_keeper") {
-      return [
-        {
-          title: "Store Operations",
-          items: [
-            { label: "Inventory", href: "/app/inventory" },
-          ],
-        },
-      ];
-    }
     return ceoNavSections;
   }, [role]);
   const footer = role === "farm_manager" ? "Assigned Branch Scope" : "Organization Scope";

@@ -259,9 +259,9 @@ export default function SalesPage() {
     })
   );
 
-  const canMutate = ["farm_manager", "ceo", "system_admin", "super_admin"].includes(role ?? "");
+  const canMutate = role === "farm_manager";
   useEffect(() => {
-    if (role === "ceo" || role === "system_admin" || role === "super_admin") {
+    if (role === "ceo") {
       setDateFrom(period.dateFrom);
       setDateTo(period.dateTo);
     }

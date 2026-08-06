@@ -20,6 +20,7 @@ export default function SignUpForm({ showSignInLink = true }: SignUpFormProps) {
     event.preventDefault();
     setError(null);
     setIsLoading(true);
+    const selfRegistrationEnabled=false;if(!selfRegistrationEnabled){setError("Self-registration is disabled. A system administrator must onboard the organization and create its initial CEO account.");setIsLoading(false);return}
 
     const formData = new FormData(event.currentTarget);
     const fullName = formData.get("full_name")?.toString().trim() ?? "";
@@ -28,6 +29,11 @@ export default function SignUpForm({ showSignInLink = true }: SignUpFormProps) {
     const email = formData.get("email")?.toString().trim() ?? "";
     const password = formData.get("password")?.toString() ?? "";
     const selectedRole = normalizeRole(formData.get("role")?.toString());
+    if (!selectedRole || selectedRole === "system_admin") {
+      setError("Choose an active organization role.");
+      setIsLoading(false);
+      return;
+    }
 
     const supabase = createClient();
 
@@ -137,8 +143,6 @@ export default function SignUpForm({ showSignInLink = true }: SignUpFormProps) {
           >
             <option value="manager">Manager (CEO access)</option>
             <option value="farm_manager">Farm Manager</option>
-            <option value="veterinarian">Veterinarian</option>
-            <option value="store_keeper">Store Keeper</option>
           </select>
         </div>
 

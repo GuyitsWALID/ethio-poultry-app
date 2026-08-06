@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     source(db.from("flocks").select("id,flock_code,flock_type,breed_id,current_count,initial_count,placement_date,age_at_placement_days,farm_id,house_id,status").eq("org_id", org).eq("batch_id", batchId).eq("status", "active")),
     source(db.from("batch_feed_templates").select("id,name,source_type,is_active,created_at,batch_feed_template_rows(*),batch_feed_template_milestones(*)").eq("org_id", org).eq("batch_id", batchId).order("created_at", { ascending: false })),
     source(db.from("feeding_schedules").select("*").eq("org_id", org).eq("batch_id", batchId).gte("schedule_date", sourceFrom).lte("schedule_date", sourceTo).order("schedule_date")),
-    source(db.from("feeding_session_records").select("*").eq("org_id", org).eq("batch_id", batchId).gte("record_date", sourceFrom).lte("record_date", sourceTo).order("record_date")),
+    source(db.from("feeding_session_records").select("*").eq("org_id", org).is("voided_at",null).eq("batch_id", batchId).gte("record_date", sourceFrom).lte("record_date", sourceTo).order("record_date")),
     source(db.from("feed_day_closures").select("*").eq("org_id", org).eq("batch_id", batchId).gte("record_date", sourceFrom).lte("record_date", sourceTo)),
     Promise.resolve<SourceResult>({ data: [], error: null }),
     Promise.resolve<SourceResult>({ data: [], error: null }),
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
   const flockIds = flocksS.data.map((row) => String(row.id));
   if (flockIds.length) {
     const [daily, weights] = await Promise.all([
-      source(db.from("daily_farm_records").select("id,flock_id,record_date,opening_birds,closing_birds,feed_intake_grams,feed_intake_quantity,feed_leftover_grams,total_eggs,normal_eggs,broken_eggs,dirty_eggs,average_egg_weight_g").eq("org_id", org).in("flock_id", flockIds).gte("record_date", sourceFrom).lte("record_date", sourceTo).order("record_date")),
+      source(db.from("daily_farm_records").select("id,flock_id,record_date,opening_birds,closing_birds,feed_intake_grams,feed_intake_quantity,feed_leftover_grams,total_eggs,normal_eggs,broken_eggs,dirty_eggs,average_egg_weight_g").eq("org_id", org).is("voided_at",null).in("flock_id", flockIds).gte("record_date", sourceFrom).lte("record_date", sourceTo).order("record_date")),
       source(db.from("weight_records").select("*").eq("org_id", org).in("flock_id", flockIds).lte("record_date", sourceTo).order("record_date")),
     ]);
     dailyS.data = daily.data; dailyS.error = daily.error;
@@ -211,6 +211,6 @@ export async function GET(request: Request) {
     template: activeTemplate ? { ...activeTemplate, rows: templateRows, currentTarget } : null, templateVersions: templatesS.data.map((template) => ({ id: template.id, name: template.name, source_type: template.source_type, is_active: template.is_active, created_at: template.created_at })), suggestedRows,
     tasks, milestones, nextCheck: pendingTasks[0] ?? { displayStatus: "All checks complete" }, exceptions,
     settings: { warningVariancePct: warning, criticalVariancePct: critical },
-    permissions: { canManage: ctx.canManage, canConfigure: ["ceo", "system_admin", "super_admin"].includes(ctx.role), canRecordWeight: ["farm_manager", "veterinarian", "ceo", "system_admin", "super_admin"].includes(ctx.role) },
+    permissions: { canManage: ctx.canManage, canConfigure: false, canRecordWeight: ctx.role === "farm_manager" },
   });
 }

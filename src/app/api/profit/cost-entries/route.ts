@@ -69,8 +69,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getSalesContext();
     if (ctx instanceof Response) return ctx;
-    if (!["ceo", "system_admin", "super_admin", "store_keeper"].includes(ctx.role)) {
-      return json({ error: "Only store keeper, CEO, or system roles can create cost entries." }, 403);
+    if (!ctx.canMutate) {
+      return json({ error: "Only farm managers can create operational cost entries." }, 403);
     }
 
     const body = await request.json();

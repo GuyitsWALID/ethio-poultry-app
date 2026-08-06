@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { normalizeRole, type AppRole } from "@/lib/roles";
+import { hasCapability } from "@/lib/permissions";
+import { type AppRole } from "@/lib/roles";
+import { getAccessContext,isAccessResponse } from "@/lib/access-context";
 import type { Database } from "@/types/supabase";
-import { createClient as createAuthedClient } from "@/utils/supabase/server";
 
 export const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,8 +22,8 @@ export type SalesContext = {
   role: AppRole;
   canView: boolean;
   canMutate: boolean;
-  allowedBranchIds: Set<string>;
   allowedFarmIds: Set<string>;
+  supportSessionId:string|null;
 };
 
 export type DailySalesRecord = {
@@ -64,49 +65,28 @@ export function json(data: unknown, status = 200) {
 }
 
 export async function getSalesContext(): Promise<SalesContext | Response> {
-  const supabase = await createAuthedClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return json({ error: "Unauthorized" }, 401);
-
-  const { data: profile, error } = await supabaseAdmin
-    .from("profiles")
-    .select("org_id, role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (error) return json({ error: error.message }, 500);
-  if (!profile?.org_id) return json({ error: "Profile is missing organization access." }, 403);
-
-  const role = normalizeRole(profile.role);
-  const [branchAccessRes, farmAccessRes] =
-    role === "farm_manager"
-      ? await Promise.all([
-          supabaseAdmin.from("user_branch_access").select("branch_id").eq("profile_id", user.id),
-          supabaseAdmin.from("user_farm_access").select("farm_id").eq("profile_id", user.id),
-        ])
-      : [{ data: [] }, { data: [] }];
+  const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return access;const role=access.role;const support=Boolean(access.supportSessionId);
+  if (!support&&!hasCapability(role, "tenant:view")) return json({ error: "Sales access is required." }, 403);
+  const now = new Date().toISOString();
+  const farmAccessRes = role === "farm_manager"
+    ? await supabaseAdmin.from("user_farm_access").select("farm_id").eq("profile_id", access.userId).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`)
+    : support?await supabaseAdmin.from("farms").select("id").eq("org_id",access.orgId):{ data: [] };
 
   return {
-    userId: user.id,
-    orgId: profile.org_id,
+    userId: access.userId,
+    orgId: access.orgId,
     role,
-    canView: ["ceo", "system_admin", "super_admin", "store_keeper", "farm_manager"].includes(role),
-    canMutate: ["farm_manager", "ceo", "system_admin", "super_admin"].includes(role),
-    allowedBranchIds: new Set((branchAccessRes.data ?? []).map((row) => row.branch_id)),
-    allowedFarmIds: new Set((farmAccessRes.data ?? []).map((row) => row.farm_id)),
+    canView: support||hasCapability(role, "tenant:view"),
+    canMutate: support||hasCapability(role, "farm:operate"),
+    allowedFarmIds: new Set((farmAccessRes.data ?? []).map((row) => "farm_id" in row?row.farm_id:row.id)),
+    supportSessionId:access.supportSessionId,
   };
 }
 
 export function hasScopedAccess(ctx: SalesContext, record: { branch_id?: string | null; farm_id?: string | null }) {
   if (ctx.role !== "farm_manager") return true;
-  if (ctx.allowedBranchIds.size + ctx.allowedFarmIds.size === 0) return false;
-  return Boolean(
-    (record.farm_id && ctx.allowedFarmIds.has(record.farm_id)) ||
-      (record.branch_id && ctx.allowedBranchIds.has(record.branch_id))
-  );
+  if (ctx.allowedFarmIds.size === 0) return false;
+  return Boolean(record.farm_id && ctx.allowedFarmIds.has(record.farm_id));
 }
 
 export async function resolveSaleScope(
