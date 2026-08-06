@@ -56,6 +56,8 @@ const itemIcons: Record<string, LucideIcon> = {
   "Inventory Log": Package,
   Governance: ShieldCheck,
   Requests: ShieldCheck,
+  "Operating Days": ClipboardList,
+  "Daily Close": ClipboardList,
 };
 
 const ceoNavSections: NavSection[] = [
@@ -67,6 +69,7 @@ const ceoNavSections: NavSection[] = [
       { label: "Analytics", href: "/app/analytics" },
       { label: "Reports", href: "/app/reports" },
       { label: "Governance", href: "/app/governance" },
+      { label: "Operating Days", href: "/app/operating-days" },
     ],
   },
   {
@@ -96,10 +99,12 @@ const farmManagerNavSections: NavSection[] = [
     items: [
       { label: "Manager Dashboard", href: "/app/farm-manager" },
       { label: "Daily Records", href: "/app/daily-records" },
+      { label: "Daily Close", href: "/app/operating-days" },
       { label: "Feed", href: "/app/feeding-log" },
       { label: "Mortality", href: "/app/mortality" },
       { label: "Farm Monitoring", href: "/app/farms" },
       { label: "Flocks & Batches", href: "/app/flocks" },
+      { label: "Governance", href: "/app/governance" },
     ],
   },
   {

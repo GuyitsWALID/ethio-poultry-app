@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Scale,
   ShieldCheck,
+  Stethoscope,
   Syringe,
   X,
 } from "lucide-react";
@@ -99,6 +100,8 @@ export default function HealthPage() {
   const [showVaccineModal, setShowVaccineModal] = useState(false);
   const [showCleanupModal, setShowCleanupModal] = useState(false);
   const [showWeightModal, setShowWeightModal] = useState(false);
+  const [showEvidenceModal,setShowEvidenceModal]=useState(false);
+  const [currentRole,setCurrentRole]=useState<string|null>(null);
   const [recordWeightModal, setRecordWeightModal] = useState<{ open: boolean; item: ScheduleItem | null }>({
     open: false,
     item: null,
@@ -151,6 +154,10 @@ export default function HealthPage() {
     const parsed = value?.toString().trim();
     return parsed && parsed.length > 0 ? parsed : null;
   };
+  const canOperate=currentRole==="farm_manager"||currentRole==="support";
+  useEffect(()=>{void fetch("/api/me/context",{cache:"no-store"}).then(response=>response.ok?response.json():null).then(data=>setCurrentRole(data?.supportSessionId?"support":data?.role??null))},[]);
+
+  const submitHealthEvidence=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setSaving(true);setError(null);const form=new FormData(event.currentTarget);const payload=Object.fromEntries(form.entries());const response=await fetch("/api/health/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const body=await response.json();setSaving(false);if(!response.ok){setError(body.error??"Health evidence could not be recorded.");return}setShowEvidenceModal(false);setSuccess("Health evidence recorded with its veterinarian recommendation and implementation status.");await loadSchedules()};
   const parseCleanupReason = (value: string | null) => {
     if (!value) return { cleanupType: "", notes: "" };
     const [cleanupType, ...rest] = value.split("|").map((part) => part.trim());
@@ -320,7 +327,6 @@ export default function HealthPage() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadSchedules();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -875,7 +881,7 @@ export default function HealthPage() {
     setActionMenu(isSameItemOpen ? { open: false, item: null, top: 0, left: 0 } : { open: true, item, top: rect.bottom + 6, left: rect.right - 160 });
   };
 
-  const scheduleActions = (item: ScheduleItem) => (
+  const scheduleActions = (item: ScheduleItem) => !canOperate?<span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-forest-500"><ShieldCheck className="h-3.5 w-3.5"/>View only</span>:(
     <div className="flex items-center gap-2">
       <button type="button" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-leaf-500/35 px-3 text-[11px] font-semibold text-forest-700 transition hover:bg-leaf-500/10 disabled:cursor-not-allowed disabled:opacity-40" disabled={saving || (item.status === "completed" && item.type !== "weight")} onClick={() => void markSchedule(item, "completed")}>
         <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />{item.type === "weight" ? "Record" : "Complete"}
@@ -895,11 +901,12 @@ export default function HealthPage() {
         <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full border-[42px] border-leaf-500/10" aria-hidden="true" />
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.22em] text-amber-300"><HeartPulse className="h-4 w-4" aria-hidden="true" />Flock health protection desk</div><h1 className="mt-3 font-display text-3xl font-semibold leading-tight sm:text-4xl">Keep every preventive action on the runway</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100">Plan vaccination, biosecurity and weight checks in one clinical operations view. Overdue work rises first, upcoming work stays visible, and every completion leaves an auditable flock record.</p></div>
-          <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[520px]">
+          {canOperate?<div className="grid gap-2 sm:grid-cols-2 xl:min-w-[600px] xl:grid-cols-4">
+            <button type="button" onClick={() => setShowEvidenceModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-semibold text-forest-950 transition hover:bg-amber-300"><Stethoscope className="h-4 w-4" aria-hidden="true" />Health evidence</button>
             <button type="button" onClick={() => setShowVaccineModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sand-50 px-4 text-xs font-semibold text-forest-900 transition hover:bg-white"><Syringe className="h-4 w-4" aria-hidden="true" />Vaccination</button>
             <button type="button" onClick={() => setShowCleanupModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Eraser className="h-4 w-4" aria-hidden="true" />Biosecurity</button>
             <button type="button" onClick={() => setShowWeightModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Scale className="h-4 w-4" aria-hidden="true" />Weight check</button>
-          </div>
+          </div>:<div className="rounded-xl border border-white/20 bg-white/[.07] px-4 py-3 text-sm text-sand-100"><ShieldCheck className="mb-2 h-5 w-5 text-amber-300"/>Executive evidence view. Operational entry remains with assigned Farm Managers.</div>}
         </div>
       </header>
 
@@ -941,6 +948,8 @@ export default function HealthPage() {
 
         <div className="hidden max-w-full overflow-x-auto md:block"><table className="min-w-[1120px] w-full text-left text-sm"><thead><tr className="border-b border-sand-200 bg-sand-50 text-[10px] uppercase tracking-[.12em] text-forest-500"><th className="px-5 py-3">Due date</th><th className="px-4 py-3">Intervention</th><th className="px-4 py-3">Farm / house</th><th className="px-4 py-3">Flock</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Clinical context</th><th className="px-5 py-3">Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan={7} className="px-5 py-10 text-center text-forest-600">Loading the health work ledger…</td></tr> : healthFilteredSchedules.length === 0 ? <tr><td colSpan={7} className="px-5 py-12 text-center"><CalendarCheck2 className="mx-auto h-6 w-6 text-forest-400" aria-hidden="true" /><p className="mt-3 font-semibold text-forest-900">No health work matches these filters</p><p className="mt-1 text-xs text-forest-600">Broaden the scope or schedule the next intervention.</p></td></tr> : healthFilteredSchedules.map((item) => { const target = targetLabel(item); return <tr key={`${item.type}-${item.id}`} className="border-b border-sand-100 align-top last:border-0 hover:bg-sand-50/50"><td className="px-5 py-4"><p className="font-semibold text-forest-900">{formatDate(item.date, true)}</p><p className="mt-1 text-[11px] text-forest-500">{item.date === addisToday() ? "Due today" : item.date < addisToday() && item.status !== "completed" ? "Past due" : "Scheduled date"}</p></td><td className="px-4 py-4"><div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-sand-50 text-forest-600"><ScheduleTypeIcon type={item.type} /></span><span className="font-medium text-forest-900">{scheduleTypeLabel(item.type)}</span></div></td><td className="px-4 py-4"><p className="text-forest-900">{target.farm}</p><p className="mt-1 text-[11px] text-forest-500">{target.house}</p></td><td className="px-4 py-4 font-medium text-forest-900">{target.flock}</td><td className="px-4 py-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.06em] ${badgeClass(item.status)}`}>{item.status}</span></td><td className="max-w-[330px] px-4 py-4"><p className="text-xs leading-5 text-forest-800">{item.scheduleReason ?? "No schedule description"}</p>{item.reason ? <p className="mt-1 text-[11px] leading-4 text-forest-500">Outcome: {item.reason}</p> : null}</td><td className="px-5 py-4">{scheduleActions(item)}</td></tr>; })}</tbody></table></div>
       </section>
+
+      {showEvidenceModal ? <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" aria-labelledby="health-evidence-title" className="mx-auto my-4 w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-300">Clinical evidence chain</p><h2 id="health-evidence-title" className="mt-1 font-display text-2xl font-semibold">Record health event and external guidance</h2><p className="mt-1 text-xs text-sand-200">The Farm Manager records the event; the consultant remains an external evidence source.</p></div><button type="button" aria-label="Close health evidence form" onClick={()=>setShowEvidenceModal(false)} className="grid h-10 w-10 place-items-center rounded-xl border border-white/15"><X className="h-4 w-4"/></button></div><form onSubmit={submitHealthEvidence} className="grid gap-4 p-5 md:grid-cols-2"><label className="grid gap-1 text-sm text-forest-700">Flock<select name="flock_id" required defaultValue={scope.flockId} className="h-11 rounded-xl border border-sand-200 px-3"><option value="">Select flock</option>{filteredFlocks.map(flock=><option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">Event date<input name="event_date" type="date" required defaultValue={addisToday()} max={addisToday()} className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700">Event type<select name="event_type" className="h-11 rounded-xl border border-sand-200 px-3"><option value="observation">Observation</option><option value="disease">Disease</option><option value="treatment">Treatment</option></select></label><label className="grid gap-1 text-sm text-forest-700">Diagnosis<input name="diagnosis" className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">Observed condition<textarea name="description" required className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">Action taken or decline reason<textarea name="treatment" className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><fieldset className="grid gap-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 md:col-span-2 md:grid-cols-2"><legend className="px-2 text-sm font-semibold text-forest-900">External veterinary guidance · optional</legend><label className="grid gap-1 text-sm text-forest-700">Veterinarian name<input name="external_veterinarian_name" className="h-11 rounded-xl border border-sand-200 bg-white px-3"/></label><label className="grid gap-1 text-sm text-forest-700">Implementation status<select name="recommendation_status" className="h-11 rounded-xl border border-sand-200 bg-white px-3"><option value="">No external guidance</option><option value="received">Received</option><option value="planned">Planned</option><option value="implemented">Implemented</option><option value="declined">Declined</option></select></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">Recommendation<textarea name="veterinarian_recommendation" className="min-h-20 rounded-xl border border-sand-200 bg-white p-3"/></label><label className="grid gap-1 text-sm text-forest-700">Reference<input name="veterinarian_reference" placeholder="Letter, case, or consultation reference" className="h-11 rounded-xl border border-sand-200 bg-white px-3"/></label><label className="grid gap-1 text-sm text-forest-700">Supporting document URL<input name="attachment_url" type="url" placeholder="https://…" className="h-11 rounded-xl border border-sand-200 bg-white px-3"/></label></fieldset><button type="submit" disabled={saving} className="min-h-11 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50 md:col-span-2">{saving?"Recording…":"Record health evidence"}</button></form></div></div>:null}
 
       {showWeightModal ? (
         <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm">

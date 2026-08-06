@@ -308,7 +308,7 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
             {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
           </select>
         </label>
-        <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={onCreate}>
+        {role==="farm_manager"?<form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={onCreate}>
           <input name="batch_code" required placeholder="Batch code" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <select name="source" className="h-11 rounded-xl border border-sand-200 px-3 text-sm">
             <option value="external_purchase">External Purchase</option>
@@ -373,7 +373,7 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
           <button type="submit" disabled={loading} className="md:col-span-2 min-h-11 rounded-xl bg-forest-900 px-4 py-2 text-sm font-semibold text-sand-50 disabled:opacity-60">
             {loading ? "Saving..." : "Create Batch"}
           </button>
-        </form>
+        </form>:<div className="mt-4 rounded-xl border border-sand-200 bg-sand-50 p-4 text-sm text-forest-700">Executive view only. Farm Managers submit batch proposals; the CEO decides them in Governance.</div>}
       </section>
 
       <section className="min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
@@ -401,7 +401,7 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
                   <td className="px-2 py-2 text-forest-700">{row.total_chicks}</td>
                   <td className="px-2 py-2 text-forest-700">{row.chicks_per_flock}</td>
                   <td className="px-2 py-2 text-right">
-                    <button
+                    {role==="farm_manager"?<button
                       type="button"
                       className="rounded-md border border-sand-200 p-1.5 text-forest-700 hover:bg-sand-50"
                       onClick={(e) => toggleMenu(row.id, e.currentTarget)}
@@ -409,7 +409,7 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
                       aria-label="Batch actions"
                     >
                       <MoreHorizontal className="h-4 w-4" />
-                    </button>
+                    </button>:<span className="text-xs font-semibold text-forest-500">View only</span>}
                   </td>
                 </tr>
               ))}
@@ -421,7 +421,7 @@ export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
             </tbody>
           </table>
         </div>
-        {menuOpenId && menuPosition
+        {role==="farm_manager" && menuOpenId && menuPosition
           ? createPortal(
               <div
                 className="fixed z-50 w-32 rounded-lg border border-sand-200 bg-white p-1 shadow-lg"

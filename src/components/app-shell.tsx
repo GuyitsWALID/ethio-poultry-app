@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Menu, MapPin, PanelsTopLeft } from "lucide-react";
+import { CalendarDays, Menu, MapPin, PanelsTopLeft, ShieldX } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
@@ -27,6 +27,7 @@ const routeTitles = [
   ["/app/sales", "Sales", "Support functions"],
   ["/app/alerts", "Alerts", "Operations attention"],
   ["/app/governance", "Governance", "Controlled change"],
+  ["/app/operating-days", "Operating Days", "Daily closebook"],
 ] as const;
 
 function addisDateLabel() {
@@ -42,13 +43,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { loading, scope, branches, farms, houses, flocks } = useFarmScope();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [support, setSupport] = useState<{ expiresAt: string; orgName: string } | null>(null);
+  const [support, setSupport] = useState<{ id:string;expiresAt: string; orgName: string } | null>(null);
 
   useEffect(() => {
     void fetch("/api/me/context", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((data) => {
-      if (data?.supportSessionId && data?.supportExpiresAt) setSupport({ expiresAt: String(data.supportExpiresAt), orgName: String(data.orgName ?? "tenant") });
+      if (data?.supportSessionId && data?.supportExpiresAt) setSupport({ id:String(data.supportSessionId),expiresAt: String(data.supportExpiresAt), orgName: String(data.orgName ?? "tenant") });
     });
   }, []);
+
+  const endSupport=async()=>{if(!support)return;const reason=window.prompt("Why are you ending this support session?")?.trim();if(!reason)return;const response=await fetch(`/api/governance/break-glass/sessions/${support.id}`,{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason})});if(response.ok){setSupport(null);window.location.assign("/admin/dashboard")}};
 
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -75,7 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <AppSidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {support ? <div role="status" className="sticky top-0 z-[60] flex items-center justify-center gap-2 bg-ember-600 px-4 py-2 text-center text-xs font-semibold text-white">Support access active for {support.orgName}. Every read and change is audited. Expires {new Date(support.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</div> : null}
+          {support ? <div role="status" className="sticky top-0 z-[60] flex flex-wrap items-center justify-center gap-3 bg-ember-600 px-4 py-2 text-center text-xs font-semibold text-white"><span>Support access active for {support.orgName}. Every read and change is audited. Expires {new Date(support.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</span><button type="button" onClick={()=>void endSupport()} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/30 px-3 hover:bg-white/10"><ShieldX className="h-3.5 w-3.5"/>End support session</button></div> : null}
           <header className="sticky top-0 z-40 border-b border-sand-200 bg-white/95 shadow-[0_1px_0_rgba(29,42,31,.04)] backdrop-blur-xl">
             <div className="flex min-h-[76px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
               <div className="flex min-w-0 items-center gap-3">

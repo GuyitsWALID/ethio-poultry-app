@@ -4,14 +4,15 @@ export async function GET() {
   const ctx = await getAccessContext({ tenant: true });
   if (isAccessResponse(ctx)) return ctx;
   if (ctx.role !== "ceo") return accessJson({ error: "CEO access is required." }, 403);
-  const now = new Date().toISOString();
   const [farm, warehouse, unassigned] = await Promise.all([
-    governanceAdmin.from("user_farm_access").select("*").eq("org_id", ctx.orgId).is("revoked_at", null).or(`expires_at.is.null,expires_at.gt.${now}`),
-    governanceAdmin.from("user_warehouse_access").select("*").eq("org_id", ctx.orgId).is("revoked_at", null).or(`expires_at.is.null,expires_at.gt.${now}`),
+    governanceAdmin.from("user_farm_access").select("*").eq("org_id", ctx.orgId).order("created_at", { ascending: false }),
+    governanceAdmin.from("user_warehouse_access").select("*").eq("org_id", ctx.orgId).order("created_at", { ascending: false }),
     governanceAdmin.from("warehouses").select("id,name").eq("org_id", ctx.orgId),
   ]);
-  const warehouseManagerIds = new Set((warehouse.data ?? []).map((row) => row.warehouse_id));
-  return accessJson({ farmAssignments: farm.data ?? [], warehouseAssignments: warehouse.data ?? [], unassignedWarehouses: (unassigned.data ?? []).filter((row) => !warehouseManagerIds.has(row.id)) });
+  const now = Date.now();
+  const warehouseManagerIds = new Set((warehouse.data ?? []).filter((row) => !row.revoked_at && (!row.expires_at || Date.parse(row.expires_at) > now) && Date.parse(row.starts_at) <= now).map((row) => row.warehouse_id));
+  const withStatus=<T extends {starts_at:string;expires_at:string|null;revoked_at:string|null}>(rows:T[])=>rows.map(row=>({...row,assignment_status:row.revoked_at?"Revoked":Date.parse(row.starts_at)>now?"Scheduled":row.expires_at&&Date.parse(row.expires_at)<=now?"Expired":"Active"}));
+  return accessJson({ farmAssignments: withStatus(farm.data ?? []), warehouseAssignments: withStatus(warehouse.data ?? []), unassignedWarehouses: (unassigned.data ?? []).filter((row) => !warehouseManagerIds.has(row.id)) });
 }
 
 export async function POST(request: Request) {
@@ -24,12 +25,12 @@ export async function POST(request: Request) {
   const {data:manager}=await governanceAdmin.from("profiles").select("id").eq("id",profileId).eq("org_id",ctx.orgId).eq("role","farm_manager").eq("is_active",true).maybeSingle();if(!manager)return accessJson({error:"Assignments can only be granted to an active farm manager."},400);
   const table=scopeType==="farm"?"user_farm_access":"user_warehouse_access";const scopeColumn=scopeType==="farm"?"farm_id":"warehouse_id";
   const {data:scope}=await governanceAdmin.from(scopeType==="farm"?"farms":"warehouses").select("id").eq("id",scopeId).eq("org_id",ctx.orgId).maybeSingle();if(!scope)return accessJson({error:"Scope is outside this organization."},400);
-  const {data,error}=await governanceAdmin.from(table).upsert({org_id:ctx.orgId,profile_id:profileId,[scopeColumn]:scopeId,starts_at:startsAt,expires_at:expiresAt,revoked_at:null,revoked_by:null,granted_by:ctx.userId},{onConflict:`profile_id,${scopeColumn}`}).select("*").single();
+  const {data,error}=await governanceAdmin.from(table).upsert({org_id:ctx.orgId,profile_id:profileId,[scopeColumn]:scopeId,starts_at:startsAt,expires_at:expiresAt,revoked_at:null,revoked_by:null,revocation_reason:null,granted_by:ctx.userId},{onConflict:`profile_id,${scopeColumn}`}).select("*").single();
   if(error)return accessJson({error:error.message},400);await governanceAdmin.from("governance_audit_events").insert({org_id:ctx.orgId,actor_id:ctx.userId,actor_role:ctx.role,event_type:`assignment.${scopeType}.granted`,entity_table:table,entity_id:data.id,after_values:data});return accessJson({assignment:data},201);
 }
 
 export async function DELETE(request: Request) {
   const ctx=await getAccessContext({tenant:true});if(isAccessResponse(ctx))return ctx;if(ctx.role!=="ceo")return accessJson({error:"Only the CEO can revoke assignments."},403);
   const body=await request.json().catch(()=>null) as {scope_type?:string;assignment_id?:string;reason?:string}|null;const scopeType=String(body?.scope_type??"");const id=String(body?.assignment_id??"");const reason=String(body?.reason??"").trim();if(!["farm","warehouse"].includes(scopeType)||!id||reason.length<8)return accessJson({error:"Assignment and a revocation reason of at least eight characters are required."},400);
-  const table=scopeType==="farm"?"user_farm_access":"user_warehouse_access";const {data:before}=await governanceAdmin.from(table).select("*").eq("id",id).eq("org_id",ctx.orgId).maybeSingle();if(!before)return accessJson({error:"Assignment not found."},404);const {data,error}=await governanceAdmin.from(table).update({revoked_at:new Date().toISOString(),revoked_by:ctx.userId}).eq("id",id).eq("org_id",ctx.orgId).select("*").single();if(error)return accessJson({error:error.message},400);await governanceAdmin.from("governance_audit_events").insert({org_id:ctx.orgId,actor_id:ctx.userId,actor_role:ctx.role,event_type:`assignment.${scopeType}.revoked`,entity_table:table,entity_id:id,reason,before_values:before,after_values:data});return accessJson({assignment:data});
+  const table=scopeType==="farm"?"user_farm_access":"user_warehouse_access";const {data:before}=await governanceAdmin.from(table).select("*").eq("id",id).eq("org_id",ctx.orgId).maybeSingle();if(!before)return accessJson({error:"Assignment not found."},404);if(before.revoked_at)return accessJson({error:"Assignment is already revoked."},409);const {data,error}=await governanceAdmin.from(table).update({revoked_at:new Date().toISOString(),revoked_by:ctx.userId,revocation_reason:reason}).eq("id",id).eq("org_id",ctx.orgId).select("*").single();if(error)return accessJson({error:error.message},400);await governanceAdmin.from("governance_audit_events").insert({org_id:ctx.orgId,actor_id:ctx.userId,actor_role:ctx.role,event_type:`assignment.${scopeType}.revoked`,entity_table:table,entity_id:id,reason,before_values:before,after_values:data});return accessJson({assignment:data});
 }
