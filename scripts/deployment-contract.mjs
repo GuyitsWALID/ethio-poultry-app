@@ -6,9 +6,12 @@ import { fileURLToPath } from "node:url";
 export const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const migrationDirectory = path.join(repositoryRoot, "supabase", "migrations");
 export const migrationLockPath = path.join(repositoryRoot, "supabase", "migrations.lock.json");
+export const migrationBaselineManifestPath = path.join(repositoryRoot, "supabase", "migration-baseline.json");
+export const legacyMigrationMapPath = path.join(repositoryRoot, "supabase", "legacy-migration-map.json");
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const present = (value) => typeof value === "string" && value.trim().length > 0;
+const compareCodePoints = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
 
 function parseEnvironmentFile(contents) {
   const parsed = {};
@@ -111,29 +114,100 @@ export function validateEnvironment(env = process.env) {
   };
 }
 
-export async function buildMigrationLock() {
-  const names = (await readdir(migrationDirectory))
-    .filter((name) => name.endsWith(".sql"))
-    .sort((a, b) => a.localeCompare(b));
-  const files = {};
+export function validateMigrationSequence(names, coveredThrough) {
+  const errors = [];
   const versions = new Map();
-  for (const name of names) {
-    if (!/^\d{8}(?:\d{6})?_[a-z0-9][a-z0-9_]*\.sql$/.test(name)) {
-      throw new Error(`Migration filename is not deterministic: ${name}`);
+  const coveredIndex = names.indexOf(coveredThrough);
+  if (coveredIndex < 0) errors.push(`Baseline head is missing from migrations: ${coveredThrough}`);
+
+  for (const [index, name] of names.entries()) {
+    if (!/^\d{14}_[a-z0-9][a-z0-9_]*\.sql$/.test(name)) {
+      errors.push(`Migration filename must use a unique 14-digit UTC version: ${name}`);
+      continue;
     }
     const version = name.split("_", 1)[0];
-    versions.set(version, [...(versions.get(version) || []), name]);
+    versions.set(version, [...(versions.get(version) || []), { index, name }]);
+  }
+
+  const duplicateVersions = [];
+  for (const [version, entries] of versions) {
+    if (entries.length < 2) continue;
+    duplicateVersions.push(version);
+    errors.push(`Duplicate migration version is not allowed: ${version}`);
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    coveredIndex,
+    duplicateVersions,
+    coveredNames: coveredIndex < 0 ? [] : names.slice(0, coveredIndex + 1),
+  };
+}
+
+export async function loadMigrationBaseline() {
+  const manifest = JSON.parse(await readFile(migrationBaselineManifestPath, "utf8"));
+  const schemaPath = path.resolve(path.dirname(migrationBaselineManifestPath), manifest.schemaFile || "");
+  const baselineRoot = `${path.join(repositoryRoot, "supabase", "baselines")}${path.sep}`;
+  if (!schemaPath.startsWith(baselineRoot)) throw new Error("Migration baseline schemaFile must stay inside supabase/baselines.");
+  const schemaHash = sha256(await readFile(schemaPath));
+  if (schemaHash !== manifest.schemaSha256) throw new Error("Migration baseline differs from its verified SHA-256 hash.");
+  if (manifest.containsBusinessData !== false) throw new Error("Migration baseline must explicitly declare that it contains no business data.");
+  if (!Array.isArray(manifest.retiredHistoryVersions) || manifest.retiredHistoryVersions.some((version) => !/^\d{8}$/.test(version))) {
+    throw new Error("Migration baseline retiredHistoryVersions must contain only legacy eight-digit versions.");
+  }
+  return { ...manifest, schemaPath, schemaHash };
+}
+
+export async function loadLegacyMigrationMap() {
+  const migrationMap = JSON.parse(await readFile(legacyMigrationMapPath, "utf8"));
+  const entries = Object.entries(migrationMap.files || {}).sort(([left], [right]) => compareCodePoints(left, right));
+  if (!entries.length) throw new Error("Legacy migration map must preserve at least one canonicalized filename.");
+  const canonical = [];
+  for (const [legacyName, canonicalName] of entries) {
+    if (!/^\d{8}_[a-z0-9][a-z0-9_]*\.sql$/.test(legacyName)) throw new Error(`Invalid legacy migration name: ${legacyName}`);
+    if (!/^\d{14}_[a-z0-9][a-z0-9_]*\.sql$/.test(canonicalName)) throw new Error(`Invalid canonical migration name: ${canonicalName}`);
+    const contentHash = sha256(await readFile(path.join(migrationDirectory, canonicalName)));
+    canonical.push(`${legacyName}\0${canonicalName}\0${contentHash}\n`);
+  }
+  const aggregateSha256 = sha256(canonical.join(""));
+  if (aggregateSha256 !== migrationMap.contentAggregateSha256) {
+    throw new Error("Canonicalized legacy migration contents differ from the reviewed migration map.");
+  }
+  return { ...migrationMap, aggregateSha256 };
+}
+
+export async function buildMigrationLock() {
+  const names = (await readdir(migrationDirectory)).filter((name) => name.endsWith(".sql")).sort(compareCodePoints);
+  const baseline = await loadMigrationBaseline();
+  const legacyMap = await loadLegacyMigrationMap();
+  const sequence = validateMigrationSequence(names, baseline.coveredThrough);
+  if (!sequence.ok) throw new Error(sequence.errors.join("\n"));
+  const files = {};
+  for (const name of names) {
     files[name] = sha256(await readFile(path.join(migrationDirectory, name)));
   }
-  const duplicateVersions = [...versions.entries()].filter(([, entries]) => entries.length > 1).map(([version]) => version);
-  const canonical = Object.entries(files).map(([name, hash]) => `${name}\0${hash}\n`).join("");
+  const canonical = [
+    `baseline\0${baseline.schemaHash}\0${baseline.coveredThrough}\n`,
+    `retired\0${baseline.retiredHistoryVersions.join(",")}\n`,
+    `legacy-map\0${legacyMap.aggregateSha256}\n`,
+    Object.entries(files).map(([name, hash]) => `${name}\0${hash}\n`).join(""),
+  ].join("");
   return {
-    version: 1,
+    version: 2,
     algorithm: "sha256",
     count: names.length,
     latest: names.at(-1) || null,
     aggregateSha256: sha256(canonical),
-    legacyDuplicateVersions: duplicateVersions,
+    baseline: {
+      schemaFile: baseline.schemaFile,
+      schemaSha256: baseline.schemaHash,
+      coveredThrough: baseline.coveredThrough,
+      containsBusinessData: false,
+      retiredHistoryVersions: baseline.retiredHistoryVersions,
+    },
+    baselineCoveredVersions: [...new Set(sequence.coveredNames.map((name) => name.split("_", 1)[0]))],
+    legacyMigrationMapSha256: legacyMap.aggregateSha256,
     files,
   };
 }
@@ -145,9 +219,11 @@ export async function verifyMigrationLock() {
   if (expected.aggregateSha256 !== actual.aggregateSha256) errors.push("Migration files differ from the reviewed lock.");
   if (expected.count !== actual.count) errors.push(`Migration count changed from ${expected.count} to ${actual.count}.`);
   if (expected.latest !== actual.latest) errors.push(`Latest migration changed from ${expected.latest} to ${actual.latest}.`);
-  const approvedLegacy = new Set(expected.legacyDuplicateVersions || []);
-  for (const version of actual.legacyDuplicateVersions) {
-    if (!approvedLegacy.has(version)) errors.push(`New duplicate migration version ${version} is not allowed.`);
+  if (expected.baseline?.schemaSha256 !== actual.baseline.schemaSha256) errors.push("Migration baseline hash changed.");
+  if (expected.baseline?.coveredThrough !== actual.baseline.coveredThrough) errors.push("Migration baseline coverage changed.");
+  if (expected.legacyMigrationMapSha256 !== actual.legacyMigrationMapSha256) errors.push("Legacy migration rename map changed.");
+  if (JSON.stringify(expected.baseline?.retiredHistoryVersions || []) !== JSON.stringify(actual.baseline.retiredHistoryVersions)) {
+    errors.push("Retired migration-history transition changed.");
   }
   return { ok: errors.length === 0, errors, expected, actual };
 }
@@ -165,5 +241,7 @@ export async function createReleaseManifest(env = process.env) {
     migrationCount: migration.count,
     migrationHead: migration.latest,
     migrationAggregateSha256: migration.aggregateSha256,
+    migrationBaselineSha256: migration.baseline.schemaSha256,
+    migrationBaselineCoveredThrough: migration.baseline.coveredThrough,
   };
 }

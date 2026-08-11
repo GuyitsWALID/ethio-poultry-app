@@ -67,6 +67,9 @@ Status: implemented; external staging evidence required
 - [x] Environment and release-identity validation
 - [x] Self-hosted Fraunces and IBM Plex Sans application fonts
 - [x] Cryptographically locked migration-chain verification
+- [x] Verified data-free production baseline for empty environments
+- [x] Canonical 14-digit migration history and metadata-only adoption guard
+- [x] Guarded bootstrap and idempotent migration deployment commands
 - [x] Production-like database preflight
 - [x] Protected staging release gate
 - [x] Release, migration, staging, and rollback runbooks

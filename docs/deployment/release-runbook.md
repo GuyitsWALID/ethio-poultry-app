@@ -21,8 +21,8 @@ This runbook is the authoritative order for staging and production releases. A r
 ## Staging gate
 
 1. Deploy the exact candidate commit to the staging application environment.
-2. Apply pending migrations to staging in a single controlled change window.
-3. Set `DATABASE_URL` locally without printing it, then run `npm run db:verify`.
+2. Run `npm run db:history:inspect`. A schema restored from the verified baseline must complete the one-time `db:history:adopt` procedure before deployment.
+3. Apply pending migrations with the guarded `npm run db:deploy` command in a controlled change window; it runs the database preflight automatically.
 4. Run the GitHub **Staging release gate** against the immutable staging URL.
 5. Complete the role smoke tests in [staging-validation.md](staging-validation.md).
 6. Do not promote a different commit than the one that passed staging.
@@ -32,8 +32,8 @@ This runbook is the authoritative order for staging and production releases. A r
 1. Announce the release window and suspend routine entry if the migration is not backward compatible.
 2. Confirm the latest automated backup completed. Record its timestamp and recovery target.
 3. Take an additional pre-release database backup when the migration changes business data or constraints.
-4. Verify the production migration history and review the SQL diff. Never edit or rename an applied migration.
-5. Apply database changes before application code only when the changes are backward compatible. Otherwise use the expand/migrate/contract sequence across separate releases.
+4. Verify production history with `npm run db:history:inspect` and review the SQL diff. Never edit or rename an applied migration or history marker.
+5. Apply database changes through `npm run db:deploy` before application code only when the changes are backward compatible. Otherwise use the expand/migrate/contract sequence across separate releases.
 6. Run `npm run db:verify` against production.
 7. Deploy the exact staged application commit.
 8. Verify sign-in, CEO read access, farm-manager assigned-farm access, alerts, Daily Records, Feed Control, inventory, sales, governance, and reconciliation.

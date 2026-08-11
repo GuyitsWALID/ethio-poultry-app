@@ -1,6 +1,6 @@
 # Item 2 governance rollout
 
-Apply `20260804_governance_permissions_foundation.sql` additively before deploying the application changes. The migration deliberately fails on duplicate active CEOs; resolve those organizations explicitly instead of choosing an account silently.
+Apply `20260804000000_governance_permissions_foundation.sql` additively before deploying the application changes. The migration deliberately fails on duplicate active CEOs; resolve those organizations explicitly instead of choosing an account silently.
 
 Before enforcement, review:
 

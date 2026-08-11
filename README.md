@@ -35,6 +35,17 @@ npm run db:verify
 Remove-Item Env:DATABASE_URL
 ```
 
+Database releases use guarded interfaces rather than raw migration commands:
+
+```powershell
+npm run db:history:inspect  # read-only history comparison
+npm run db:history:adopt    # one-time metadata adoption after verified restore
+npm run db:deploy           # apply pending locked migrations
+npm run db:bootstrap        # empty databases only
+```
+
+See the migration policy before using a mutating database command. Confirmation variables are required, credentials are never printed, and the verified baseline contains schema only—not production business data.
+
 ## Deployment
 
 - [Release and rollback runbook](docs/deployment/release-runbook.md)

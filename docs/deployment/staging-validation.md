@@ -15,6 +15,8 @@ Create a protected GitHub environment named `staging` with an approval requireme
 
 Deploy the candidate commit through the hosting provider's immutable preview or staging deployment. Then manually run **Staging release gate** and supply that deployment's HTTPS URL.
 
+For the first staging setup, restore the verified data-free baseline with `npm run db:bootstrap`, or use `npm run db:history:adopt` when the schema has already been restored and passed the baseline preflight. Routine releases use `npm run db:deploy`. Do not run the legacy date-only migrations directly against an empty database.
+
 ## Required smoke evidence
 
 - Anonymous access is redirected to sign-in and `/api/me/context` returns `401`.

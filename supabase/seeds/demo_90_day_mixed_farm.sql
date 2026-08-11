@@ -1,7 +1,7 @@
 -- Laba Poultry Farms: comprehensive 90-day mixed-farm demo dataset
 -- Range: 2026-04-22 through 2026-07-20 (Africa/Addis_Ababa reporting dates)
 -- Safe to rerun: demo-owned rows use stable UUIDs/upserts. Existing non-demo rows are preserved.
--- Prerequisite: run all migrations through 20260720_executive_control_tower.sql first.
+-- Prerequisite: run all migrations through 20260720000000_executive_control_tower.sql first.
 
 begin;
 

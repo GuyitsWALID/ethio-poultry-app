@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "schemaFile": "baselines/20260811000000_production_schema.sql",
+  "schemaSha256": "1bab5d34132741e9fdd481a89e308d2bec1a156991a982f5e16af354b024cc92",
+  "coveredThrough": "20260809000000_item3_operational_reconciliation.sql",
+  "createdFrom": "production schema-only dump",
+  "createdAt": "2026-08-11T12:46:52+03:00",
+  "containsBusinessData": false,
+  "retiredHistoryVersions": [
+    "20260507",
+    "20260508",
+    "20260512",
+    "20260514",
+    "20260516",
+    "20260517",
+    "20260521",
+    "20260528",
+    "20260603",
+    "20260610",
+    "20260611",
+    "20260613",
+    "20260614",
+    "20260616",
+    "20260626",
+    "20260709",
+    "20260714",
+    "20260720",
+    "20260721",
+    "20260804",
+    "20260806",
+    "20260809"
+  ]
+}

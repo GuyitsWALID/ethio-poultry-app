@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
 
-const migration=await readFile(new URL("../supabase/migrations/20260804_governance_permissions_foundation.sql",import.meta.url),"utf8");
-const closureMigration=await readFile(new URL("../supabase/migrations/20260806_item2_governance_closure.sql",import.meta.url),"utf8");
+const migration=await readFile(new URL("../supabase/migrations/20260804000000_governance_permissions_foundation.sql",import.meta.url),"utf8");
+const closureMigration=await readFile(new URL("../supabase/migrations/20260806000000_item2_governance_closure.sql",import.meta.url),"utf8");
 
 test("governance migration enforces sole CEO and explicit assignment windows",()=>{assert.match(migration,/profiles_one_active_ceo_per_org/);assert.match(migration,/starts_at<=now\(\).*revoked_at is null.*expires_at/s);assert.match(migration,/delete from public\.user_branch_access/)});
 test("break glass is CEO decided, four-hour limited, and access audited",()=>{assert.match(migration,/break_glass_session_max_four_hours/);assert.match(migration,/current_active_role\(\)<>'ceo'/);assert.match(migration,/record_support_access/);assert.match(migration,/support_session_id/)});
