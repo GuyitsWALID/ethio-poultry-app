@@ -18,8 +18,11 @@ jobs:
     timeout-minutes: 15
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-key
-      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-key
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key
+      ADMIN_ACCESS_CODE: ci-only-access-code
+      APP_ENVIRONMENT: ci
+      APP_RELEASE: ${{ github.sha }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -33,8 +36,14 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Validate deployment and migration contracts
+        run: npm run env:check && npm run migrations:verify
+
       - name: Run static checks and calculation tests
         run: npm run check
 
       - name: Build production application
         run: npm run build
+
+      - name: Emit release evidence
+        run: npm run release:manifest

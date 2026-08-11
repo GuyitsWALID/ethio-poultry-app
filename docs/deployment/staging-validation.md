@@ -1,0 +1,31 @@
+# Staging environment and validation
+
+Staging must be isolated from production: separate Supabase project, credentials, application URL, storage, scheduled jobs, and test users. Production service-role keys must never be configured in staging.
+
+## GitHub environment
+
+Create a protected GitHub environment named `staging` with an approval requirement and these secrets:
+
+- `STAGING_SUPABASE_URL`
+- `STAGING_SUPABASE_PUBLISHABLE_KEY`
+- `STAGING_SUPABASE_SERVICE_ROLE_KEY`
+- `STAGING_SUPABASE_PROJECT_REF`
+- `STAGING_DATABASE_URL`
+- `STAGING_ADMIN_ACCESS_CODE`
+
+Deploy the candidate commit through the hosting provider's immutable preview or staging deployment. Then manually run **Staging release gate** and supply that deployment's HTTPS URL.
+
+## Required smoke evidence
+
+- Anonymous access is redirected to sign-in and `/api/me/context` returns `401`.
+- CEO can view all tenant farms, reconciliation, governance, reports, inventory, and sales but cannot submit routine farm operations.
+- Farm manager can write only within active farm and warehouse assignments.
+- An expired or revoked assignment receives `403`.
+- Daily Record save and Feed Control close produce one synchronized feed total and one inventory issue.
+- Reopen/reclose is idempotent and preserves non-feed Daily Record fields.
+- Physical inventory count creates a reconciliation variance when the count differs from the ledger.
+- Locked operating-day changes require an approved correction.
+- Retired and unknown roles are denied.
+- Alert dropdown and `/app/reconciliation` load without server errors.
+
+Record screenshots or test output, the release manifest, the database preflight output, and the reviewer decision. Test data must be clearly marked and must not contain copied production personal data.

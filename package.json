@@ -2,14 +2,25 @@
   "name": "ethio-poultry-app",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": "22.16.0",
+    "npm": "10.9.2"
+  },
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build",
+    "build": "npm run env:check && next build --webpack",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/*.test.mjs",
     "check": "npm run lint && npm run typecheck && npm test",
+    "env:check": "node scripts/deployment-check.mjs env",
+    "migrations:verify": "node scripts/deployment-check.mjs migrations",
+    "migrations:lock": "node scripts/deployment-check.mjs lock",
+    "db:verify": "node scripts/verify-database.mjs",
+    "release:manifest": "node scripts/deployment-check.mjs manifest",
+    "release:verify": "npm run env:check && npm run migrations:verify && npm run check && npm run build",
     "supabase": "supabase"
   },
   "dependencies": {

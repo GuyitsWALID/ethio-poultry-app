@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EthioPoultry Management System
 
-## Getting Started
+Governed poultry operations for CEO oversight and assigned-farm execution. The application uses Next.js 16, Supabase/PostgreSQL, TypeScript, and a locked npm dependency graph.
 
-First, run the development server:
+## Required toolchain
 
-```bash
+- Node.js `22.16.0`
+- npm `10.9.2`
+- PostgreSQL `psql` for database verification
+- Supabase CLI and Docker-compatible runtime for local database work
+
+Copy `.env.example` to `.env.local` and replace every placeholder. Never commit `.env.local`.
+
+```powershell
+npm ci
+npm run env:check
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Verification
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```powershell
+npm run migrations:verify
+npm run check
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`npm run build` uses Webpack deliberately, giving the same production compiler on Windows and CI without relying on platform-specific Turbopack bindings. Application fonts are stored locally, so the build does not download fonts.
 
-## Learn More
+For a disposable or staging database:
 
-To learn more about Next.js, take a look at the following resources:
+```powershell
+$env:DATABASE_URL = "postgresql://..."
+npm run db:verify
+Remove-Item Env:DATABASE_URL
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Release and rollback runbook](docs/deployment/release-runbook.md)
+- [Staging validation](docs/deployment/staging-validation.md)
+- [Migration policy](docs/deployment/migration-policy.md)
+- [Production-readiness gates](docs/production-readiness.md)

@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
-import { Fraunces, IBM_Plex_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const fraunces = Fraunces({
+const fraunces = localFont({
+  src: "./fonts/Fraunces-Variable.ttf",
   variable: "--font-display",
-  subsets: ["latin"],
+  display: "swap",
+  weight: "100 900",
 });
 
-const plexSans = IBM_Plex_Sans({
+const plexSans = localFont({
+  src: "./fonts/IBMPlexSans-Variable.ttf",
   variable: "--font-sans",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
+  weight: "100 700",
 });
 
 export const metadata: Metadata = {

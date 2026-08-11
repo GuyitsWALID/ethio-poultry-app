@@ -62,13 +62,15 @@ Required controls:
 
 ### 4. Deterministic deployment
 
-Status: pending
+Status: implemented; external staging evidence required
 
-- Environment validation
-- Self-hosted application fonts
-- Migration verification
-- Staging deployment
-- Release and rollback runbooks
+- [x] Environment and release-identity validation
+- [x] Self-hosted Fraunces and IBM Plex Sans application fonts
+- [x] Cryptographically locked migration-chain verification
+- [x] Production-like database preflight
+- [x] Protected staging release gate
+- [x] Release, migration, staging, and rollback runbooks
+- [ ] First protected staging run recorded with smoke-test evidence
 
 ### 5. Immutable audit history
 
