@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowRight, BellRing, CheckCircle2, Clock3, RefreshCw, Search, ShieldAlert } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-type Alert={id:string;title:string;severity:"high"|"medium"|"low";source:"Alert Rule"|"Inventory"|"Mortality"|"Daily Records"|"Health"|"Production";context:string;route:string;createdAt:string};
+type Alert={id:string;title:string;severity:"high"|"medium"|"low";source:"Alert Rule"|"Inventory"|"Mortality"|"Daily Records"|"Health"|"Production"|"Reconciliation";context:string;route:string;createdAt:string};
 const rank={high:3,medium:2,low:1};
 const tone={high:"border-red-200 bg-red-50 text-red-700",medium:"border-amber-200 bg-amber-50 text-amber-800",low:"border-sand-200 bg-sand-50 text-forest-700"};
 function age(value:string,reference:number){const timestamp=new Date(value).getTime();if(!Number.isFinite(timestamp))return "Time unavailable";const hours=Math.max(0,Math.floor((reference-timestamp)/3600000));if(hours<1)return "Less than 1 hour ago";if(hours<24)return `${hours}h ago`;return `${Math.floor(hours/24)}d ago`}

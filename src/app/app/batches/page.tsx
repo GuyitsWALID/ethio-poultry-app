@@ -34,7 +34,7 @@ type SlotRow = {
   current_count: number;
 };
 
-export function BatchManagement({ embedded = false }: { embedded?: boolean }) {
+function BatchManagement({ embedded = false }: { embedded?: boolean }) {
   const { role, loading: scopeLoading, scope, setScope, branches, filteredFarms, filteredHouses, filteredFlocks } = useFarmScope();
   const [rows, setRows] = useState<BatchRow[]>([]);
   const [slotRows, setSlotRows] = useState<SlotRow[]>([]);
