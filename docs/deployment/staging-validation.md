@@ -15,6 +15,29 @@ Create a protected GitHub environment named `staging` with an approval requireme
 
 Deploy the candidate commit through the hosting provider's immutable preview or staging deployment. Then manually run **Staging release gate** and supply that deployment's HTTPS URL.
 
+## Cloudflare Workers staging
+
+The repository pins `@opennextjs/cloudflare` and Wrangler and owns both `wrangler.jsonc` and `open-next.config.ts`. Do not use `npx wrangler deploy` to auto-migrate the project during a release.
+
+Use these Cloudflare Workers Build settings for the staging Worker:
+
+- Build command: `npm run cloudflare:build`
+- Deploy command: `npx wrangler deploy --env staging --keep-vars`
+- Worker name: `ethio-poultry-app-staging` (declared by the `staging` Wrangler environment)
+
+Configure the following in both **Build variables and secrets** and the Worker's **Runtime variables and secrets** where applicable:
+
+- `APP_ENVIRONMENT=staging`
+- `APP_RELEASE=<the full candidate commit SHA>`
+- `APP_BASE_URL=https://<the staging Worker hostname>`
+- `NEXT_PUBLIC_SUPABASE_URL=https://uzmhpecehmlwojdmitgj.supabase.co`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<staging publishable key>`
+- `SUPABASE_SERVICE_ROLE_KEY=<staging service-role secret>`
+- `SUPABASE_PROJECT_REF=uzmhpecehmlwojdmitgj`
+- `ADMIN_ACCESS_CODE=<strong staging-only secret>`
+
+Never copy `.dev.vars` into a deployment or use it as a substitute for runtime bindings. The `--keep-vars` flag preserves values configured in the Cloudflare dashboard.
+
 For the first staging setup, restore the verified data-free baseline with `npm run db:bootstrap`, or use `npm run db:history:adopt` when the schema has already been restored and passed the baseline preflight. Routine releases use `npm run db:deploy`. Do not run the legacy date-only migrations directly against an empty database.
 
 ## Required smoke evidence

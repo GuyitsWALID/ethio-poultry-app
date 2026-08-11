@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /out/
+/.open-next/
+/.wrangler/
 
 # production
 /build
@@ -36,6 +38,7 @@ yarn-error.log*
 
 # generated release evidence
 /.release/
+/.firecrawl/
 
 # vercel
 .vercel

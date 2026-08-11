@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, Menu, MapPin, PanelsTopLeft, ShieldX } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppSidebar } from "@/components/app-sidebar";
@@ -42,6 +42,7 @@ function addisDateLabel() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { loading, scope, branches, farms, houses, flocks } = useFarmScope();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [support, setSupport] = useState<{ id:string;expiresAt: string; orgName: string } | null>(null);
@@ -52,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const endSupport=async()=>{if(!support)return;const reason=window.prompt("Why are you ending this support session?")?.trim();if(!reason)return;const response=await fetch(`/api/governance/break-glass/sessions/${support.id}`,{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason})});if(response.ok){setSupport(null);window.location.assign("/admin/dashboard")}};
+  const endSupport=async()=>{if(!support)return;const reason=window.prompt("Why are you ending this support session?")?.trim();if(!reason)return;const response=await fetch(`/api/governance/break-glass/sessions/${support.id}`,{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason})});if(response.ok){setSupport(null);router.push("/admin/dashboard")}};
 
   useEffect(() => {
     if (!mobileNavOpen) return;
