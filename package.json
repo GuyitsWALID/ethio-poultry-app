@@ -13,7 +13,7 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/*.test.mjs",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/*.test.mjs",
     "check": "npm run lint && npm run typecheck && npm test",
     "env:check": "node scripts/deployment-check.mjs env",
     "migrations:verify": "node scripts/deployment-check.mjs migrations",
