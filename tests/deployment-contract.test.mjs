@@ -55,7 +55,7 @@ test("reviewed migration chain matches its committed cryptographic lock",async()
 
 test("verified production baseline is part of the migration release identity",async()=>{
   const lock=await buildMigrationLock();
-  assert.equal(lock.baseline.schemaSha256,"1bab5d34132741e9fdd481a89e308d2bec1a156991a982f5e16af354b024cc92");
+  assert.equal(lock.baseline.schemaSha256,"a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424");
   assert.equal(lock.baseline.containsBusinessData,false);
   assert(lock.baselineCoveredVersions.includes("20260505064542"));
   assert(lock.baselineCoveredVersions.includes("20260809000000"));

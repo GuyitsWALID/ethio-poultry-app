@@ -3,10 +3,10 @@
   "algorithm": "sha256",
   "count": 44,
   "latest": "20260811100000_required_reference_defaults.sql",
-  "aggregateSha256": "bd88effcbe2f2d2d064d6b85cf3735dd5ffd7aa1e88eaf95bc30c42218e84a81",
+  "aggregateSha256": "6c563dce3c71932006f65938df874b8ca62cfbf8da238b8ca408db5d9d94d5c1",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
-    "schemaSha256": "1bab5d34132741e9fdd481a89e308d2bec1a156991a982f5e16af354b024cc92",
+    "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
     "coveredThrough": "20260809000000_item3_operational_reconciliation.sql",
     "containsBusinessData": false,
     "retiredHistoryVersions": [

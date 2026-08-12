@@ -1,7 +1,7 @@
 {
   "version": 1,
   "schemaFile": "baselines/20260811000000_production_schema.sql",
-  "schemaSha256": "1bab5d34132741e9fdd481a89e308d2bec1a156991a982f5e16af354b024cc92",
+  "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
   "coveredThrough": "20260809000000_item3_operational_reconciliation.sql",
   "createdFrom": "production schema-only dump",
   "createdAt": "2026-08-11T12:46:52+03:00",
