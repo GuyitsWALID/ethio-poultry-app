@@ -62,7 +62,7 @@ Required controls:
 
 ### 4. Deterministic deployment
 
-Status: implemented; external staging evidence required
+Status: complete
 
 - [x] Environment and release-identity validation
 - [x] Self-hosted Fraunces and IBM Plex Sans application fonts
@@ -73,7 +73,7 @@ Status: implemented; external staging evidence required
 - [x] Production-like database preflight
 - [x] Protected staging release gate
 - [x] Release, migration, staging, and rollback runbooks
-- [ ] First protected staging run recorded with smoke-test evidence
+- [x] First protected staging run recorded with smoke-test evidence ([run 31638573354](https://github.com/GuyitsWALID/ethio-poultry-app/actions/runs/31638573354), commit `62d9974edc57d11a88fbe874604be83edc582f66`)
 
 ### 5. Immutable audit history
 
