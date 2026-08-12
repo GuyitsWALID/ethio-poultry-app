@@ -42,6 +42,12 @@ test("production identity rejects a Supabase project-reference mismatch",()=>{
   assert(result.errors.some(error=>error.includes("does not match")));
 });
 
+test("Cloudflare builds cannot silently fall back to the local environment",()=>{
+  const result=validateEnvironment({...valid,APP_ENVIRONMENT:"",WORKERS_CI_COMMIT_SHA:"abcdef123456"});
+  assert.equal(result.ok,false);
+  assert(result.errors.some(error=>error.includes("explicitly set for a Cloudflare build")));
+});
+
 test("reviewed migration chain matches its committed cryptographic lock",async()=>{
   const result=await verifyMigrationLock();
   assert.deepEqual(result.errors,[]);

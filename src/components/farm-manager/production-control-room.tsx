@@ -12,6 +12,7 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useFarmScope } from "@/components/farm-scope-context";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import type { AttentionStatus, FarmManagerDashboardResponse, FlockComparison, TrendDirection } from "@/lib/farm-manager-dashboard";
+import { readJsonResponse } from "@/lib/http-response";
 
 const chartConfig = {
   hdep: { label: "HDEP %", color: "var(--chart-1)" },
@@ -139,8 +140,7 @@ export function ProductionControlRoom() {
     setLoading(true); setError(null);
     const params = new URLSearchParams({ farm_id: scope.farmId, house_id: scope.houseId, flock_id: scope.flockId, batch_id: scope.batchId });
     const response = await fetch(`/api/farm-manager/dashboard?${params}`, { signal });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body?.error ?? "Could not load the Farm Manager dashboard.");
+    const body = await readJsonResponse<FarmManagerDashboardResponse>(response);
     setData(body as FarmManagerDashboardResponse); setLoading(false);
   }, [scope.batchId, scope.farmId, scope.flockId, scope.houseId]);
 

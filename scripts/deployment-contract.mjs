@@ -50,6 +50,7 @@ export function validateEnvironment(env = process.env) {
   const errors = [];
   const warnings = [];
   const environment = env.APP_ENVIRONMENT?.trim() || "local";
+  const cloudflareBuild = present(env.WORKERS_CI_COMMIT_SHA);
   const required = [
     "NEXT_PUBLIC_SUPABASE_URL",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
@@ -59,6 +60,9 @@ export function validateEnvironment(env = process.env) {
 
   if (!["local", "ci", "staging", "production"].includes(environment)) {
     errors.push("APP_ENVIRONMENT must be local, ci, staging, or production.");
+  }
+  if (cloudflareBuild && environment === "local") {
+    errors.push("APP_ENVIRONMENT must be explicitly set for a Cloudflare build.");
   }
   for (const key of required) if (!present(env[key])) errors.push(`${key} is required.`);
 

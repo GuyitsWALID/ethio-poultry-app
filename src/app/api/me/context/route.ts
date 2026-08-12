@@ -3,9 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 import { normalizeRole } from "@/lib/roles";
 import { createClient as createAuthedClient } from "@/utils/supabase/server";
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+const serverConfigurationError = !supabaseUrl || !serviceRoleKey
+  ? "The server database connection is not configured for this deployment."
+  : null;
 const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  supabaseUrl ?? "https://unconfigured.invalid",
+  serviceRoleKey ?? "unconfigured-service-role-key",
   {
     auth: {
       autoRefreshToken: false,
@@ -16,6 +21,9 @@ const supabaseAdmin = createClient(
 
 export async function GET() {
   try {
+    if (serverConfigurationError) {
+      return Response.json({ error: serverConfigurationError, code: "SERVER_CONFIGURATION_ERROR" }, { status: 503 });
+    }
     const supabase = await createAuthedClient();
     const {
       data: { user },

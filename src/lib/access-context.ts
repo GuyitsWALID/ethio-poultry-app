@@ -3,7 +3,16 @@ import { createClient } from "@supabase/supabase-js";
 import { capabilitiesFor, parseActiveRole, type ActiveRole, type Capability } from "@/lib/permissions";
 import { createClient as createAuthedClient } from "@/utils/supabase/server";
 
-const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth:{autoRefreshToken:false,persistSession:false} });
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+const serverConfigurationError = !supabaseUrl || !serviceRoleKey
+  ? "The server database connection is not configured for this deployment."
+  : null;
+const admin = createClient(
+  supabaseUrl ?? "https://unconfigured.invalid",
+  serviceRoleKey ?? "unconfigured-service-role-key",
+  { auth:{autoRefreshToken:false,persistSession:false} }
+);
 
 export type AccessContext = {
   userId:string; homeOrgId:string; orgId:string; role:ActiveRole; capabilities:Capability[];
@@ -13,6 +22,7 @@ export type AccessContext = {
 export function accessJson(value:unknown,status=200){return Response.json(value,{status});}
 
 export async function getAccessContext(options:{tenant?:boolean}={}):Promise<AccessContext|Response>{
+  if(serverConfigurationError)return accessJson({error:serverConfigurationError,code:"SERVER_CONFIGURATION_ERROR"},503);
   const auth=await createAuthedClient();const {data:{user}}=await auth.auth.getUser();
   if(!user)return accessJson({error:"Unauthorized"},401);
   const {data:profile,error}=await admin.from("profiles").select("org_id,role,is_active").eq("id",user.id).maybeSingle();

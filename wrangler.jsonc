@@ -11,6 +11,19 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "vars": {
+    "APP_ENVIRONMENT": "production",
+    "APP_BASE_URL": "https://ethio-poultry-app.walidmurad65.workers.dev",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://gnmeoxwqexennoidwwpf.supabase.co",
+    "SUPABASE_PROJECT_REF": "gnmeoxwqexennoidwwpf"
+  },
+  "secrets": {
+    "required": [
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "ADMIN_ACCESS_CODE"
+    ]
+  },
   "env": {
     "staging": {
       "name": "ethio-poultry-app-staging"

@@ -4,7 +4,11 @@ import { NextRequest } from "next/server";
 import { calculateProduction, previousPeriod, round, summarizeSales, type ExecutiveDailyRow } from "@/lib/executive-dashboard";
 import { getAccessContext,isAccessResponse } from "@/lib/access-context";
 
-const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
+const admin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "https://unconfigured.invalid",
+  process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "unconfigured-service-role-key",
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
 type DbError = { message: string } | null;
 async function allRows<T>(load: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: DbError }>) {
   const result: T[] = [];
