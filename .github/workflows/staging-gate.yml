@@ -1,0 +1,51 @@
+name: Staging release gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: HTTPS URL of the immutable staging deployment
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      APP_ENVIRONMENT: staging
+      APP_RELEASE: ${{ github.sha }}
+      APP_BASE_URL: ${{ inputs.staging_url }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+      ADMIN_ACCESS_CODE: ${{ secrets.STAGING_ADMIN_ACCESS_CODE }}
+      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - run: npm ci
+      - name: Verify locked release
+        run: npm run release:verify
+      - name: Verify staging database contract
+        run: npm run db:verify
+      - name: Smoke-test staging application
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' "$APP_BASE_URL/auth/sign-in")" = "200"
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$APP_BASE_URL/api/me/context")" = "401"
+      - name: Record release evidence
+        run: npm run release:manifest

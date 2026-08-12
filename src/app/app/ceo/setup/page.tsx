@@ -1,0 +1,42 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Archive, Building2, CheckCircle2, Layers3, Loader2, MapPin, Plus, RefreshCw, Search, Warehouse } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+import { SetupModal } from "@/components/ceo/setup-modal";
+
+type HierarchyRow = { key:string; branchId:string; farmId:string|null; houseId:string|null; flockId:string|null; batchId:string|null; branchName:string; branchLocation:string; farmName:string; houseName:string; flockCode:string; batchCode:string; batchStatus:string };
+type BranchSummary = { id:string; name:string; location:string; farms:Set<string>; houses:Set<string>; flocks:Set<string>; batches:Map<string,string> };
+
+export default function BranchListPage() {
+  const [rows,setRows]=useState<HierarchyRow[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [modalOpen,setModalOpen]=useState(false);
+  const [query,setQuery]=useState("");
+  const load=async()=>{setLoading(true);setError("");try{const response=await fetch("/api/ceo/branch-hierarchy");const data=await response.json();if(!response.ok)throw new Error(data?.error??"Could not load branch network.");setRows((data?.rows??[]) as HierarchyRow[])}catch(value){setError(value instanceof Error?value.message:"Could not load branch network.")}finally{setLoading(false)}};
+  useEffect(()=>{void load()},[]);
+
+  const branches=useMemo(()=>{
+    const needle=query.trim().toLowerCase();
+    const visible=rows.filter((row)=>!needle||[row.branchName,row.branchLocation,row.farmName,row.houseName,row.flockCode,row.batchCode].join(" ").toLowerCase().includes(needle));
+    const map=new Map<string,BranchSummary>();
+    visible.forEach((row)=>{const item=map.get(row.branchId)??{id:row.branchId,name:row.branchName,location:row.branchLocation,farms:new Set(),houses:new Set(),flocks:new Set(),batches:new Map()};if(row.farmId)item.farms.add(row.farmId);if(row.houseId)item.houses.add(row.houseId);if(row.flockId)item.flocks.add(row.flockId);if(row.batchId)item.batches.set(row.batchCode,row.batchStatus);map.set(row.branchId,item)});
+    return [...map.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  },[query,rows]);
+  const totals=branches.reduce((sum,row)=>({farms:sum.farms+row.farms.size,houses:sum.houses+row.houses.size,flocks:sum.flocks+row.flocks.size,batches:sum.batches+[...row.batches.values()].filter((status)=>status.toLowerCase()==="active").length}),{farms:0,houses:0,flocks:0,batches:0});
+  const incomplete=branches.filter((row)=>!row.farms.size||!row.houses.size||!row.flocks.size).length;
+
+  return <main className="space-y-5 pb-8">
+    <section className="relative overflow-hidden rounded-[28px] bg-forest-900 px-6 py-7 text-sand-50 shadow-sm sm:px-8 lg:px-10 lg:py-9"><div className="absolute -right-20 -top-24 h-64 w-64 rounded-full border-[44px] border-amber-500/10"/><div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between"><div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.24em] text-amber-500"><Layers3 className="h-4 w-4"/>Organization architecture</div><h1 className="mt-3 max-w-3xl font-display text-3xl font-semibold sm:text-4xl">Build a branch network that operations can actually run.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100/80">See where farms, houses, flocks, and active batch cycles are complete—and where the operating hierarchy still needs setup.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void load()} disabled={loading} className="inline-flex h-11 items-center gap-2 rounded-xl border border-white/20 px-4 text-sm font-semibold hover:bg-white/10 disabled:opacity-60"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>Refresh</button><button type="button" onClick={()=>setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-sand-50 px-4 text-sm font-semibold text-forest-900"><Plus className="h-4 w-4"/>Add branch structure</button></div></div></section>
+    {error?<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>:null}
+    <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><div className="grid divide-y divide-sand-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-5">{([["Branches",branches.length,Building2],["Farms",totals.farms,MapPin],["Houses",totals.houses,Warehouse],["Active flocks",totals.flocks,CheckCircle2],["Active batches",totals.batches,Archive]] as Array<[string,number,LucideIcon]>).map(([label,value,Icon])=><div key={label} className="p-5"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">{label}</p><Icon className="h-4 w-4 text-forest-500"/></div><p className="mt-2 font-display text-3xl font-semibold text-forest-900">{loading?"—":value.toLocaleString()}</p></div>)}</div></section>
+    {incomplete?<div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>{incomplete} branch{incomplete===1?"":"es"} need hierarchy completion.</strong> A branch needs a farm, house, and flock before it can produce reliable operational comparisons.</div>:null}
+    <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-sand-200 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6"><div><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-forest-500">Network register</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Branch operating structure</h2><p className="mt-1 text-sm text-forest-600">Coverage from branch to active production cycle.</p></div><label className="relative"><span className="sr-only">Search branch network</span><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-forest-500"/><input value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search network" className="h-11 w-full rounded-xl border border-sand-200 pl-9 pr-3 text-sm sm:w-72"/></label></div>
+      {loading?<div className="grid place-items-center py-20"><Loader2 className="h-7 w-7 animate-spin text-forest-600"/></div>:branches.length?<div className="overflow-x-auto"><table className="min-w-[850px] w-full text-sm"><thead><tr className="bg-sand-50 text-left text-[10px] uppercase tracking-[.16em] text-forest-600"><th className="px-5 py-3">Branch</th><th className="px-4 py-3">Location</th><th className="px-4 py-3">Farms</th><th className="px-4 py-3">Houses</th><th className="px-4 py-3">Flocks</th><th className="px-5 py-3">Batch cycles</th></tr></thead><tbody>{branches.map((row)=><tr key={row.id} className="border-t border-sand-100 hover:bg-sand-50/60"><td className="px-5 py-4"><strong className="text-forest-900">{row.name}</strong><span className={`mt-1 block text-xs ${row.farms.size&&row.houses.size&&row.flocks.size?"text-forest-500":"text-amber-700"}`}>{row.farms.size&&row.houses.size&&row.flocks.size?"Operational hierarchy present":"Setup incomplete"}</span></td><td className="px-4 py-4 text-forest-700"><span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5"/>{row.location}</span></td><td className="px-4 py-4 font-semibold">{row.farms.size}</td><td className="px-4 py-4 font-semibold">{row.houses.size}</td><td className="px-4 py-4 font-semibold">{row.flocks.size}</td><td className="px-5 py-4">{row.batches.size?<div className="flex flex-wrap gap-2">{[...row.batches].map(([code,status])=>{const active=status.toLowerCase()==="active";return <span key={code} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${active?"border-leaf-400/40 bg-green-50 text-forest-700":"border-sand-200 text-forest-600"}`}>{active?<span className="h-2 w-2 rounded-full bg-leaf-500"/>:<Archive className="h-3 w-3"/>}{code}</span>})}</div>:<span className="text-forest-500">No batch cycle</span>}</td></tr>)}</tbody></table></div>:<div className="p-10 text-center text-sm text-forest-600">No branch structure matches this search. Clear the search or add a branch.</div>}
+    </section>
+    {modalOpen?<SetupModal isOpen={modalOpen} onClose={()=>setModalOpen(false)} onSuccess={load}/>:null}
+  </main>;
+}

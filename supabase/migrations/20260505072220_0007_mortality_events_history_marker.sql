@@ -1,0 +1,3 @@
+-- History marker for the original production migration 0007_mortality_events.
+-- Its resulting schema is captured by supabase/migration-baseline.json.
+-- Never execute this marker as a substitute for bootstrapping an empty database.

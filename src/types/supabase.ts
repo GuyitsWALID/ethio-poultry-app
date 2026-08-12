@@ -144,6 +144,365 @@ export type Database = {
           },
         ]
       }
+      batches: {
+        Row: {
+          age_at_placement_days: number | null
+          batch_code: string
+          branch_id: string
+          created_at: string
+          farm_id: string
+          female_count: number | null
+          house_id: string
+          id: string
+          male_count: number | null
+          notes: string | null
+          org_id: string
+          other_cost: number | null
+          placement_date: string
+          purchase_cost_per_bird: number | null
+          purchase_date: string | null
+          source: Database["public"]["Enums"]["flock_source"]
+          status: string
+          supplier_name: string | null
+          total_batch_cost: number | null
+          total_count: number
+          transport_cost: number | null
+          updated_at: string
+        }
+        Insert: {
+          age_at_placement_days?: number | null
+          batch_code: string
+          branch_id: string
+          created_at?: string
+          farm_id: string
+          female_count?: number | null
+          house_id: string
+          id?: string
+          male_count?: number | null
+          notes?: string | null
+          org_id: string
+          other_cost?: number | null
+          placement_date: string
+          purchase_cost_per_bird?: number | null
+          purchase_date?: string | null
+          source: Database["public"]["Enums"]["flock_source"]
+          status?: string
+          supplier_name?: string | null
+          total_batch_cost?: number | null
+          total_count: number
+          transport_cost?: number | null
+          updated_at?: string
+        }
+        Update: {
+          age_at_placement_days?: number | null
+          batch_code?: string
+          branch_id?: string
+          created_at?: string
+          farm_id?: string
+          female_count?: number | null
+          house_id?: string
+          id?: string
+          male_count?: number | null
+          notes?: string | null
+          org_id?: string
+          other_cost?: number | null
+          placement_date?: string
+          purchase_cost_per_bird?: number | null
+          purchase_date?: string | null
+          source?: Database["public"]["Enums"]["flock_source"]
+          status?: string
+          supplier_name?: string | null
+          total_batch_cost?: number | null
+          total_count?: number
+          transport_cost?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_farm_id_fkey"
+            columns: ["farm_id"]
+            isOneToOne: false
+            referencedRelation: "farms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_house_id_fkey"
+            columns: ["house_id"]
+            isOneToOne: false
+            referencedRelation: "houses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batches_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_feed_templates: {
+        Row: {
+          batch_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          source_type: string
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          source_type?: string
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          source_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_feed_templates_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_feed_templates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_feed_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_feed_template_rows: {
+        Row: {
+          age_day_end: number
+          age_day_start: number
+          created_at: string
+          feed_intake_recommended_g_per_head: number | null
+          feed_intake_std_g_per_head: number | null
+          feed_type_plan: string | null
+          id: string
+          light_off_time: string | null
+          light_on_time: string | null
+          row_order: number
+          target_weight_max_g: number | null
+          target_weight_min_g: number | null
+          template_id: string
+          updated_at: string
+          week_number: number
+        }
+        Insert: {
+          age_day_end: number
+          age_day_start: number
+          created_at?: string
+          feed_intake_recommended_g_per_head?: number | null
+          feed_intake_std_g_per_head?: number | null
+          feed_type_plan?: string | null
+          id?: string
+          light_off_time?: string | null
+          light_on_time?: string | null
+          row_order?: number
+          target_weight_max_g?: number | null
+          target_weight_min_g?: number | null
+          template_id: string
+          updated_at?: string
+          week_number: number
+        }
+        Update: {
+          age_day_end?: number
+          age_day_start?: number
+          created_at?: string
+          feed_intake_recommended_g_per_head?: number | null
+          feed_intake_std_g_per_head?: number | null
+          feed_type_plan?: string | null
+          id?: string
+          light_off_time?: string | null
+          light_on_time?: string | null
+          row_order?: number
+          target_weight_max_g?: number | null
+          target_weight_min_g?: number | null
+          template_id?: string
+          updated_at?: string
+          week_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_feed_template_rows_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "batch_feed_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_feed_template_milestones: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          is_required: boolean
+          notes: string | null
+          template_id: string
+          title: string
+          trigger_day: number
+          updated_at: string
+          week_number: number | null
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          notes?: string | null
+          template_id: string
+          title: string
+          trigger_day: number
+          updated_at?: string
+          week_number?: number | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          notes?: string | null
+          template_id?: string
+          title?: string
+          trigger_day?: number
+          updated_at?: string
+          week_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_feed_template_milestones_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "batch_feed_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      batch_weight_check_tasks: {
+        Row: {
+          batch_id: string
+          created_at: string
+          created_by: string | null
+          due_date: string
+          due_week_number: number
+          flock_id: string
+          id: string
+          org_id: string
+          status: string
+          template_row_id: string | null
+          updated_at: string
+          weight_record_id: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          created_by?: string | null
+          due_date: string
+          due_week_number: number
+          flock_id: string
+          id?: string
+          org_id: string
+          status?: string
+          template_row_id?: string | null
+          updated_at?: string
+          weight_record_id?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          created_by?: string | null
+          due_date?: string
+          due_week_number?: number
+          flock_id?: string
+          id?: string
+          org_id?: string
+          status?: string
+          template_row_id?: string | null
+          updated_at?: string
+          weight_record_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "batch_weight_check_tasks_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_flock_id_fkey"
+            columns: ["flock_id"]
+            isOneToOne: false
+            referencedRelation: "flocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_template_row_id_fkey"
+            columns: ["template_row_id"]
+            isOneToOne: false
+            referencedRelation: "batch_feed_template_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "batch_weight_check_tasks_weight_record_id_fkey"
+            columns: ["weight_record_id"]
+            isOneToOne: false
+            referencedRelation: "weight_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       biosecurity_checks: {
         Row: {
           checklist_date: string
@@ -512,61 +871,106 @@ export type Database = {
       }
       daily_farm_records: {
         Row: {
+          average_egg_weight_g: number | null
+          broken_eggs: number | null
+          closing_birds: number | null
           created_at: string
           culls: number | null
           deaths: number | null
           deaths_cause: string | null
-          feed_consumed_kg: number | null
-          feed_type: string | null
+          feed_intake_grams: number | null
+          feed_intake_quantity: number | null
+          feed_leftover_grams: number | null
+          feed_type: Database["public"]["Enums"]["feed_type"] | null
+          dirty_eggs: number | null
+          flock_age_days: number | null
+          flock_age_weeks: number | null
           flock_id: string
-          humidity_pct: number | null
           id: string
-          live_count: number | null
+          medication_vitamins: string | null
+          mortality_percentage: number | null
+          normal_eggs: number | null
+          opening_birds: number | null
+          other_removals: number | null
           org_id: string
+          production_percentage: number | null
           record_date: string
           recorded_by: string | null
           synced: boolean
-          temperature_c: number | null
+          total_eggs: number | null
+          transfers_in: number | null
+          transfers_out: number | null
           updated_at: string
-          water_liters: number | null
+          vaccination_status: string | null
+          water_consumed_liters: number | null
         }
         Insert: {
+          average_egg_weight_g?: number | null
+          broken_eggs?: number | null
+          closing_birds?: number | null
           created_at?: string
           culls?: number | null
           deaths?: number | null
           deaths_cause?: string | null
-          feed_consumed_kg?: number | null
-          feed_type?: string | null
+          feed_intake_grams?: number | null
+          feed_intake_quantity?: number | null
+          feed_leftover_grams?: number | null
+          feed_type?: Database["public"]["Enums"]["feed_type"] | null
+          dirty_eggs?: number | null
+          flock_age_days?: number | null
+          flock_age_weeks?: number | null
           flock_id: string
-          humidity_pct?: number | null
           id?: string
-          live_count?: number | null
+          medication_vitamins?: string | null
+          mortality_percentage?: number | null
+          normal_eggs?: number | null
+          opening_birds?: number | null
+          other_removals?: number | null
           org_id: string
+          production_percentage?: number | null
           record_date: string
           recorded_by?: string | null
           synced?: boolean
-          temperature_c?: number | null
+          total_eggs?: number | null
+          transfers_in?: number | null
+          transfers_out?: number | null
           updated_at?: string
-          water_liters?: number | null
+          vaccination_status?: string | null
+          water_consumed_liters?: number | null
         }
         Update: {
+          average_egg_weight_g?: number | null
+          broken_eggs?: number | null
+          closing_birds?: number | null
           created_at?: string
           culls?: number | null
           deaths?: number | null
           deaths_cause?: string | null
-          feed_consumed_kg?: number | null
-          feed_type?: string | null
+          feed_intake_grams?: number | null
+          feed_intake_quantity?: number | null
+          feed_leftover_grams?: number | null
+          feed_type?: Database["public"]["Enums"]["feed_type"] | null
+          dirty_eggs?: number | null
+          flock_age_days?: number | null
+          flock_age_weeks?: number | null
           flock_id?: string
-          humidity_pct?: number | null
           id?: string
-          live_count?: number | null
+          medication_vitamins?: string | null
+          mortality_percentage?: number | null
+          normal_eggs?: number | null
+          opening_birds?: number | null
+          other_removals?: number | null
           org_id?: string
+          production_percentage?: number | null
           record_date?: string
           recorded_by?: string | null
           synced?: boolean
-          temperature_c?: number | null
+          total_eggs?: number | null
+          transfers_in?: number | null
+          transfers_out?: number | null
           updated_at?: string
-          water_liters?: number | null
+          vaccination_status?: string | null
+          water_consumed_liters?: number | null
         }
         Relationships: [
           {
@@ -585,6 +989,186 @@ export type Database = {
           },
           {
             foreignKeyName: "daily_farm_records_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feed_control_settings: {
+        Row: { id: string; org_id: string; warning_variance_pct: number; critical_variance_pct: number; created_at: string; updated_at: string }
+        Insert: { id?: string; org_id: string; warning_variance_pct?: number; critical_variance_pct?: number; created_at?: string; updated_at?: string }
+        Update: { id?: string; org_id?: string; warning_variance_pct?: number; critical_variance_pct?: number; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      feed_day_closures: {
+        Row: { id: string; org_id: string; batch_id: string; flock_id: string; record_date: string; status: string; planned_feed_kg: number; actual_feed_kg: number; variance_kg: number; override_reason: string | null; closed_by: string | null; closed_at: string | null; reopened_by: string | null; reopened_at: string | null; reopen_reason: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; org_id: string; batch_id: string; flock_id: string; record_date: string; status?: string; planned_feed_kg?: number; actual_feed_kg: number; variance_kg?: number; override_reason?: string | null; closed_by?: string | null; closed_at?: string | null; reopened_by?: string | null; reopened_at?: string | null; reopen_reason?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; org_id?: string; batch_id?: string; flock_id?: string; record_date?: string; status?: string; planned_feed_kg?: number; actual_feed_kg?: number; variance_kg?: number; override_reason?: string | null; closed_by?: string | null; closed_at?: string | null; reopened_by?: string | null; reopened_at?: string | null; reopen_reason?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      feed_milestone_executions: {
+        Row: { id: string; org_id: string; milestone_id: string; flock_id: string | null; status: string; completed_by: string | null; completed_at: string; notes: string | null; created_at: string }
+        Insert: { id?: string; org_id: string; milestone_id: string; flock_id?: string | null; status?: string; completed_by?: string | null; completed_at?: string; notes?: string | null; created_at?: string }
+        Update: { id?: string; org_id?: string; milestone_id?: string; flock_id?: string | null; status?: string; completed_by?: string | null; completed_at?: string; notes?: string | null; created_at?: string }
+        Relationships: []
+      }
+      feeding_schedules: {
+        Row: {
+          batch_id: string
+          created_at: string
+          created_by: string | null
+          feed_type: string
+          id: string
+          notes: string | null
+          org_id: string
+          planned_feed_kg: number
+          schedule_date: string
+          target_grams_per_bird: number | null
+          updated_at: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          created_by?: string | null
+          feed_type: string
+          id?: string
+          notes?: string | null
+          org_id: string
+          planned_feed_kg: number
+          schedule_date: string
+          target_grams_per_bird?: number | null
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          created_by?: string | null
+          feed_type?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          planned_feed_kg?: number
+          schedule_date?: string
+          target_grams_per_bird?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feeding_schedules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_schedules_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_schedules_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      feeding_session_records: {
+        Row: {
+          actual_feed_kg: number | null
+          batch_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          feed_item_id: string | null
+          feed_type: Database["public"]["Enums"]["feed_type"] | null
+          feeders_count: number
+          flock_id: string
+          id: string
+          notes: string | null
+          org_id: string
+          planned_feed_kg: number
+          record_date: string
+          recorded_by: string | null
+          session_name: string
+          session_time: string | null
+          status: string
+          updated_at: string
+          warehouse_id: string | null
+        }
+        Insert: {
+          actual_feed_kg?: number | null
+          batch_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          feed_item_id?: string | null
+          feed_type?: Database["public"]["Enums"]["feed_type"] | null
+          feeders_count: number
+          flock_id: string
+          id?: string
+          notes?: string | null
+          org_id: string
+          planned_feed_kg: number
+          record_date: string
+          recorded_by?: string | null
+          session_name: string
+          session_time?: string | null
+          status?: string
+          updated_at?: string
+          warehouse_id?: string | null
+        }
+        Update: {
+          actual_feed_kg?: number | null
+          batch_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          feed_item_id?: string | null
+          feed_type?: Database["public"]["Enums"]["feed_type"] | null
+          feeders_count?: number
+          flock_id?: string
+          id?: string
+          notes?: string | null
+          org_id?: string
+          planned_feed_kg?: number
+          record_date?: string
+          recorded_by?: string | null
+          session_name?: string
+          session_time?: string | null
+          status?: string
+          updated_at?: string
+          warehouse_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feeding_session_records_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_session_records_flock_id_fkey"
+            columns: ["flock_id"]
+            isOneToOne: false
+            referencedRelation: "flocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_session_records_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feeding_session_records_recorded_by_fkey"
             columns: ["recorded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -711,6 +1295,7 @@ export type Database = {
       flocks: {
         Row: {
           age_at_placement_days: number | null
+          batch_id: string | null
           breed_id: string | null
           created_at: string
           current_count: number
@@ -720,6 +1305,7 @@ export type Database = {
           house_id: string
           id: string
           initial_count: number
+          intake_batch_id: string | null
           notes: string | null
           org_id: string
           placement_date: string
@@ -730,6 +1316,7 @@ export type Database = {
         }
         Insert: {
           age_at_placement_days?: number | null
+          batch_id?: string | null
           breed_id?: string | null
           created_at?: string
           current_count: number
@@ -739,6 +1326,7 @@ export type Database = {
           house_id: string
           id?: string
           initial_count: number
+          intake_batch_id?: string | null
           notes?: string | null
           org_id: string
           placement_date: string
@@ -749,6 +1337,7 @@ export type Database = {
         }
         Update: {
           age_at_placement_days?: number | null
+          batch_id?: string | null
           breed_id?: string | null
           created_at?: string
           current_count?: number
@@ -758,6 +1347,7 @@ export type Database = {
           house_id?: string
           id?: string
           initial_count?: number
+          intake_batch_id?: string | null
           notes?: string | null
           org_id?: string
           placement_date?: string
@@ -767,6 +1357,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "flocks_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "flocks_breed_id_fkey"
             columns: ["breed_id"]
@@ -786,6 +1383,13 @@ export type Database = {
             columns: ["house_id"]
             isOneToOne: false
             referencedRelation: "houses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flocks_intake_batch_id_fkey"
+            columns: ["intake_batch_id"]
+            isOneToOne: false
+            referencedRelation: "branch_intake_batches"
             referencedColumns: ["id"]
           },
           {
@@ -1274,26 +1878,38 @@ export type Database = {
       }
       organizations: {
         Row: {
+          branch_count: number | null
+          contact_email: string | null
+          contact_phone: string | null
           created_at: string
           id: string
           name: string
           plan: string | null
+          primary_location: string | null
           settings_json: Json | null
           updated_at: string
         }
         Insert: {
+          branch_count?: number | null
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           id?: string
           name: string
           plan?: string | null
+          primary_location?: string | null
           settings_json?: Json | null
           updated_at?: string
         }
         Update: {
+          branch_count?: number | null
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
           id?: string
           name?: string
           plan?: string | null
+          primary_location?: string | null
           settings_json?: Json | null
           updated_at?: string
         }
@@ -1601,6 +2217,62 @@ export type Database = {
           },
         ]
       }
+      role_aliases: {
+        Row: {
+          alias: string
+          created_at: string
+          id: string
+          role_code: string
+        }
+        Insert: {
+          alias: string
+          created_at?: string
+          id?: string
+          role_code: string
+        }
+        Update: {
+          alias?: string
+          created_at?: string
+          id?: string
+          role_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_aliases_role_code_fkey"
+            columns: ["role_code"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          code: string
+          created_at: string
+          default_route: string
+          display_name: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          default_route: string
+          display_name: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          default_route?: string
+          display_name?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sales_order_items: {
         Row: {
           created_at: string
@@ -1841,16 +2513,27 @@ export type Database = {
       }
       stock_ledger: {
         Row: {
+          batch_id: string | null
           batch_number: string | null
+          branch_id: string | null
           created_at: string
+          daily_record_id: string | null
           expiry_date: string | null
+          farm_id: string | null
           flock_id: string | null
+          house_id: string | null
           id: string
+          invoice_number: string | null
           item_id: string
+          notes: string | null
           org_id: string
+          procurement_type: Database["public"]["Enums"]["procurement_type"] | null
           quantity: number
           recorded_by: string | null
           reference_doc: string | null
+          supplier_name: string | null
+          source_key: string | null
+          source_kind: string | null
           transaction_date: string
           transaction_type: Database["public"]["Enums"]["stock_txn_type"]
           unit_cost: number
@@ -1858,16 +2541,27 @@ export type Database = {
           warehouse_id: string
         }
         Insert: {
+          batch_id?: string | null
           batch_number?: string | null
+          branch_id?: string | null
           created_at?: string
+          daily_record_id?: string | null
           expiry_date?: string | null
+          farm_id?: string | null
           flock_id?: string | null
+          house_id?: string | null
           id?: string
+          invoice_number?: string | null
           item_id: string
+          notes?: string | null
           org_id: string
+          procurement_type?: Database["public"]["Enums"]["procurement_type"] | null
           quantity: number
           recorded_by?: string | null
           reference_doc?: string | null
+          supplier_name?: string | null
+          source_key?: string | null
+          source_kind?: string | null
           transaction_date?: string
           transaction_type: Database["public"]["Enums"]["stock_txn_type"]
           unit_cost: number
@@ -1875,16 +2569,27 @@ export type Database = {
           warehouse_id: string
         }
         Update: {
+          batch_id?: string | null
           batch_number?: string | null
+          branch_id?: string | null
           created_at?: string
+          daily_record_id?: string | null
           expiry_date?: string | null
+          farm_id?: string | null
           flock_id?: string | null
+          house_id?: string | null
           id?: string
+          invoice_number?: string | null
           item_id?: string
+          notes?: string | null
           org_id?: string
+          procurement_type?: Database["public"]["Enums"]["procurement_type"] | null
           quantity?: number
           recorded_by?: string | null
           reference_doc?: string | null
+          supplier_name?: string | null
+          source_key?: string | null
+          source_kind?: string | null
           transaction_date?: string
           transaction_type?: Database["public"]["Enums"]["stock_txn_type"]
           unit_cost?: number
@@ -1892,6 +2597,13 @@ export type Database = {
           warehouse_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "stock_ledger_daily_record_id_fkey"
+            columns: ["daily_record_id"]
+            isOneToOne: false
+            referencedRelation: "daily_farm_records"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "stock_ledger_flock_id_fkey"
             columns: ["flock_id"]
@@ -2036,6 +2748,52 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_branch_access: {
+        Row: {
+          branch_id: string
+          created_at: string
+          id: string
+          org_id: string
+          profile_id: string
+        }
+        Insert: {
+          branch_id: string
+          created_at?: string
+          id?: string
+          org_id: string
+          profile_id: string
+        }
+        Update: {
+          branch_id?: string
+          created_at?: string
+          id?: string
+          org_id?: string
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_branch_access_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_branch_access_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_branch_access_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2312,6 +3070,64 @@ export type Database = {
     }
     Functions: {
       auth_org_id: { Args: never; Returns: string }
+      close_feed_day: { Args: { p_actor_id: string; p_flock_id: string; p_record_date: string; p_override_reason?: string | null }; Returns: Json }
+      create_branch_batch_cycle: {
+        Args: {
+          p_org_id: string
+          p_branch_id: string
+          p_batch: Json
+          p_flock_slots: Json
+        }
+        Returns: Json
+      }
+      normalize_user_role: {
+        Args: { input_role: string }
+        Returns: Database["public"]["Enums"]["user_role"]
+      }
+      record_feed_weight: { Args: { p_actor_id: string; p_task_id: string; p_record_date: string; p_sample_count: number; p_average_weight_g: number; p_min_weight_g: number; p_max_weight_g: number; p_uniformity_pct: number }; Returns: Json }
+      record_feed_milestone: { Args: { p_actor_id: string; p_milestone_id: string; p_flock_id: string; p_status: string; p_notes?: string | null }; Returns: Json }
+      reopen_feed_day: { Args: { p_actor_id: string; p_flock_id: string; p_record_date: string; p_reason: string }; Returns: Json }
+      save_feed_template: { Args: { p_actor_id: string; p_batch_id: string; p_name: string; p_source_type: string; p_rows: Json }; Returns: Json }
+      record_inventory_movement: {
+        Args: {
+          p_actor_id: string
+          p_item_id: string
+          p_warehouse_id: string
+          p_transaction_type: string
+          p_quantity: number
+          p_unit_cost?: number
+          p_transaction_date?: string
+          p_destination_warehouse_id?: string | null
+          p_branch_id?: string | null
+          p_farm_id?: string | null
+          p_house_id?: string | null
+          p_flock_id?: string | null
+          p_batch_id?: string | null
+          p_procurement_type?: Database["public"]["Enums"]["procurement_type"] | null
+          p_supplier_name?: string | null
+          p_invoice_number?: string | null
+          p_reference_doc?: string | null
+          p_notes?: string | null
+        }
+        Returns: Json
+      }
+      save_daily_record_with_usage: {
+        Args: {
+          p_actor_id: string
+          p_daily_record_id: string | null
+          p_flock_id: string
+          p_record: Json
+          p_usages?: Json
+        }
+        Returns: Json
+      }
+      stock_movement_delta: {
+        Args: {
+          p_transaction_type: Database["public"]["Enums"]["stock_txn_type"]
+          p_quantity: number
+        }
+        Returns: number
+      }
     }
     Enums: {
       account_type: "asset" | "liability" | "equity" | "revenue" | "expense"
@@ -2323,8 +3139,14 @@ export type Database = {
         | "health"
       alert_priority: "info" | "low" | "medium" | "high" | "emergency"
       alert_status: "open" | "acknowledged" | "resolved"
+      feed_type:
+        | "starter_feed"
+        | "grower_pullet_feed"
+        | "layer_feed"
+        | "broiler_feed"
+        | "medicated_feed"
       flock_source: "internal_transfer" | "external_purchase"
-      flock_status: "active" | "transferred" | "sold" | "culled" | "quarantined"
+      flock_status: "active" | "transferred" | "sold" | "culled" | "quarantined" | "archived"
       flock_type: "layer" | "rearing" | "parent_stock" | "broiler"
       health_event_type: "disease" | "treatment" | "observation"
       house_type: "layer" | "rearing" | "parent_stock" | "broiler"
@@ -2333,9 +3155,11 @@ export type Database = {
         | "medicine"
         | "vaccine"
         | "vitamin"
+        | "supplement"
         | "equipment"
         | "spare_parts"
         | "packaging"
+        | "miscellaneous"
       lead_activity_type: "call" | "visit" | "message" | "email" | "note"
       lead_source:
         | "telegram"
@@ -2364,6 +3188,7 @@ export type Database = {
       payment_status: "pending" | "partial" | "paid"
       payment_type: "deposit_50" | "final_50" | "full" | "partial"
       pos_payment_method: "cash" | "bank_transfer" | "mobile_money"
+      procurement_type: "monthly" | "emergency" | "miscellaneous"
       sales_order_status:
         | "draft"
         | "proforma_sent"
@@ -2533,7 +3358,7 @@ export const Constants = {
       alert_priority: ["info", "low", "medium", "high", "emergency"],
       alert_status: ["open", "acknowledged", "resolved"],
       flock_source: ["internal_transfer", "external_purchase"],
-      flock_status: ["active", "transferred", "sold", "culled", "quarantined"],
+      flock_status: ["active", "transferred", "sold", "culled", "quarantined", "archived"],
       flock_type: ["layer", "rearing", "parent_stock", "broiler"],
       health_event_type: ["disease", "treatment", "observation"],
       house_type: ["layer", "rearing", "parent_stock", "broiler"],
@@ -2542,9 +3367,11 @@ export const Constants = {
         "medicine",
         "vaccine",
         "vitamin",
+        "supplement",
         "equipment",
         "spare_parts",
         "packaging",
+        "miscellaneous",
       ],
       lead_activity_type: ["call", "visit", "message", "email", "note"],
       lead_source: [
@@ -2576,6 +3403,7 @@ export const Constants = {
       payment_status: ["pending", "partial", "paid"],
       payment_type: ["deposit_50", "final_50", "full", "partial"],
       pos_payment_method: ["cash", "bank_transfer", "mobile_money"],
+      procurement_type: ["monthly", "emergency", "miscellaneous"],
       sales_order_status: [
         "draft",
         "proforma_sent",
