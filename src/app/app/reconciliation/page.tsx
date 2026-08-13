@@ -19,6 +19,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import { formatReconciliationNumber, type EvidenceEntry } from "@/lib/reconciliation-presentation";
 import { reconciliationWorkflow, type ReconciliationWorkflow } from "@/lib/reconciliation-workflow";
+import { ReconciliationAiPanel } from "@/components/reconciliation-ai-panel";
 
 type Finding = {
   id: string;
@@ -235,6 +236,8 @@ function FindingCard({ finding, role, canResolve, selected, busy, onVerify, onAc
         <div><h4 className="text-xs font-semibold uppercase tracking-wider text-forest-500">Review history</h4><p className="mt-1 text-xs leading-5 text-forest-500">Notes are supporting context; they never edit the source record.</p><div className="mt-3 space-y-2">{finding.responses?.length ? finding.responses.map((response) => <div key={response.id} className="rounded-lg border border-sand-200 bg-white p-3 text-xs"><strong>{responseActionLabel(response.action)}</strong> · {response.actor_name ?? "Authorized user"}<p className="mt-1 leading-5 text-forest-600">{response.note}</p></div>) : <p className="rounded-lg border border-sand-200 bg-white p-3 text-xs text-forest-500">No review note has been needed.</p>}</div></div>
       </div>
     </details>
+
+    <ReconciliationAiPanel findingId={finding.id}/>
 
     <div className="flex flex-col gap-3 border-t border-sand-200 bg-white px-5 py-4 lg:flex-row lg:items-center">
       <div className="mr-auto"><p className="text-sm font-semibold text-forest-900">{active ? "Next step" : "Outcome"}</p><p className="mt-0.5 text-xs leading-5 text-forest-600">{active ? workflow.verification : workflow.stageLabel === "Verified automatically" ? "The system confirmed that the underlying records now agree." : "The decision and supporting history remain available for audit."}</p></div>

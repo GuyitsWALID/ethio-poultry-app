@@ -42,6 +42,15 @@ test("production identity rejects a Supabase project-reference mismatch",()=>{
   assert(result.errors.some(error=>error.includes("does not match")));
 });
 
+test("enabled reconciliation AI requires a server-only Groq secret in production",()=>{
+  const missing=validateEnvironment({...valid,RECONCILIATION_AI_ENABLED:"true"});
+  assert.match(missing.errors.join("\n"),/GROQ_API_KEY is required/);
+  const configured=validateEnvironment({...valid,RECONCILIATION_AI_ENABLED:"true",GROQ_API_KEY:"gsk_test_server_only_key"});
+  assert.equal(configured.errors.some(error=>error.includes("GROQ")),false);
+  const exposed=validateEnvironment({...valid,NEXT_PUBLIC_GROQ_API_KEY:"never-public"});
+  assert.match(exposed.errors.join("\n"),/NEXT_PUBLIC_GROQ_API_KEY is forbidden/);
+});
+
 test("Cloudflare builds cannot silently fall back to the local environment",()=>{
   const result=validateEnvironment({...valid,APP_ENVIRONMENT:"",WORKERS_CI_COMMIT_SHA:"abcdef123456"});
   assert.equal(result.ok,false);

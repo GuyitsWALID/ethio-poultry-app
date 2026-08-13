@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 44,
-  "latest": "20260811100000_required_reference_defaults.sql",
-  "aggregateSha256": "9ff1f2f78a604b23a4f3322bfb9020d626684933df5f866ee04653d6a6afe238",
+  "count": 45,
+  "latest": "20260813000000_reconciliation_ai_advisor.sql",
+  "aggregateSha256": "2f0bd96e1775340c58903f8ab7e52b526a6e4e88280197cb89fffff7e0eacbda",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -124,6 +124,7 @@
     "20260804000000_governance_permissions_foundation.sql": "af5431ef45051a9cadbfb95538d45cf360c3d1840d293cf9e657e6e6185b6a15",
     "20260806000000_item2_governance_closure.sql": "75407f10990e49877f649a2331532adb8b9f9cf96dd4a1e7d9e5e8854cfceaeb",
     "20260809000000_item3_operational_reconciliation.sql": "cec7dec0c789c22f32e5141115ad495579f5cf7b91fdef7977d7083e7657e7de",
-    "20260811100000_required_reference_defaults.sql": "627d174a6e5936f805bf7cd7211fd40b7c0cda44031b7fe2cfb9c6854359c83d"
+    "20260811100000_required_reference_defaults.sql": "627d174a6e5936f805bf7cd7211fd40b7c0cda44031b7fe2cfb9c6854359c83d",
+    "20260813000000_reconciliation_ai_advisor.sql": "7c457772e412cbb4e7091c560784154d47b0b51585c996c9867de5510a3e65d8"
   }
 }

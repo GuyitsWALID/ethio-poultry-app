@@ -13,7 +13,7 @@ This runbook is the authoritative order for staging and production releases. A r
 
 1. Confirm the branch is clean and the intended commit is tagged or recorded.
 2. Use Node `22.16.0`, npm `10.9.2`, and `npm ci`.
-3. Set `APP_ENVIRONMENT`, `APP_RELEASE`, `APP_BASE_URL`, and `SUPABASE_PROJECT_REF` for the target.
+3. Set `APP_ENVIRONMENT`, `APP_RELEASE`, `APP_BASE_URL`, and `SUPABASE_PROJECT_REF` for the target. If Record Checks AI is enabled, also set `RECONCILIATION_AI_ENABLED=true`, `GROQ_MODEL=openai/gpt-oss-120b`, and the server-only `GROQ_API_KEY` secret.
 4. Run `npm run release:verify`.
 5. Run `npm run release:manifest` and retain the output with the release evidence.
 6. Compare `SUPABASE_PROJECT_REF` with the target Supabase dashboard URL. Stop on any mismatch.

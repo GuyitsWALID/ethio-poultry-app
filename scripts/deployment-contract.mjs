@@ -51,6 +51,7 @@ export function validateEnvironment(env = process.env) {
   const warnings = [];
   const environment = env.APP_ENVIRONMENT?.trim() || "local";
   const cloudflareBuild = present(env.WORKERS_CI_COMMIT_SHA);
+  const reconciliationAi = env.RECONCILIATION_AI_ENABLED?.trim().toLowerCase();
   const required = [
     "NEXT_PUBLIC_SUPABASE_URL",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
@@ -63,6 +64,12 @@ export function validateEnvironment(env = process.env) {
   }
   if (cloudflareBuild && environment === "local") {
     errors.push("APP_ENVIRONMENT must be explicitly set for a Cloudflare build.");
+  }
+  if (reconciliationAi && !["true", "false"].includes(reconciliationAi)) {
+    errors.push("RECONCILIATION_AI_ENABLED must be true or false when set.");
+  }
+  if (present(env.NEXT_PUBLIC_GROQ_API_KEY)) {
+    errors.push("NEXT_PUBLIC_GROQ_API_KEY is forbidden; GROQ_API_KEY must remain server-only.");
   }
   for (const key of required) if (!present(env[key])) errors.push(`${key} is required.`);
 
@@ -95,6 +102,7 @@ export function validateEnvironment(env = process.env) {
       if (value && !value.startsWith("https://")) errors.push(`${key} must use HTTPS in ${environment}.`);
     }
     if (!present(env.SUPABASE_PROJECT_REF)) errors.push("SUPABASE_PROJECT_REF is required to bind the release to the intended database project.");
+    if (reconciliationAi === "true" && !present(env.GROQ_API_KEY)) errors.push("GROQ_API_KEY is required when Record Checks AI is enabled.");
     if (present(env.SUPABASE_PROJECT_REF) && present(env.NEXT_PUBLIC_SUPABASE_URL)) {
       const host = new URL(env.NEXT_PUBLIC_SUPABASE_URL).hostname;
       if (host.endsWith(".supabase.co") && host.split(".")[0] !== env.SUPABASE_PROJECT_REF) {

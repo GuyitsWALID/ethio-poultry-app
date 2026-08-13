@@ -34,6 +34,9 @@ Configure the following in both **Build variables and secrets** and the Worker's
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<staging publishable key>`
 - `SUPABASE_SERVICE_ROLE_KEY=<staging service-role secret>`
 - `SUPABASE_PROJECT_REF=uzmhpecehmlwojdmitgj`
+- `RECONCILIATION_AI_ENABLED=true` when validating the Record Checks advisor
+- `GROQ_MODEL=openai/gpt-oss-120b`
+- `GROQ_API_KEY` as a server-only secret when the advisor is enabled
 - `ADMIN_ACCESS_CODE=<strong staging-only secret>`
 
 Never copy `.dev.vars` into a deployment or use it as a substitute for runtime bindings. The `--keep-vars` flag preserves values configured in the Cloudflare dashboard.
