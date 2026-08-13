@@ -74,3 +74,13 @@ test("trust summary excludes resolved and accepted exceptions", () => {
   assert.equal(summary.estimatedImpactEtb, 500);
   assert.equal(summary.trustScore, 80);
 });
+
+test("cost allocation findings carry readable source evidence plus the technical reference", () => {
+  const findings = engine.evaluateOperationalReconciliation(input({
+    costEntries:[{id:"cost-1",amount:54000,entryDate:"2026-08-09",category:"transport",description:"Feed transport",allocationMethod:"direct",supplierName:"Carrier One",invoiceNumber:"INV-14",farmId:"farm-1",flockId:null,batchId:null}],
+  }));
+  const finding = findings.find(item => item.ruleCode === "COST_ALLOCATION_MISMATCH");
+  assert.equal(finding.evidence.description, "Feed transport");
+  assert.equal(finding.evidence.amountEtb, 54000);
+  assert.equal(finding.evidence.costEntryId, "cost-1");
+});
