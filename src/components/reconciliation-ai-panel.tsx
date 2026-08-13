@@ -90,7 +90,7 @@ export function ReconciliationAiPanel({ findingId }: { findingId: string }) {
   };
 
   if (!opened) {
-    return <section className="border-t border-sand-200 bg-forest-950 px-5 py-4 text-white">
+    return <section className="border-t border-sand-200 bg-forest-900 px-5 py-4 text-white">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-amber-300/20 bg-amber-300/10 text-amber-200"><BrainCircuit className="h-5 w-5"/></span>
         <div className="mr-auto"><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-200">AI investigation assistant</p><p className="mt-1 text-sm text-sand-100/80">Ask for an evidence-grounded explanation and practical checks. No records or decisions will be changed.</p></div>
@@ -99,7 +99,7 @@ export function ReconciliationAiPanel({ findingId }: { findingId: string }) {
     </section>;
   }
 
-  return <section className="border-t border-sand-200 bg-forest-950 px-5 py-5 text-white" aria-label="AI investigation assistant">
+  return <section className="border-t border-sand-200 bg-forest-900 px-5 py-5 text-white" aria-label="AI investigation assistant">
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-amber-300/20 bg-amber-300/10 text-amber-200"><BrainCircuit className="h-5 w-5"/></span>
       <div className="mr-auto"><div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-200">AI investigation assistant</p>{state?.latest?.stale ? <span className="rounded-full bg-amber-300 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-forest-950">Evidence changed</span> : state?.latest ? <span className="rounded-full bg-leaf-400/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-leaf-200">Current evidence</span> : null}</div><p className="mt-1 max-w-3xl text-xs leading-5 text-sand-100/70">{RECONCILIATION_AI_DISCLAIMER}</p></div>
@@ -107,8 +107,8 @@ export function ReconciliationAiPanel({ findingId }: { findingId: string }) {
     </div>
 
     {loading ? <div className="mt-5 flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-sand-100"><RefreshCw className="h-4 w-4 animate-spin"/>Loading preserved guidance…</div> : null}
-    {error ? <div role="alert" className="mt-5 flex items-start gap-3 rounded-xl border border-ember-400/30 bg-ember-500/10 p-4 text-sm text-ember-100"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/><span>{error} The deterministic Record Check remains available.</span></div> : null}
-    {!loading && state && !state.enabled ? <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-sm font-semibold">AI guidance is not enabled for this deployment.</p><p className="mt-1 text-xs text-sand-100/70">The automatic Record Check and its correction workflow continue to work normally.</p></div> : null}
+    {error ? <div role="alert" className="mt-5 flex items-start gap-3 rounded-xl border border-ember-300 bg-ember-50 p-4 text-sm text-ember-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0"/><div><p className="font-semibold">AI analysis did not complete</p><p className="mt-1 leading-5">{error} The automatic Record Check remains available.</p></div></div> : null}
+    {!loading && state && !state.enabled ? <div className="mt-5 rounded-xl border border-amber-300 bg-white p-4 text-forest-900"><p className="text-sm font-semibold">AI analysis is switched off in this environment</p><p className="mt-1 text-xs leading-5 text-forest-600">No evidence was sent to Groq. Ask an administrator to enable the AI runtime setting. The automatic Record Check continues to work normally.</p></div> : null}
     {!loading && state?.enabled && !state.latest ? <div className="mt-5 grid gap-4 rounded-2xl border border-white/10 bg-white/5 p-5 lg:grid-cols-[1fr_auto] lg:items-center"><div><p className="text-sm font-semibold">Analyze this confirmed record difference</p><p className="mt-1 text-xs leading-5 text-sand-100/70">Groq receives only the visible business labels, relevant values, dates, and review notes for this check.</p></div><button disabled={generating} onClick={() => void generate(false)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 text-sm font-semibold text-forest-950 disabled:opacity-60">{generating ? <RefreshCw className="h-4 w-4 animate-spin"/> : <Sparkles className="h-4 w-4"/>}{generating ? "Analyzing evidence…" : "Ask AI to analyze"}</button></div> : null}
 
     {state?.latest?.output ? <div className="mt-5 space-y-4">

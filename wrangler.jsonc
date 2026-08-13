@@ -26,7 +26,23 @@
   },
   "env": {
     "staging": {
-      "name": "ethio-poultry-app-staging"
+      "name": "ethio-poultry-app-staging",
+      "vars": {
+        "APP_ENVIRONMENT": "staging",
+        "APP_BASE_URL": "https://ethio-poultry-app-staging.walidmurad65.workers.dev",
+        "NEXT_PUBLIC_SUPABASE_URL": "https://uzmhpecehmlwojdmitgj.supabase.co",
+        "SUPABASE_PROJECT_REF": "uzmhpecehmlwojdmitgj",
+        "RECONCILIATION_AI_ENABLED": "true",
+        "GROQ_MODEL": "openai/gpt-oss-120b"
+      },
+      "secrets": {
+        "required": [
+          "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+          "SUPABASE_SERVICE_ROLE_KEY",
+          "ADMIN_ACCESS_CODE",
+          "GROQ_API_KEY"
+        ]
+      }
     }
   }
 }
