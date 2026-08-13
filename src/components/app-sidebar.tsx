@@ -59,7 +59,7 @@ const itemIcons: Record<string, LucideIcon> = {
   Requests: ShieldCheck,
   "Operating Days": ClipboardList,
   "Daily Close": ClipboardList,
-  Reconciliation: Scale,
+  "Record Checks": Scale,
 };
 
 const ceoNavSections: NavSection[] = [
@@ -72,7 +72,7 @@ const ceoNavSections: NavSection[] = [
       { label: "Reports", href: "/app/reports" },
       { label: "Governance", href: "/app/governance" },
       { label: "Operating Days", href: "/app/operating-days" },
-      { label: "Reconciliation", href: "/app/reconciliation" },
+      { label: "Record Checks", href: "/app/reconciliation" },
     ],
   },
   {
@@ -108,7 +108,7 @@ const farmManagerNavSections: NavSection[] = [
       { label: "Farm Monitoring", href: "/app/farms" },
       { label: "Flocks & Batches", href: "/app/flocks" },
       { label: "Governance", href: "/app/governance" },
-      { label: "Reconciliation", href: "/app/reconciliation" },
+      { label: "Record Checks", href: "/app/reconciliation" },
     ],
   },
   {

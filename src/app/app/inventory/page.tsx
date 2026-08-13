@@ -206,6 +206,13 @@ export default function InventoryPage() {
   const canRecordCosts = currentRole === "farm_manager";
   const canReconcile = currentRole === "ceo";
 
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    if (!requestedTab || !tabs.some((tab) => tab.id === requestedTab)) return;
+    const timer = window.setTimeout(() => setActiveTab(requestedTab as TabId), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const scopedFlockIds = useMemo(
     () =>
       filteredFlocks

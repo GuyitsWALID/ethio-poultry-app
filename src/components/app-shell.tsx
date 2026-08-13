@@ -28,7 +28,7 @@ const routeTitles = [
   ["/app/alerts", "Alerts", "Operations attention"],
   ["/app/governance", "Governance", "Controlled change"],
   ["/app/operating-days", "Operating Days", "Daily closebook"],
-  ["/app/reconciliation", "Reconciliation", "Operational proof"],
+  ["/app/reconciliation", "Record Checks", "Automatic verification"],
 ] as const;
 
 function addisDateLabel() {

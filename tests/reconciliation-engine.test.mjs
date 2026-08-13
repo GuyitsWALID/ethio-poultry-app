@@ -77,10 +77,37 @@ test("trust summary excludes resolved and accepted exceptions", () => {
 
 test("cost allocation findings carry readable source evidence plus the technical reference", () => {
   const findings = engine.evaluateOperationalReconciliation(input({
-    costEntries:[{id:"cost-1",amount:54000,entryDate:"2026-08-09",category:"transport",description:"Feed transport",allocationMethod:"direct",supplierName:"Carrier One",invoiceNumber:"INV-14",farmId:"farm-1",flockId:null,batchId:null}],
+    costEntries:[{id:"cost-1",amount:54000,entryDate:"2026-08-09",category:"transport",description:"Feed transport",allocationMethod:"direct",supplierName:"Carrier One",invoiceNumber:"INV-14",farmId:null,flockId:null,batchId:null}],
   }));
   const finding = findings.find(item => item.ruleCode === "COST_ALLOCATION_MISMATCH");
   assert.equal(finding.evidence.description, "Feed transport");
   assert.equal(finding.evidence.amountEtb, 54000);
   assert.equal(finding.evidence.costEntryId, "cost-1");
+});
+
+test("a directly scoped cost is already fully allocated without a separate allocation row", () => {
+  const findings = engine.evaluateOperationalReconciliation(input({
+    costEntries:[{id:"cost-2",amount:54000,entryDate:"2026-08-09",category:"payroll",description:"Farm payroll",allocationMethod:"direct",supplierName:null,invoiceNumber:"PAY-14",farmId:"farm-1",flockId:null,batchId:null}],
+  }));
+  assert.equal(findings.some(item => item.ruleCode === "COST_ALLOCATION_MISMATCH"), false);
+});
+
+test("explicit split allocations must total the source cost even when the entry has a broad scope", () => {
+  const findings = engine.evaluateOperationalReconciliation(input({
+    costEntries:[{id:"cost-3",amount:54000,entryDate:"2026-08-09",category:"payroll",description:"Shared payroll",allocationMethod:"manual_percent",supplierName:null,invoiceNumber:"PAY-15",farmId:"farm-1",flockId:null,batchId:null}],
+    costAllocations:[{id:"allocation-1",costEntryId:"cost-3",amount:30000}],
+  }));
+  const finding = findings.find(item => item.ruleCode === "COST_ALLOCATION_MISMATCH");
+  assert.equal(finding.recordedValue, 30000);
+  assert.equal(finding.variance, -24000);
+});
+
+test("lineage evidence describes relationships without exposing database identifiers", () => {
+  const findings = engine.evaluateOperationalReconciliation(input({
+    farms:[farm], houses:[house], batches:[{...batch,houseId:"different-house"}], flocks:[flock],
+  }));
+  const finding = findings.find(item => item.ruleCode === "ACTIVE_FLOCK_LINEAGE_BROKEN");
+  assert.equal(finding.evidence.flockCode, "F-1");
+  assert.equal(finding.evidence.batchMatchesHouse, false);
+  assert.equal(Object.keys(finding.evidence).some(key => /Id$/.test(key)), false);
 });
