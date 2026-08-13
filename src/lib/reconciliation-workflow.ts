@@ -1,4 +1,9 @@
 export type ReconciliationWorkflowInput = {
+  id?: string;
+  farm_id?: string | null;
+  house_id?: string | null;
+  flock_id?: string | null;
+  batch_id?: string | null;
   rule_code: string;
   domain: string;
   severity: "critical" | "high" | "medium" | "low";
@@ -202,6 +207,11 @@ export function reconciliationWorkflow(
   const owner = role === "ceo"
     ? governance || finding.domain === "financial" ? "CEO review · Farm Manager correction" : "Farm Manager correction"
     : governance ? "CEO review required" : "Your operating scope";
+  const destinationHref = finding.rule_code === "ACTIVE_FLOCK_LINEAGE_BROKEN" && finding.flock_id
+    ? `/app/flocks?view=overview&flock=${encodeURIComponent(finding.flock_id)}&check=lineage${finding.id ? `&finding=${encodeURIComponent(finding.id)}` : ""}`
+    : finding.rule_code === "BATCH_FLOCK_PLACEMENT_MISMATCH" && finding.batch_id
+      ? `/app/flocks?view=overview&batch=${encodeURIComponent(finding.batch_id)}&check=placement${finding.id ? `&finding=${encodeURIComponent(finding.id)}` : ""}`
+      : guide?.href ?? "/app/reconciliation";
 
   return {
     plainTitle: guide?.title ?? finding.title,
@@ -210,7 +220,7 @@ export function reconciliationWorkflow(
     likelyCauses: guide?.causes ?? ["A source record may be missing, duplicated, or entered incorrectly."],
     owner,
     destination: {
-      href: guide?.href ?? "/app/reconciliation",
+      href: destinationHref,
       label: guide?.destination ?? "Review the source records",
       context: guide?.destinationContext ?? finding.recommended_action,
     },

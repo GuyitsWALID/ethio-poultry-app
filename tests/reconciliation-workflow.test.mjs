@@ -40,6 +40,17 @@ test("critical controls clearly require management attention", () => {
   assert.equal(workflow.destination.href, "/app/governance");
 });
 
+test("lineage findings deep-link to the exact flock and finding", () => {
+  const workflow = reconciliationWorkflow({
+    ...base,
+    id: "finding-42",
+    flock_id: "flock-17",
+    rule_code: "ACTIVE_FLOCK_LINEAGE_BROKEN",
+    domain: "lineage",
+  }, "farm_manager");
+  assert.equal(workflow.destination.href, "/app/flocks?view=overview&flock=flock-17&check=lineage&finding=finding-42");
+});
+
 test("unknown future rules still receive a safe usable fallback", () => {
   const workflow = reconciliationWorkflow({ ...base, rule_code: "NEW_RULE", domain: "birds", title: "New record difference" }, "farm_manager");
   assert.equal(workflow.plainTitle, "New record difference");

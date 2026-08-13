@@ -23,6 +23,10 @@ import { ReconciliationAiPanel } from "@/components/reconciliation-ai-panel";
 
 type Finding = {
   id: string;
+  farm_id?: string | null;
+  house_id?: string | null;
+  flock_id?: string | null;
+  batch_id?: string | null;
   rule_code: string;
   domain: string;
   severity: "critical" | "high" | "medium" | "low";
