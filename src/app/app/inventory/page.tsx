@@ -48,9 +48,18 @@ type StockLedgerRow = {
 type WarehouseRow = {
   id: string;
   branch_id: string;
+  farm_id: string | null;
   name: string;
   type: string;
+  status: "active" | "inactive";
+  branch_name: string;
+  farm_name: string | null;
+  manager_names: string[];
 };
+
+type WarehouseOption = { id: string; name: string };
+type WarehouseFarmOption = { id: string; branch_id: string; name: string };
+type WarehouseManagerOption = { id: string; full_name: string | null; email: string | null };
 
 type CostEntry = {
   id: string;
@@ -95,6 +104,7 @@ const tabs = [
   { id: "stock", label: "Stock" },
   { id: "purchases", label: "Purchases" },
   { id: "issues", label: "Issues" },
+  { id: "warehouses", label: "Warehouses" },
   { id: "monthly", label: "Monthly Costs" },
   { id: "reconciliation", label: "Reconciliation" },
 ] as const;
@@ -125,6 +135,7 @@ const tabIcons = {
   stock: Boxes,
   purchases: ArrowDownToLine,
   issues: ArrowUpFromLine,
+  warehouses: Warehouse,
   monthly: Calculator,
   reconciliation: ClipboardCheck,
 };
@@ -158,6 +169,9 @@ export default function InventoryPage() {
   const [ledger, setLedger] = useState<StockLedgerRow[]>([]);
   const [balanceLedger, setBalanceLedger] = useState<StockLedgerRow[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
+  const [warehouseBranches, setWarehouseBranches] = useState<WarehouseOption[]>([]);
+  const [warehouseFarms, setWarehouseFarms] = useState<WarehouseFarmOption[]>([]);
+  const [warehouseManagers, setWarehouseManagers] = useState<WarehouseManagerOption[]>([]);
   const [costEntries, setCostEntries] = useState<CostEntry[]>([]);
   const [periods, setPeriods] = useState<MonthlyPeriod[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -201,10 +215,17 @@ export default function InventoryPage() {
   const [stockSearch, setStockSearch] = useState("");
   const [stockCategory, setStockCategory] = useState("all");
   const [stockRisk, setStockRisk] = useState<"all" | "attention" | "healthy" | "unrated">("all");
+  const [stockWarehouseId, setStockWarehouseId] = useState("");
+  const [warehouseName, setWarehouseName] = useState("");
+  const [warehouseBranchId, setWarehouseBranchId] = useState("");
+  const [warehouseFarmId, setWarehouseFarmId] = useState("");
+  const [warehouseType, setWarehouseType] = useState("farm_store");
+  const [warehouseManagerId, setWarehouseManagerId] = useState("");
 
   const canManageStock = currentRole === "farm_manager";
   const canRecordCosts = currentRole === "farm_manager";
   const canReconcile = currentRole === "ceo";
+  const canCreateWarehouse = currentRole === "ceo";
 
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
@@ -280,7 +301,7 @@ export default function InventoryPage() {
       return;
     }
 
-    const [itemsRes, ledgerRes, balanceLedgerRes, warehousesRes, costsResponse, periodsResponse] = await Promise.all([
+    const [itemsRes, ledgerRes, balanceLedgerRes, warehousesResponse, costsResponse, periodsResponse] = await Promise.all([
       supabase
         .from("inventory_items")
         .select("id, name, category, unit, reorder_level, unit_cost")
@@ -292,27 +313,32 @@ export default function InventoryPage() {
         .select("item_id, warehouse_id, quantity, transaction_type, unit_cost, transaction_date, flock_id, reference_doc, supplier_name, invoice_number, procurement_type, notes")
         .eq("org_id", nextOrgId)
         .limit(10000),
-      supabase.from("warehouses").select("id, branch_id, name, type").eq("org_id", nextOrgId).order("name"),
+      fetch("/api/inventory/warehouses"),
       fetch(`/api/profit/cost-entries?${scopeParams.toString()}`),
       fetch(`/api/profit/monthly?${scopeParams.toString()}`),
     ]);
 
     const costsJson = costsResponse.ok ? await costsResponse.json() : { costEntries: [] };
     const periodsJson = periodsResponse.ok ? await periodsResponse.json() : { periods: [] };
+    const warehousesJson = warehousesResponse.ok ? await warehousesResponse.json() : { warehouses: [], branches: [], farms: [], managers: [] };
+    if (!warehousesResponse.ok) setError(warehousesJson.error ?? "Could not load assigned warehouses.");
     setItems((itemsRes.data ?? []) as InventoryItem[]);
-    setLedger((ledgerRes.data ?? []) as StockLedgerRow[]);
-    const warehouseRows = (warehousesRes.data ?? []) as WarehouseRow[];
-    const balanceRows = (balanceLedgerRes.data ?? []) as StockLedgerRow[];
-    const scopedWarehouseIds = new Set(
-      warehouseRows
-        .filter((warehouse) => !scope.branchId || warehouse.branch_id === scope.branchId)
-        .map((warehouse) => warehouse.id)
+    const warehouseRows = ((warehousesJson.warehouses ?? []) as WarehouseRow[]).filter((warehouse) =>
+      (!scope.branchId || warehouse.branch_id === scope.branchId) && (!scope.farmId || warehouse.farm_id === scope.farmId)
     );
+    const balanceRows = (balanceLedgerRes.data ?? []) as StockLedgerRow[];
+    const scopedWarehouseIds = new Set(warehouseRows.map((warehouse) => warehouse.id));
+    setLedger(((ledgerRes.data ?? []) as StockLedgerRow[]).filter((row) => scopedWarehouseIds.has(row.warehouse_id)));
     setBalanceLedger(balanceRows.filter((row) => scopedWarehouseIds.has(row.warehouse_id)));
     setWarehouses(warehouseRows);
+    setWarehouseBranches((warehousesJson.branches ?? []) as WarehouseOption[]);
+    setWarehouseFarms((warehousesJson.farms ?? []) as WarehouseFarmOption[]);
+    setWarehouseManagers((warehousesJson.managers ?? []) as WarehouseManagerOption[]);
+    if (!warehouseBranchId && warehousesJson.branches?.[0]) setWarehouseBranchId(String(warehousesJson.branches[0].id));
     setCostEntries((costsJson.costEntries ?? []) as CostEntry[]);
     setPeriods((periodsJson.periods ?? []) as MonthlyPeriod[]);
     if (!txnWarehouseId && warehouseRows[0]) setTxnWarehouseId(warehouseRows[0].id);
+    if (stockWarehouseId && !warehouseRows.some((warehouse) => warehouse.id === stockWarehouseId)) setStockWarehouseId("");
     setLoading(false);
   };
 
@@ -325,9 +351,11 @@ export default function InventoryPage() {
   const stockByItem = useMemo(() => {
     const sign = (txn: StockLedgerRow["transaction_type"]) => (txn === "issue" || txn === "transfer_out" ? -1 : 1);
     const map = new Map<string, number>();
-    balanceLedger.forEach((entry) => map.set(entry.item_id, (map.get(entry.item_id) ?? 0) + sign(entry.transaction_type) * entry.quantity));
+    balanceLedger
+      .filter((entry) => !stockWarehouseId || entry.warehouse_id === stockWarehouseId)
+      .forEach((entry) => map.set(entry.item_id, (map.get(entry.item_id) ?? 0) + sign(entry.transaction_type) * entry.quantity));
     return map;
-  }, [balanceLedger]);
+  }, [balanceLedger, stockWarehouseId]);
 
   const itemNameMap = useMemo(() => new Map(items.map((item) => [item.id, item.name])), [items]);
   const flockLabelMap = useMemo(() => new Map(filteredFlocks.map((flock) => [flock.id, flock.flock_code])), [filteredFlocks]);
@@ -513,6 +541,36 @@ export default function InventoryPage() {
     await loadData();
   };
 
+  const onCreateWarehouse = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (saving || !canCreateWarehouse) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    const response = await fetch("/api/inventory/warehouses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: warehouseName,
+        branchId: warehouseBranchId,
+        farmId: warehouseFarmId || null,
+        type: warehouseType,
+        managerId: warehouseManagerId || null,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setSaving(false);
+    if (!response.ok) {
+      setError(data.error ?? "Could not create warehouse.");
+      return;
+    }
+    setSuccess(data.warning ?? (warehouseManagerId ? "Warehouse created and assigned to the Farm Manager." : "Warehouse created. Assign a Farm Manager before operational use."));
+    setWarehouseName("");
+    setWarehouseFarmId("");
+    setWarehouseManagerId("");
+    await loadData();
+  };
+
   const reconcile = async (lock: boolean) => {
     if (saving || !canReconcile) return;
     setSaving(true);
@@ -630,8 +688,9 @@ export default function InventoryPage() {
           <section className="min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
             <div className="border-b border-sand-200 p-5 sm:p-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">Current catalogue</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Inventory position</h2><p className="mt-1 text-sm text-forest-600">{filteredStockRows.length} of {items.length} items shown</p></div>
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <label className="relative"><span className="sr-only">Search inventory</span><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-forest-500" aria-hidden="true" /><input value={stockSearch} onChange={(e) => setStockSearch(e.target.value)} className={`${inputClass} w-full pl-9`} placeholder="Search items" /></label>
+                  <select aria-label="Filter by warehouse" className={inputClass} value={stockWarehouseId} onChange={(e) => setStockWarehouseId(e.target.value)}><option value="">All assigned warehouses</option>{warehouses.filter((warehouse) => warehouse.status === "active").map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select>
                   <select aria-label="Filter by category" className={inputClass} value={stockCategory} onChange={(e) => setStockCategory(e.target.value)}><option value="all">All categories</option>{inventoryCategories.map((value) => <option key={value} value={value}>{value.replaceAll("_", " ")}</option>)}</select>
                   <select aria-label="Filter by stock status" className={inputClass} value={stockRisk} onChange={(e) => setStockRisk(e.target.value as typeof stockRisk)}><option value="all">All statuses</option><option value="attention">Needs action</option><option value="healthy">Above reorder</option><option value="unrated">No reorder level</option></select>
                 </div>
@@ -687,6 +746,44 @@ export default function InventoryPage() {
           <section className="rounded-2xl border border-sand-200 bg-sand-50 p-5"><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">Category exposure</p><div className="mt-3 space-y-3">{categorySummary.slice(0, 5).map((row) => <div key={row.name} className="flex items-center justify-between gap-3 text-sm"><span className="capitalize text-forest-700">{row.name.replaceAll("_", " ")} <span className="text-xs text-forest-500">({row.items})</span></span><span className={`font-semibold ${row.attention ? "text-ember-500" : "text-forest-900"}`}>{row.attention ? `${row.attention} action` : "Covered"}</span></div>)}{categorySummary.length === 0 ? <p className="text-sm text-forest-600">Category signals will appear after items are added.</p> : null}</div></section>
           </aside>
           </div>
+        </div>
+      ) : null}
+
+      {activeTab === "warehouses" ? (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
+            <div className="border-b border-sand-200 p-5 sm:p-6">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">Storage network</p>
+              <h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Where inventory physically belongs</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-forest-600">The item catalogue is shared by the organization. Every quantity belongs to a warehouse through its stock-ledger postings, and physical counts compare one warehouse at a time.</p>
+            </div>
+            <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-6">
+              {warehouses.length ? warehouses.map((warehouse) => (
+                <article key={warehouse.id} className="rounded-xl border border-sand-200 bg-sand-50/50 p-4">
+                  <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-forest-900">{warehouse.name}</h3><p className="mt-1 text-xs text-forest-600">{warehouse.branch_name}{warehouse.farm_name ? ` · ${warehouse.farm_name}` : " · Branch-level store"}</p></div><span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${warehouse.status === "active" ? "bg-green-50 text-forest-700" : "bg-sand-100 text-forest-500"}`}>{warehouse.status}</span></div>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-forest-500">{warehouse.type.replaceAll("_", " ")}</p>
+                  <p className="mt-2 text-sm text-forest-700">{warehouse.manager_names.length ? `Assigned to ${warehouse.manager_names.join(", ")}` : "No Farm Manager assigned — stock mutations are blocked."}</p>
+                  <button type="button" onClick={() => { setStockWarehouseId(warehouse.id); setActiveTab("stock"); }} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-forest-900 underline underline-offset-4">View this warehouse stock <ChevronRight className="h-4 w-4" aria-hidden="true" /></button>
+                </article>
+              )) : <div className="rounded-xl border border-dashed border-sand-300 p-6 text-sm leading-6 text-forest-600 sm:col-span-2">{currentRole === "farm_manager" ? "No warehouse is assigned to you. Ask the CEO to create or assign the appropriate farm or central store before receiving, issuing, transferring, or counting stock." : "No warehouse has been created yet. Use Warehouse setup to establish the first physical stock location."}</div>}
+            </div>
+          </section>
+
+          <aside className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm sm:p-6">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">Governed setup</p>
+            <h2 className="mt-1 font-display text-xl font-semibold text-forest-900">Create a warehouse</h2>
+            <p className="mt-1 text-sm leading-6 text-forest-600">CEO setup defines the location. Assigning a Farm Manager grants the operational authority to post and count stock there.</p>
+            {!canCreateWarehouse ? <div className="mt-4 rounded-xl bg-sand-50 p-4 text-sm text-forest-600">Warehouse creation is managed by the CEO. Your assigned locations appear on the left.</div> : (
+              <form className="mt-4 grid gap-3" onSubmit={onCreateWarehouse}>
+                <input required className={inputClass} value={warehouseName} onChange={(event) => setWarehouseName(event.target.value)} placeholder="Warehouse name" aria-label="Warehouse name" />
+                <select required className={inputClass} value={warehouseBranchId} onChange={(event) => { setWarehouseBranchId(event.target.value); setWarehouseFarmId(""); }} aria-label="Warehouse branch"><option value="">Select branch</option>{warehouseBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select>
+                <select className={inputClass} value={warehouseFarmId} onChange={(event) => setWarehouseFarmId(event.target.value)} aria-label="Associated farm"><option value="">Branch-level or central warehouse</option>{warehouseFarms.filter((farm) => farm.branch_id === warehouseBranchId).map((farm) => <option key={farm.id} value={farm.id}>{farm.name}</option>)}</select>
+                <select className={inputClass} value={warehouseType} onChange={(event) => setWarehouseType(event.target.value)} aria-label="Warehouse type"><option value="farm_store">Farm store</option><option value="pharmacy">Pharmacy</option><option value="equipment_store">Equipment store</option><option value="central_warehouse">Central warehouse</option></select>
+                <select className={inputClass} value={warehouseManagerId} onChange={(event) => setWarehouseManagerId(event.target.value)} aria-label="Assigned Farm Manager"><option value="">Create unassigned</option>{warehouseManagers.map((manager) => <option key={manager.id} value={manager.id}>{manager.full_name || manager.email || "Farm Manager"}</option>)}</select>
+                <button type="submit" disabled={saving || !warehouseBranchId} className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 transition hover:bg-forest-800 disabled:opacity-60">{saving ? "Creating…" : "Create warehouse"}</button>
+              </form>
+            )}
+          </aside>
         </div>
       ) : null}
 

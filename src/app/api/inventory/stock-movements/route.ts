@@ -41,6 +41,8 @@ export async function POST(request: NextRequest) {
 
     if (!itemId) return json({ error: "Select an inventory item." }, 400);
     if (!warehouseId) return json({ error: "Select a source warehouse." }, 400);
+    const activeWarehouse=async(id:string)=>{const {data}=await governanceAdmin.from("warehouses").select("id").eq("id",id).eq("org_id",ctx.orgId).eq("status","active").maybeSingle();return Boolean(data)};
+    if(!await activeWarehouse(warehouseId))return json({error:"The source warehouse is inactive or outside this organization."},400);
     const now=new Date().toISOString();const assigned=async(id:string)=>{if(ctx.supportSessionId)return true;const {data}=await governanceAdmin.from("user_warehouse_access").select("id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).eq("warehouse_id",id).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`).maybeSingle();return Boolean(data)};
     if(!await assigned(warehouseId))return json({error:"An active assignment to the source warehouse is required."},403);
     if (!transactionType || !VALID_TRANSACTION_TYPES.has(transactionType)) {
@@ -53,6 +55,7 @@ export async function POST(request: NextRequest) {
       return json({ error: "Select a destination warehouse for the transfer." }, 400);
     }
     if(transactionType==="transfer"&&destinationWarehouseId&&!await assigned(destinationWarehouseId))return json({error:"An active assignment to the destination warehouse is required."},403);
+    if(transactionType==="transfer"&&destinationWarehouseId&&!await activeWarehouse(destinationWarehouseId))return json({error:"The destination warehouse is inactive or outside this organization."},400);
     if (transactionType === "receipt" && (!procurementType || !VALID_PROCUREMENT_TYPES.has(procurementType))) {
       return json({ error: "Select monthly, emergency, or miscellaneous procurement." }, 400);
     }
