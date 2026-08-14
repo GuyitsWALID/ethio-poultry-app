@@ -52,7 +52,7 @@ export async function listInventoryWarehouses(ctx: AccessContext) {
     warehouseQuery = warehouseQuery.in("id", allowedIds).eq("status", "active");
   }
 
-  const managerQuery = governanceAdmin.from("profiles").select("id,full_name,email").eq("org_id", ctx.orgId).eq("role", "farm_manager").eq("is_active", true);
+  const managerQuery = governanceAdmin.from("profiles").select("id,full_name").eq("org_id", ctx.orgId).eq("role", "farm_manager").eq("is_active", true);
   const assignmentQuery = governanceAdmin.from("user_warehouse_access").select("warehouse_id,profile_id,starts_at,expires_at,revoked_at").eq("org_id", ctx.orgId);
   if (ctx.role === "farm_manager") {
     managerQuery.eq("id", ctx.userId);
@@ -70,7 +70,7 @@ export async function listInventoryWarehouses(ctx: AccessContext) {
 
   const branchNames = new Map((branchesResult.data ?? []).map((row) => [row.id, row.name]));
   const farmNames = new Map((farmsResult.data ?? []).map((row) => [row.id, row.name]));
-  const managerNames = new Map((managersResult.data ?? []).map((row) => [row.id, row.full_name || row.email || "Farm manager"]));
+  const managerNames = new Map((managersResult.data ?? []).map((row) => [row.id, row.full_name || "Farm manager"]));
   const now = Date.now();
   const assignmentsByWarehouse = new Map<string, string[]>();
   for (const assignment of assignmentsResult.data ?? []) {

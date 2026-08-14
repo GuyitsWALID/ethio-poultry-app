@@ -24,6 +24,7 @@ test("CEO setup can assign an active farm manager and emits an audit event", () 
   assert.match(management, /user_warehouse_access/);
   assert.match(management, /warehouse\.created/);
   assert.match(management, /role", "farm_manager"/);
+  assert.doesNotMatch(management, /select\("id,full_name,email"\)/);
 });
 
 test("inventory presents warehouse-specific balances and setup", () => {

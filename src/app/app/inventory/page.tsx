@@ -59,7 +59,7 @@ type WarehouseRow = {
 
 type WarehouseOption = { id: string; name: string };
 type WarehouseFarmOption = { id: string; branch_id: string; name: string };
-type WarehouseManagerOption = { id: string; full_name: string | null; email: string | null };
+type WarehouseManagerOption = { id: string; full_name: string | null };
 
 type CostEntry = {
   id: string;
@@ -779,7 +779,7 @@ export default function InventoryPage() {
                 <select required className={inputClass} value={warehouseBranchId} onChange={(event) => { setWarehouseBranchId(event.target.value); setWarehouseFarmId(""); }} aria-label="Warehouse branch"><option value="">Select branch</option>{warehouseBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select>
                 <select className={inputClass} value={warehouseFarmId} onChange={(event) => setWarehouseFarmId(event.target.value)} aria-label="Associated farm"><option value="">Branch-level or central warehouse</option>{warehouseFarms.filter((farm) => farm.branch_id === warehouseBranchId).map((farm) => <option key={farm.id} value={farm.id}>{farm.name}</option>)}</select>
                 <select className={inputClass} value={warehouseType} onChange={(event) => setWarehouseType(event.target.value)} aria-label="Warehouse type"><option value="farm_store">Farm store</option><option value="pharmacy">Pharmacy</option><option value="equipment_store">Equipment store</option><option value="central_warehouse">Central warehouse</option></select>
-                <select className={inputClass} value={warehouseManagerId} onChange={(event) => setWarehouseManagerId(event.target.value)} aria-label="Assigned Farm Manager"><option value="">Create unassigned</option>{warehouseManagers.map((manager) => <option key={manager.id} value={manager.id}>{manager.full_name || manager.email || "Farm Manager"}</option>)}</select>
+                <select className={inputClass} value={warehouseManagerId} onChange={(event) => setWarehouseManagerId(event.target.value)} aria-label="Assigned Farm Manager"><option value="">Create unassigned</option>{warehouseManagers.map((manager) => <option key={manager.id} value={manager.id}>{manager.full_name || "Farm Manager"}</option>)}</select>
                 <button type="submit" disabled={saving || !warehouseBranchId} className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 transition hover:bg-forest-800 disabled:opacity-60">{saving ? "Creating…" : "Create warehouse"}</button>
               </form>
             )}
