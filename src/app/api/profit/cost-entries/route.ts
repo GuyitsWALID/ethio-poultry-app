@@ -19,6 +19,7 @@ const VALID_CATEGORIES = new Set([
   "miscellaneous",
 ]);
 const VALID_ALLOCATIONS = new Set(["direct", "bird_count", "egg_count", "feed_consumption", "manual_percent"]);
+const VALID_ENTRY_KINDS = new Set(["monthly", "one_off"]);
 
 function cleanText(value: unknown) {
   if (typeof value !== "string") return null;
@@ -76,12 +77,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const category = cleanText(body.category);
     const allocationMethod = cleanText(body.allocation_method) ?? "direct";
+    const entryKind = cleanText(body.entry_kind) ?? "one_off";
     const entryDate = cleanText(body.entry_date);
     const description = cleanText(body.description);
     const amount = numberFrom(body.amount);
     if (!entryDate) return json({ error: "Entry date is required." }, 400);
     if (!category || !VALID_CATEGORIES.has(category)) return json({ error: "Select a valid cost category." }, 400);
     if (!VALID_ALLOCATIONS.has(allocationMethod)) return json({ error: "Select a valid allocation method." }, 400);
+    if (!VALID_ENTRY_KINDS.has(entryKind)) return json({ error: "Select monthly or one-off expense." }, 400);
     if (!description) return json({ error: "Description is required." }, 400);
     if (amount <= 0) return json({ error: "Amount must be greater than zero." }, 400);
 
@@ -95,6 +98,7 @@ export async function POST(request: NextRequest) {
         flock_id: cleanText(body.flock_id),
         batch_id: cleanText(body.batch_id),
         entry_date: entryDate,
+        entry_kind: entryKind,
         category,
         description,
         amount,

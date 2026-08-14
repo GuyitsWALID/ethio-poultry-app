@@ -12,6 +12,7 @@ import {
   ClipboardCheck,
   PackagePlus,
   RefreshCw,
+  Scale,
   Search,
   ShieldAlert,
   Warehouse,
@@ -64,6 +65,7 @@ type WarehouseManagerOption = { id: string; full_name: string | null };
 type CostEntry = {
   id: string;
   entry_date: string;
+  entry_kind: "monthly" | "one_off";
   category: string;
   description: string;
   amount: number;
@@ -101,12 +103,13 @@ type InventoryCategory = Database["public"]["Enums"]["inventory_category"];
 type StockMovementInputType = "receipt" | "issue" | "return" | "adjustment" | "transfer";
 
 const tabs = [
-  { id: "stock", label: "Stock" },
-  { id: "purchases", label: "Purchases" },
-  { id: "issues", label: "Issues" },
+  { id: "stock", label: "Stock overview" },
+  { id: "purchases", label: "Receive stock" },
+  { id: "issues", label: "Use or move stock" },
+  { id: "count", label: "Count stock" },
   { id: "warehouses", label: "Warehouses" },
-  { id: "monthly", label: "Monthly Costs" },
-  { id: "reconciliation", label: "Reconciliation" },
+  { id: "monthly", label: "Record expense" },
+  { id: "reconciliation", label: "Month-end close" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -135,6 +138,7 @@ const tabIcons = {
   stock: Boxes,
   purchases: ArrowDownToLine,
   issues: ArrowUpFromLine,
+  count: Scale,
   warehouses: Warehouse,
   monthly: Calculator,
   reconciliation: ClipboardCheck,
@@ -200,6 +204,7 @@ export default function InventoryPage() {
   const [txnNotes, setTxnNotes] = useState("");
 
   const [costDate, setCostDate] = useState(addisToday());
+  const [costEntryKind, setCostEntryKind] = useState<"monthly" | "one_off">("monthly");
   const [costCategory, setCostCategory] = useState("payroll");
   const [costDescription, setCostDescription] = useState("");
   const [costAmount, setCostAmount] = useState(0);
@@ -221,6 +226,13 @@ export default function InventoryPage() {
   const [warehouseFarmId, setWarehouseFarmId] = useState("");
   const [warehouseType, setWarehouseType] = useState("farm_store");
   const [warehouseManagerId, setWarehouseManagerId] = useState("");
+  const [countWarehouseId, setCountWarehouseId] = useState("");
+  const [countItemId, setCountItemId] = useState("");
+  const [countDate, setCountDate] = useState(addisToday());
+  const [countQuantity, setCountQuantity] = useState(0);
+  const [countType, setCountType] = useState<"monthly" | "spot">("monthly");
+  const [countNotes, setCountNotes] = useState("");
+  const [countResult, setCountResult] = useState<{ ledger: number; counted: number; variance: number } | null>(null);
 
   const canManageStock = currentRole === "farm_manager";
   const canRecordCosts = currentRole === "farm_manager";
@@ -338,6 +350,8 @@ export default function InventoryPage() {
     setCostEntries((costsJson.costEntries ?? []) as CostEntry[]);
     setPeriods((periodsJson.periods ?? []) as MonthlyPeriod[]);
     if (!txnWarehouseId && warehouseRows[0]) setTxnWarehouseId(warehouseRows[0].id);
+    if (!countWarehouseId && warehouseRows[0]) setCountWarehouseId(warehouseRows[0].id);
+    if (!countItemId && itemsRes.data?.[0]) setCountItemId(String(itemsRes.data[0].id));
     if (stockWarehouseId && !warehouseRows.some((warehouse) => warehouse.id === stockWarehouseId)) setStockWarehouseId("");
     setLoading(false);
   };
@@ -514,6 +528,7 @@ export default function InventoryPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         entry_date: costDate,
+        entry_kind: costEntryKind,
         category: costCategory,
         description: costDescription,
         amount: costAmount,
@@ -533,11 +548,50 @@ export default function InventoryPage() {
       setError(data?.error ?? "Could not save cost entry.");
       return;
     }
-    setSuccess("Monthly cost entry saved.");
+    setSuccess(costEntryKind === "monthly" ? "Monthly operating cost saved." : "One-off operating cost saved.");
     setCostDescription("");
     setCostAmount(0);
     setCostSupplier("");
     setCostInvoice("");
+    await loadData();
+  };
+
+  const onRecordPhysicalCount = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (saving || !canManageStock) return;
+    if (!countWarehouseId || !countItemId || countQuantity < 0) {
+      setError("Select a warehouse and item, then enter the quantity physically counted.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    setCountResult(null);
+    const response = await fetch("/api/reconciliation/physical-counts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        warehouseId: countWarehouseId,
+        itemId: countItemId,
+        countDate,
+        countedQuantity: countQuantity,
+        notes: `${countType === "monthly" ? "Monthly stock count" : "Spot stock count"}${countNotes.trim() ? ` — ${countNotes.trim()}` : ""}`,
+        evidence: [],
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    setSaving(false);
+    if (!response.ok) {
+      setError(data.error ?? "Could not save the stock count.");
+      return;
+    }
+    const ledgerQuantity = Number(data.count?.ledger_quantity ?? 0);
+    const countedQuantity = Number(data.count?.counted_quantity ?? countQuantity);
+    const variance = countedQuantity - ledgerQuantity;
+    setCountResult({ ledger: ledgerQuantity, counted: countedQuantity, variance });
+    setSuccess(variance === 0 ? "Stock count saved. The shelf count matches the system." : "Stock count saved. A difference was found and Record Checks has been updated.");
+    setCountQuantity(0);
+    setCountNotes("");
     await loadData();
   };
 
@@ -621,7 +675,7 @@ export default function InventoryPage() {
               <PackagePlus className="h-4 w-4" aria-hidden="true" /> Receive stock
             </button>
             <button type="button" onClick={() => { setActiveTab("issues"); setTxnType("issue"); }} className="inline-flex h-11 items-center gap-2 rounded-xl border border-sand-50/25 bg-white/5 px-4 text-sm font-semibold text-sand-50 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-amber-500">
-              <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" /> Issue stock
+              <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" /> Use or move stock
             </button>
           </div>
         </div>
@@ -629,6 +683,18 @@ export default function InventoryPage() {
 
       {error ? <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{error}</div> : null}
       {success ? <div role="status" className="flex items-start gap-3 rounded-xl border border-leaf-400/40 bg-green-50 px-4 py-3 text-sm text-forest-700"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-leaf-500" aria-hidden="true" />{success}</div> : null}
+
+      <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
+        <div className="border-b border-sand-200 px-5 py-4 sm:px-6"><p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">Start with what happened</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">What do you need to record?</h2><p className="mt-1 text-sm text-forest-600">Choose one job. The page will show only the fields needed for it.</p></div>
+        <div className="grid divide-y divide-sand-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
+          {[
+            { id: "purchases" as TabId, Icon: PackagePlus, title: "Stock arrived", copy: "Receive a delivery or purchase into a warehouse.", action: "Receive stock" },
+            { id: "issues" as TabId, Icon: ArrowUpFromLine, title: "Stock left or moved", copy: "Record use, return, adjustment, or transfer.", action: "Update stock" },
+            { id: "count" as TabId, Icon: Scale, title: "I counted the shelf", copy: "Save a monthly or surprise physical count.", action: "Count stock" },
+            { id: "monthly" as TabId, Icon: Calculator, title: "We paid an expense", copy: "Record a monthly bill or one-off miscellaneous cost.", action: "Record expense" },
+          ].map(({ id, Icon, title, copy, action }) => <button key={id} type="button" onClick={() => { setActiveTab(id); if (id === "purchases") setTxnType("receipt"); if (id === "issues" && txnType === "receipt") setTxnType("issue"); }} className={`group p-5 text-left transition focus:outline-none focus:ring-2 focus:ring-inset focus:ring-amber-500 ${activeTab === id ? "bg-forest-900 text-sand-50" : "hover:bg-sand-50"}`}><span className={`grid h-10 w-10 place-items-center rounded-xl ${activeTab === id ? "bg-amber-500 text-forest-950" : "bg-leaf-500/10 text-forest-700"}`}><Icon className="h-5 w-5" aria-hidden="true" /></span><p className={`mt-4 font-semibold ${activeTab === id ? "text-white" : "text-forest-900"}`}>{title}</p><p className={`mt-1 min-h-10 text-xs leading-5 ${activeTab === id ? "text-sand-100/75" : "text-forest-600"}`}>{copy}</p><span className={`mt-3 inline-flex items-center gap-1 text-xs font-semibold ${activeTab === id ? "text-amber-400" : "text-forest-900"}`}>{action}<ChevronRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" aria-hidden="true" /></span></button>)}
+        </div>
+      </section>
 
       <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
         <div className="grid divide-y divide-sand-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">
@@ -749,6 +815,29 @@ export default function InventoryPage() {
         </div>
       ) : null}
 
+      {activeTab === "count" ? (
+        <div className="grid gap-5 xl:grid-cols-[minmax(360px,480px)_minmax(0,1fr)]">
+          <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm sm:p-6">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">Physical verification</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Record what is actually on the shelf</h2>
+            <p className="mt-2 text-sm leading-6 text-forest-600">Choose the location and item, then enter the quantity you physically counted. The system compares it with the expected balance automatically.</p>
+            {!canManageStock ? <p className="mt-3 rounded-xl bg-sand-50 p-3 text-sm text-forest-600">Only an assigned Farm Manager can submit a physical count.</p> : null}
+            <form className="mt-5 grid gap-4" onSubmit={onRecordPhysicalCount}>
+              <fieldset className="grid grid-cols-2 gap-2"><legend className="mb-2 text-xs font-semibold text-forest-700">Why are you counting?</legend><button type="button" onClick={() => setCountType("monthly")} className={`rounded-xl border p-3 text-left text-sm ${countType === "monthly" ? "border-forest-900 bg-forest-900 text-white" : "border-sand-200 text-forest-700"}`}><strong className="block">Monthly count</strong><span className="mt-1 block text-xs opacity-75">Scheduled store check</span></button><button type="button" onClick={() => setCountType("spot")} className={`rounded-xl border p-3 text-left text-sm ${countType === "spot" ? "border-forest-900 bg-forest-900 text-white" : "border-sand-200 text-forest-700"}`}><strong className="block">Spot count</strong><span className="mt-1 block text-xs opacity-75">Surprise or follow-up check</span></button></fieldset>
+              <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Warehouse<select required className={inputClass} value={countWarehouseId} onChange={(event) => setCountWarehouseId(event.target.value)}><option value="">Select where you counted</option>{warehouses.filter((warehouse) => warehouse.status === "active").map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>
+              <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Inventory item<select required className={inputClass} value={countItemId} onChange={(event) => setCountItemId(event.target.value)}><option value="">Select what you counted</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select></label>
+              <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-semibold text-forest-700">Count date<input required type="date" className={inputClass} value={countDate} onChange={(event) => setCountDate(event.target.value)} /></label><label className="grid gap-1.5 text-xs font-semibold text-forest-700">Quantity physically counted<input required min={0} step="any" type="number" className={inputClass} value={countQuantity || ""} onChange={(event) => setCountQuantity(Number(event.target.value) || 0)} placeholder="Example: 42" /></label></div>
+              <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Optional note<input className={inputClass} value={countNotes} onChange={(event) => setCountNotes(event.target.value)} placeholder="Witness, damaged bags, count circumstances…" /></label>
+              <button disabled={saving || !canManageStock || !warehouses.length || !items.length} className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-white disabled:opacity-50">{saving ? "Saving and comparing…" : "Save count and compare"}</button>
+            </form>
+          </section>
+          <section className="rounded-2xl border border-sand-200 bg-sand-50 p-5 sm:p-6">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">What happens next</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">One count, one clear result</h2>
+            {countResult ? <div className="mt-5 overflow-hidden rounded-2xl border border-sand-200 bg-white"><div className="grid grid-cols-3 divide-x divide-sand-200"><div className="p-4"><p className="text-[10px] uppercase tracking-wider text-forest-500">System expected</p><p className="mt-2 font-display text-2xl font-semibold text-forest-900">{money(countResult.ledger)}</p></div><div className="p-4"><p className="text-[10px] uppercase tracking-wider text-forest-500">You counted</p><p className="mt-2 font-display text-2xl font-semibold text-forest-900">{money(countResult.counted)}</p></div><div className="p-4"><p className="text-[10px] uppercase tracking-wider text-forest-500">Difference</p><p className={`mt-2 font-display text-2xl font-semibold ${countResult.variance === 0 ? "text-leaf-500" : "text-ember-500"}`}>{countResult.variance > 0 ? "+" : ""}{money(countResult.variance)}</p></div></div><p className="border-t border-sand-200 p-4 text-sm leading-6 text-forest-600">{countResult.variance === 0 ? "The physical count agrees with the inventory ledger. No follow-up is needed." : "Record Checks now contains the difference so it can be investigated without changing the ledger silently."}</p></div> : <ol className="mt-5 space-y-4 text-sm text-forest-700"><li className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white font-semibold">1</span><span>Count the actual units, bags, kilograms, bottles, or pieces in one warehouse.</span></li><li className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white font-semibold">2</span><span>Enter that physical quantity here. Do not calculate the difference yourself.</span></li><li className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white font-semibold">3</span><span>If it differs, the system creates a Record Check for follow-up; it never adjusts stock automatically.</span></li></ol>}
+          </section>
+        </div>
+      ) : null}
+
       {activeTab === "warehouses" ? (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
           <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
@@ -790,66 +879,55 @@ export default function InventoryPage() {
       {activeTab === "purchases" || activeTab === "issues" ? (
         <div className="grid gap-6 xl:grid-cols-[minmax(360px,430px)_minmax(0,1fr)]">
           <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm sm:p-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">{activeTab === "purchases" ? "Inbound control" : "Outbound control"}</p>
-            <h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">{activeTab === "purchases" ? "Receive and cost stock" : "Issue, return, or transfer stock"}</h2>
-            <p className="mt-1 text-sm leading-6 text-forest-600">{activeTab === "purchases" ? "Capture the supplier evidence and landed unit cost that should enter the ledger." : "Allocate consumption to the right flock or move stock between warehouses with a traceable reason."}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">{activeTab === "purchases" ? "Stock arrived" : "Stock left or moved"}</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">{activeTab === "purchases" ? "Receive stock" : "Use or move stock"}</h2>
+            <p className="mt-1 text-sm leading-6 text-forest-600">{activeTab === "purchases" ? "Choose what arrived, where it was stored, and how much it cost." : "First choose what happened, then record the item and quantity."}</p>
             {!canManageStock ? <p className="mt-2 text-sm text-forest-600">Your role is view-only for stock movements.</p> : null}
             <form className="mt-4 grid gap-3" onSubmit={onAddLedgerEntry}>
-              <select className={inputClass} value={txnItemId} onChange={(e) => {
+              {activeTab === "issues" ? <fieldset><legend className="mb-2 text-xs font-semibold text-forest-700">What happened?</legend><div className="grid grid-cols-2 gap-2">
+                {([
+                  ["issue", "Used or consumed"],
+                  ["return", "Returned to store"],
+                  ["transfer", "Moved to another store"],
+                  ["adjustment", "Correct a known balance"],
+                ] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setTxnType(value)} className={`rounded-xl border p-3 text-left text-xs font-semibold transition ${txnType === value ? "border-forest-900 bg-forest-900 text-white" : "border-sand-200 text-forest-700 hover:bg-sand-50"}`}>{label}</button>)}
+              </div></fieldset> : null}
+              <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Inventory item<select className={inputClass} value={txnItemId} onChange={(e) => {
                 const item = items.find((candidate) => candidate.id === e.target.value);
                 setTxnItemId(e.target.value);
                 setTxnUnitCost(item?.unit_cost ?? 0);
               }} required>
                 <option value="">Select item</option>
-                {items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-              <select className={inputClass} value={txnWarehouseId} onChange={(e) => setTxnWarehouseId(e.target.value)} required>
+                {items.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}
+              </select></label>
+              <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{txnType === "transfer" ? "Move from" : activeTab === "purchases" ? "Store in warehouse" : "Warehouse"}<select className={inputClass} value={txnWarehouseId} onChange={(e) => setTxnWarehouseId(e.target.value)} required>
                 <option value="">Select warehouse</option>
                 {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name} ({warehouse.type})</option>)}
-              </select>
-              <select className={inputClass} value={txnType} onChange={(e) => setTxnType(e.target.value as StockMovementInputType)}>
-                {activeTab === "purchases" ? <option value="receipt">Receipt</option> : null}
-                <option value="issue">Issue</option>
-                <option value="return">Return</option>
-                <option value="transfer">Warehouse Transfer</option>
-                <option value="adjustment">Adjustment</option>
-              </select>
+              </select></label>
               {txnType === "transfer" ? (
-                <select className={inputClass} value={txnDestinationWarehouseId} onChange={(e) => setTxnDestinationWarehouseId(e.target.value)} required>
+                <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Move to<select className={inputClass} value={txnDestinationWarehouseId} onChange={(e) => setTxnDestinationWarehouseId(e.target.value)} required>
                   <option value="">Select destination warehouse</option>
                   {warehouses
                     .filter((warehouse) => warehouse.id !== txnWarehouseId)
                     .map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name} ({warehouse.type})</option>)}
-                </select>
+                </select></label>
               ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
-                <input type="date" className={inputClass} value={txnDate} onChange={(e) => setTxnDate(e.target.value)} required />
-                {txnType === "receipt" ? (
-                  <select className={inputClass} value={txnProcurementType} onChange={(e) => setTxnProcurementType(e.target.value as "monthly" | "emergency" | "miscellaneous")}>
+                <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Date<input type="date" className={inputClass} value={txnDate} onChange={(e) => setTxnDate(e.target.value)} required /></label>
+                <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{txnType === "adjustment" ? "Quantity change (+ or −)" : "Quantity"}<input type="number" min={txnType === "adjustment" ? undefined : 0.01} step="0.01" className={inputClass} placeholder={txnType === "adjustment" ? "Example: -2 or 5" : "0"} value={txnQuantity || ""} onChange={(e) => setTxnQuantity(Number(e.target.value) || 0)} required /></label>
+              </div>
+              {activeTab === "purchases" ? <>
+                <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Purchase type<select className={inputClass} value={txnProcurementType} onChange={(e) => setTxnProcurementType(e.target.value as "monthly" | "emergency" | "miscellaneous")}>
                     <option value="monthly">Monthly procurement</option>
                     <option value="emergency">Emergency purchase</option>
                     <option value="miscellaneous">Miscellaneous purchase</option>
-                  </select>
-                ) : null}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input type="number" min={txnType === "adjustment" ? undefined : 0.01} step="0.01" className={inputClass} placeholder={txnType === "adjustment" ? "Signed quantity (+/-)" : "Quantity"} value={txnQuantity || ""} onChange={(e) => setTxnQuantity(Number(e.target.value) || 0)} required />
-                <input type="number" min={0} step="0.01" className={inputClass} placeholder="Unit cost" value={txnUnitCost || ""} onChange={(e) => setTxnUnitCost(Number(e.target.value) || 0)} />
-              </div>
-              <select className={inputClass} value={txnFlockId} onChange={(e) => setTxnFlockId(e.target.value)}>
-                <option value="">No flock allocation</option>
-                {filteredFlocks.map((flock) => <option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}
-              </select>
-              <select className={inputClass} value={txnBatchId} onChange={(e) => setTxnBatchId(e.target.value)}>
-                <option value="">No batch allocation</option>
-                {filteredBatches.map((batch) => <option key={batch.id} value={batch.id}>{batch.batch_code}</option>)}
-              </select>
-              <input className={inputClass} placeholder="Supplier" value={txnSupplier} onChange={(e) => setTxnSupplier(e.target.value)} />
-              <input className={inputClass} placeholder="Invoice number" value={txnInvoice} onChange={(e) => setTxnInvoice(e.target.value)} />
-              <input className={inputClass} placeholder="Reference document" value={txnReference} onChange={(e) => setTxnReference(e.target.value)} />
-              <input className={inputClass} placeholder="Notes or reason" value={txnNotes} onChange={(e) => setTxnNotes(e.target.value)} />
+                  </select></label>
+                <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Unit cost (ETB)<input type="number" min={0} step="0.01" className={inputClass} placeholder="0.00" value={txnUnitCost || ""} onChange={(e) => setTxnUnitCost(Number(e.target.value) || 0)} /></label>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-semibold text-forest-700">Supplier<input className={inputClass} placeholder="Supplier name" value={txnSupplier} onChange={(e) => setTxnSupplier(e.target.value)} /></label><label className="grid gap-1.5 text-xs font-semibold text-forest-700">Invoice or receipt<input className={inputClass} placeholder="Optional number" value={txnInvoice} onChange={(e) => setTxnInvoice(e.target.value)} /></label></div>
+              </> : null}
+              <details className="rounded-xl border border-sand-200 bg-sand-50 p-3"><summary className="cursor-pointer text-sm font-semibold text-forest-800">Optional allocation and supporting details</summary><div className="mt-3 grid gap-3"><select className={inputClass} value={txnFlockId} onChange={(e) => setTxnFlockId(e.target.value)}><option value="">No specific flock</option>{filteredFlocks.map((flock) => <option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}</select><select className={inputClass} value={txnBatchId} onChange={(e) => setTxnBatchId(e.target.value)}><option value="">No specific batch</option>{filteredBatches.map((batch) => <option key={batch.id} value={batch.id}>{batch.batch_code}</option>)}</select><input className={inputClass} placeholder="Reference document" value={txnReference} onChange={(e) => setTxnReference(e.target.value)} /><input className={inputClass} placeholder="Note or reason" value={txnNotes} onChange={(e) => setTxnNotes(e.target.value)} /></div></details>
               <button className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 transition hover:bg-forest-800 disabled:opacity-60" type="submit" disabled={saving || !canManageStock}>
-                {saving ? "Saving…" : txnType === "receipt" ? "Post receipt" : txnType === "transfer" ? "Post paired transfer" : "Post movement"}
+                {saving ? "Saving…" : txnType === "receipt" ? "Save stock received" : txnType === "issue" ? "Save stock used" : txnType === "return" ? "Save stock returned" : txnType === "transfer" ? "Save warehouse transfer" : "Save balance correction"}
               </button>
             </form>
             {warehouses.length === 0 ? <p className="mt-3 text-sm text-ember-500">Create at least one warehouse before recording stock movement.</p> : null}
@@ -894,30 +972,19 @@ export default function InventoryPage() {
       {activeTab === "monthly" ? (
         <div className="grid gap-6 xl:grid-cols-[minmax(360px,430px)_minmax(0,1fr)]">
           <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm sm:p-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">Operating expenditure</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Record a monthly cost</h2><p className="mt-1 text-sm text-forest-600">Add costs that do not originate from stock movements and choose how they should be allocated.</p>
-            {!canRecordCosts ? <p className="mt-2 text-sm text-forest-600">Only store keeper, CEO, or system roles can record monetary cost entries.</p> : null}
-            <form className="mt-4 grid gap-3" onSubmit={onAddCostEntry}>
-              <input type="date" className={inputClass} value={costDate} onChange={(e) => setCostDate(e.target.value)} required />
-              <select className={inputClass} value={costCategory} onChange={(e) => setCostCategory(e.target.value)}>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">Money paid outside inventory</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Record an operating expense</h2><p className="mt-1 text-sm leading-6 text-forest-600">Use this for payroll, rent, utilities, repairs, transport, or another cost that did not come from issuing a stocked item.</p>
+            {!canRecordCosts ? <p className="mt-2 text-sm text-forest-600">Only a Farm Manager can record routine operating expenses.</p> : null}
+            <form className="mt-5 grid gap-4" onSubmit={onAddCostEntry}>
+              <fieldset className="grid grid-cols-2 gap-2"><legend className="mb-2 text-xs font-semibold text-forest-700">What kind of expense is this?</legend><button type="button" onClick={() => setCostEntryKind("monthly")} className={`rounded-xl border p-3 text-left text-sm ${costEntryKind === "monthly" ? "border-forest-900 bg-forest-900 text-white" : "border-sand-200 text-forest-700"}`}><strong className="block">Monthly cost</strong><span className="mt-1 block text-xs opacity-75">Payroll, rent, utilities</span></button><button type="button" onClick={() => { setCostEntryKind("one_off"); setCostCategory("miscellaneous"); }} className={`rounded-xl border p-3 text-left text-sm ${costEntryKind === "one_off" ? "border-forest-900 bg-forest-900 text-white" : "border-sand-200 text-forest-700"}`}><strong className="block">One-off cost</strong><span className="mt-1 block text-xs opacity-75">Repair, emergency, miscellaneous</span></button></fieldset>
+              <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Date paid or incurred<input type="date" className={inputClass} value={costDate} onChange={(e) => setCostDate(e.target.value)} required /></label>
+              <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Cost category<select className={inputClass} value={costCategory} onChange={(e) => setCostCategory(e.target.value)}>
                 {costCategories.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
-              </select>
-              <input className={inputClass} placeholder="Description" value={costDescription} onChange={(e) => setCostDescription(e.target.value)} required />
-              <input type="number" min={0.01} step="0.01" className={inputClass} placeholder="Amount" value={costAmount || ""} onChange={(e) => setCostAmount(Number(e.target.value) || 0)} required />
-              <select className={inputClass} value={costAllocation} onChange={(e) => setCostAllocation(e.target.value)}>
-                {allocationMethods.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
-              </select>
-              <select className={inputClass} value={costFlockId} onChange={(e) => setCostFlockId(e.target.value)}>
-                <option value="">Use current scope / no flock</option>
-                {filteredFlocks.map((flock) => <option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}
-              </select>
-              <select className={inputClass} value={costBatchId} onChange={(e) => setCostBatchId(e.target.value)}>
-                <option value="">Use current scope / no batch</option>
-                {filteredBatches.map((batch) => <option key={batch.id} value={batch.id}>{batch.batch_code}</option>)}
-              </select>
-              <input className={inputClass} placeholder="Supplier" value={costSupplier} onChange={(e) => setCostSupplier(e.target.value)} />
-              <input className={inputClass} placeholder="Invoice number" value={costInvoice} onChange={(e) => setCostInvoice(e.target.value)} />
+              </select></label>
+              <label className="grid gap-1.5 text-xs font-semibold text-forest-700">What was paid for?<input className={inputClass} placeholder="Example: July electricity bill" value={costDescription} onChange={(e) => setCostDescription(e.target.value)} required /></label>
+              <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Amount (ETB)<input type="number" min={0.01} step="0.01" className={inputClass} placeholder="0.00" value={costAmount || ""} onChange={(e) => setCostAmount(Number(e.target.value) || 0)} required /></label>
+              <details className="rounded-xl border border-sand-200 bg-sand-50 p-3"><summary className="cursor-pointer text-sm font-semibold text-forest-800">Optional supplier, invoice, and allocation</summary><div className="mt-3 grid gap-3"><input className={inputClass} placeholder="Supplier or payee" value={costSupplier} onChange={(e) => setCostSupplier(e.target.value)} /><input className={inputClass} placeholder="Invoice or receipt number" value={costInvoice} onChange={(e) => setCostInvoice(e.target.value)} /><select className={inputClass} value={costAllocation} onChange={(e) => setCostAllocation(e.target.value)}>{allocationMethods.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><select className={inputClass} value={costFlockId} onChange={(e) => setCostFlockId(e.target.value)}><option value="">Current farm / no specific flock</option>{filteredFlocks.map((flock) => <option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}</select><select className={inputClass} value={costBatchId} onChange={(e) => setCostBatchId(e.target.value)}><option value="">No specific batch</option>{filteredBatches.map((batch) => <option key={batch.id} value={batch.id}>{batch.batch_code}</option>)}</select></div></details>
               <button className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 transition hover:bg-forest-800 disabled:opacity-60" type="submit" disabled={saving || !canRecordCosts}>
-                {saving ? "Saving…" : "Record cost"}
+                {saving ? "Saving…" : costEntryKind === "monthly" ? "Save monthly cost" : "Save one-off cost"}
               </button>
             </form>
           </section>
@@ -932,6 +999,7 @@ export default function InventoryPage() {
                 <thead>
                   <tr className="border-b border-sand-200 bg-sand-50 text-left text-[10px] uppercase tracking-[0.16em] text-forest-600">
                     <th className="px-2 py-2">Date</th>
+                    <th className="px-2 py-2">Type</th>
                     <th className="px-2 py-2">Category</th>
                     <th className="px-2 py-2">Description</th>
                     <th className="px-2 py-2">Amount</th>
@@ -940,10 +1008,11 @@ export default function InventoryPage() {
                 </thead>
                 <tbody>
                   {costEntries.length === 0 ? (
-                    <tr><td className="px-2 py-4 text-forest-600" colSpan={5}>No cost entries for this period.</td></tr>
+                    <tr><td className="px-2 py-4 text-forest-600" colSpan={6}>No expenses recorded for this period.</td></tr>
                   ) : costEntries.map((entry) => (
                     <tr key={entry.id} className="border-b border-sand-100">
                       <td className="px-2 py-2 text-forest-700">{entry.entry_date}</td>
+                      <td className="px-2 py-2 text-forest-700">{entry.entry_kind === "monthly" ? "Monthly" : "One-off"}</td>
                       <td className="px-2 py-2 text-forest-700">{entry.category}</td>
                       <td className="px-2 py-2 font-medium text-forest-900">{entry.description}</td>
                       <td className="px-2 py-2 text-forest-700">{money(entry.amount)}</td>
