@@ -233,8 +233,6 @@ export default function SalesPage() {
     houses,
     flocks,
     batches,
-    filteredFarms,
-    filteredHouses,
     period,
   } = useFarmScope();
   const [records, setRecords] = useState<SalesRecord[]>([]);
@@ -307,13 +305,19 @@ export default function SalesPage() {
   }, [params]);
 
   const openCreate = () => {
+    const selectedFarmId = scope.farmId && farms.some((farm) => farm.id === scope.farmId)
+      ? scope.farmId
+      : farms.length === 1
+        ? farms[0].id
+        : "";
+    const selectedFarm = farms.find((farm) => farm.id === selectedFarmId);
     setForm(
       emptyForm({
-        branch_id: scope.branchId,
-        farm_id: scope.farmId,
-        house_id: scope.houseId,
-        flock_id: scope.flockId,
-        batch_id: scope.batchId,
+        branch_id: selectedFarm?.branch_id ?? "",
+        farm_id: selectedFarmId,
+        house_id: selectedFarmId === scope.farmId ? scope.houseId : "",
+        flock_id: selectedFarmId === scope.farmId ? scope.flockId : "",
+        batch_id: selectedFarmId === scope.farmId ? scope.batchId : "",
       })
     );
     setModalOpen(true);
@@ -372,16 +376,16 @@ export default function SalesPage() {
     await loadSales();
   };
 
-  const filteredFormFarms = form.branch_id ? farms.filter((farm) => farm.branch_id === form.branch_id) : filteredFarms;
-  const filteredFormHouses = form.farm_id ? houses.filter((house) => house.farm_id === form.farm_id) : filteredHouses;
+  const filteredFormFarms = farms;
+  const filteredFormHouses = form.farm_id ? houses.filter((house) => house.farm_id === form.farm_id) : [];
   const filteredFormFlocks = flocks.filter(
-    (flock) => (!form.farm_id || flock.farm_id === form.farm_id) && (!form.house_id || flock.house_id === form.house_id)
+    (flock) => Boolean(form.farm_id) && flock.farm_id === form.farm_id && (!form.house_id || flock.house_id === form.house_id)
   );
   const filteredFormBatches = batches.filter(
     (batch) =>
-      (!form.branch_id || batch.branch_id === form.branch_id) &&
-      (!form.farm_id || flocks.some((flock) => flock.batch_id === batch.id && flock.farm_id === form.farm_id)) &&
-      (!form.house_id || flocks.some((flock) => flock.batch_id === batch.id && flock.house_id === form.house_id)) &&
+      Boolean(form.farm_id) &&
+      (batch.farm_id === form.farm_id || filteredFormFlocks.some((flock) => flock.batch_id === batch.id)) &&
+      (!form.house_id || batch.house_id === form.house_id || filteredFormFlocks.some((flock) => flock.batch_id === batch.id)) &&
       (!form.flock_id || flocks.some((flock) => flock.batch_id === batch.id && flock.id === form.flock_id))
   );
   const draftPricePerEgg = form.product_category === "egg" ? pricePerEgg(form.unit, form.unit_price) : null;
@@ -617,40 +621,34 @@ export default function SalesPage() {
                 <input className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.customer_phone} onChange={(event) => setForm((prev) => ({ ...prev, customer_phone: event.target.value }))} />
               </label>
               <label className="grid gap-1 text-xs text-forest-600">
-                Branch
-                <select className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.branch_id} onChange={(event) => setForm((prev) => ({ ...prev, branch_id: event.target.value, farm_id: "", house_id: "", flock_id: "", batch_id: "" }))}>
-                  <option value="">Select Branch</option>
-                  {branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs text-forest-600">
                 Farm
-                <select className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.farm_id} onChange={(event) => setForm((prev) => ({ ...prev, farm_id: event.target.value, house_id: "", flock_id: "", batch_id: "" }))}>
+                <select className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.farm_id} onChange={(event) => { const farmId=event.target.value; const farm=farms.find((item)=>item.id===farmId); setForm((prev) => ({ ...prev, branch_id: farm?.branch_id ?? "", farm_id: farmId, house_id: "", flock_id: "", batch_id: "" })); }}>
                   <option value="">Select Farm</option>
                   {filteredFormFarms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </label>
               <label className="grid gap-1 text-xs text-forest-600">
                 House
-                <select className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.house_id} onChange={(event) => setForm((prev) => ({ ...prev, house_id: event.target.value, flock_id: "", batch_id: "" }))}>
-                  <option value="">Optional House</option>
+                <select disabled={!form.farm_id} className="h-10 rounded-lg border border-sand-200 px-3 text-sm disabled:bg-sand-50 disabled:text-forest-400" value={form.house_id} onChange={(event) => setForm((prev) => ({ ...prev, house_id: event.target.value, flock_id: "", batch_id: "" }))}>
+                  <option value="">{form.farm_id ? "Select House" : "Select a farm first"}</option>
                   {filteredFormHouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                 </select>
               </label>
               <label className="grid gap-1 text-xs text-forest-600">
                 Flock
-                <select className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.flock_id} onChange={(event) => setForm((prev) => ({ ...prev, flock_id: event.target.value, batch_id: "" }))}>
-                  <option value="">Optional Flock</option>
+                <select disabled={!form.farm_id} className="h-10 rounded-lg border border-sand-200 px-3 text-sm disabled:bg-sand-50 disabled:text-forest-400" value={form.flock_id} onChange={(event) => { const flockId=event.target.value; const flock=flocks.find((item)=>item.id===flockId); setForm((prev) => ({ ...prev, flock_id: flockId, house_id: flock?.house_id ?? prev.house_id, batch_id: flock?.batch_id ?? "" })); }}>
+                  <option value="">{form.farm_id ? "Select Flock" : "Select a farm first"}</option>
                   {filteredFormFlocks.map((item) => <option key={item.id} value={item.id}>{item.flock_code}</option>)}
                 </select>
               </label>
               <label className="grid gap-1 text-xs text-forest-600">
                 Batch
-                <select className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.batch_id} onChange={(event) => setForm((prev) => ({ ...prev, batch_id: event.target.value }))}>
-                  <option value="">Optional Batch</option>
+                <select disabled={!form.farm_id} className="h-10 rounded-lg border border-sand-200 px-3 text-sm disabled:bg-sand-50 disabled:text-forest-400" value={form.batch_id} onChange={(event) => setForm((prev) => ({ ...prev, batch_id: event.target.value }))}>
+                  <option value="">{form.farm_id ? "Select Batch" : "Select a farm first"}</option>
                   {filteredFormBatches.map((item) => <option key={item.id} value={item.id}>{item.batch_code}</option>)}
                 </select>
               </label>
+              <p className="text-xs leading-5 text-forest-500 md:col-span-3">Branch is derived automatically from the selected farm. Selecting a flock also fills its house and batch.</p>
               <label className="grid gap-1 text-xs text-forest-600 md:col-span-3">
                 Notes
                 <textarea className="min-h-20 rounded-lg border border-sand-200 px-3 py-2 text-sm" value={form.notes} onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))} />

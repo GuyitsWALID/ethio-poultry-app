@@ -3,8 +3,6 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-import { createClient } from "@/utils/supabase/client";
-
 type ScopeState = {
   branchId: string;
   farmId: string;
@@ -138,7 +136,6 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadScopeData = async () => {
       setLoading(true);
-      const supabase = createClient();
       const contextResponse = await fetch("/api/me/context", { method: "GET" });
       if (!contextResponse.ok) {
         setLoading(false);
@@ -159,77 +156,23 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
       const isManager = role === "farm_manager";
       setIsFarmManager(isManager);
 
-      // CEO/System users: full org scope
-      if (!isManager) {
-        const response = await fetch("/api/scope/options", { method: "GET" });
-        if (!response.ok) {
-          setBranches([]);
-          setFarms([]);
-          setHouses([]);
-          setFlocks([]);
-          setBatches([]);
-          setLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-        const nextBranches = (data?.branches ?? []) as Branch[];
-        const nextFarms = (data?.farms ?? []) as Farm[];
-        const nextHouses = (data?.houses ?? []) as House[];
-        const nextFlocks = (data?.flocks ?? []) as Flock[];
-        const nextBatches = (data?.batches ?? []) as Batch[];
-        setBranches(nextBranches);
-        setFarms(nextFarms);
-        setHouses(nextHouses);
-        setFlocks(nextFlocks);
-        setBatches(nextBatches);
-        setScope((prev) => normalizeScope(prev, { branches: nextBranches, farms: nextFarms, houses: nextHouses, flocks: nextFlocks, batches: nextBatches }));
-        setLoading(false);
-        return;
+      // The server applies organization and active farm-assignment scope. Keeping
+      // these reads behind one endpoint avoids RLS-dependent empty dropdowns.
+      const response = await fetch("/api/scope/options", { method: "GET" });
+      if (!response.ok) {
+        setBranches([]); setFarms([]); setHouses([]); setFlocks([]); setBatches([]); setLoading(false); return;
       }
-
-      // Farm manager: access-limited scope
-      const now = new Date().toISOString();
-      const { data: farmAccessRows } = await supabase.from("user_farm_access").select("farm_id").eq("profile_id", userId).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`);
-      const allowedFarmIds = (farmAccessRows ?? []).map((row) => row.farm_id);
-
-      let farmsQuery = supabase.from("farms").select("id, name, branch_id").eq("org_id", orgId);
-
-      farmsQuery = allowedFarmIds.length > 0 ? farmsQuery.in("id", allowedFarmIds) : farmsQuery.in("id", ["00000000-0000-0000-0000-000000000000"]);
-
-      const { data: farmRows } = await farmsQuery.order("name");
-      const effectiveFarms = (farmRows ?? []) as Farm[];
+      const data = await response.json();
+      const nextBranches = (data?.branches ?? []) as Branch[];
+      const effectiveFarms = (data?.farms ?? []) as Farm[];
+      const nextHouses = (data?.houses ?? []) as House[];
+      const nextFlocks = (data?.flocks ?? []) as Flock[];
+      const nextBatches = (data?.batches ?? []) as Batch[];
+      setBranches(nextBranches);
       setFarms(effectiveFarms);
-
-      const branchIds = Array.from(new Set(effectiveFarms.map((f) => f.branch_id)));
-      let nextBranches: Branch[] = [];
-      if (branchIds.length) {
-        const { data: branchRows } = await supabase.from("branches").select("id, name").in("id", branchIds).order("name");
-        nextBranches = (branchRows ?? []) as Branch[];
-        setBranches(nextBranches);
-      }
-
-      let nextHouses: House[] = [];
-      let nextFlocks: Flock[] = [];
-      let nextBatches: Batch[] = [];
-      if (effectiveFarms.length) {
-        const farmIds = effectiveFarms.map((f) => f.id);
-        const [{ data: houseRows }, { data: flockRows }, { data: batchRows }] = await Promise.all([
-          supabase.from("houses").select("id, name, farm_id").in("farm_id", farmIds).order("name"),
-          supabase.from("flocks").select("id, flock_code, farm_id, house_id, batch_id, initial_count, current_count").in("farm_id", farmIds).order("flock_code"),
-          supabase
-            .from("batches")
-            .select("id, batch_code, status, branch_id, farm_id, house_id, placement_date, age_at_placement_days")
-            .in("farm_id", farmIds)
-            .order("placement_date", { ascending: false }),
-        ]);
-        nextHouses = (houseRows ?? []) as House[];
-        nextFlocks = (flockRows ?? []) as Flock[];
-        nextBatches = (batchRows ?? []) as Batch[];
-        setHouses(nextHouses);
-        setFlocks(nextFlocks);
-        setBatches(nextBatches);
-      }
+      setHouses(nextHouses);
+      setFlocks(nextFlocks);
+      setBatches(nextBatches);
       setScope((prev) =>
         normalizeScope(prev, {
           branches: nextBranches,
