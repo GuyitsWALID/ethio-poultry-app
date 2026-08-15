@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 48,
-  "latest": "20260815000000_remove_legacy_manual_demo_cycle.sql",
-  "aggregateSha256": "73715dddce89c26b6c4368eaa1cc414041ab59b574f97023473c11ce224f23b0",
+  "count": 49,
+  "latest": "20260815001000_repair_demo_backfill_chronology.sql",
+  "aggregateSha256": "84feb028134423602bdd5309befa37bf38ea3d48edeb71dd6346be6f3c14abe3",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -128,6 +128,7 @@
     "20260813000000_reconciliation_ai_advisor.sql": "7c457772e412cbb4e7091c560784154d47b0b51585c996c9867de5510a3e65d8",
     "20260814000000_governed_warehouse_setup.sql": "17a52e274cf17c6832e95064b82508dd7f2832852709274e9431ad821392563d",
     "20260814001000_simple_inventory_workflows.sql": "6e8fd85363aa33c48ecdd0abfb2fd50fb9b42715c8f0208e2c5b16b97c8dcbf7",
-    "20260815000000_remove_legacy_manual_demo_cycle.sql": "447ff942101189b725912802d8296cded3a20f54e46595693aed8aac326e00c4"
+    "20260815000000_remove_legacy_manual_demo_cycle.sql": "447ff942101189b725912802d8296cded3a20f54e46595693aed8aac326e00c4",
+    "20260815001000_repair_demo_backfill_chronology.sql": "5a537505b40d52d49e6a6c4a961d29896e7cc74cc5864afccf8ee05040220b5d"
   }
 }
