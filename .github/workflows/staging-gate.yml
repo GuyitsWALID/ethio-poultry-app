@@ -30,6 +30,14 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
       ADMIN_ACCESS_CODE: ${{ secrets.STAGING_ADMIN_ACCESS_CODE }}
       DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      E2E_REQUIRE_ROLE_CREDENTIALS: "true"
+      E2E_CEO_EMAIL: ${{ secrets.STAGING_E2E_CEO_EMAIL }}
+      E2E_CEO_PASSWORD: ${{ secrets.STAGING_E2E_CEO_PASSWORD }}
+      E2E_FARM_MANAGER_EMAIL: ${{ secrets.STAGING_E2E_FARM_MANAGER_EMAIL }}
+      E2E_FARM_MANAGER_PASSWORD: ${{ secrets.STAGING_E2E_FARM_MANAGER_PASSWORD }}
+      E2E_SYSTEM_ADMIN_EMAIL: ${{ secrets.STAGING_E2E_SYSTEM_ADMIN_EMAIL }}
+      E2E_SYSTEM_ADMIN_PASSWORD: ${{ secrets.STAGING_E2E_SYSTEM_ADMIN_PASSWORD }}
+      E2E_ADMIN_ACCESS_CODE: ${{ secrets.STAGING_ADMIN_ACCESS_CODE }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,6 +49,12 @@ jobs:
         run: npm run release:verify
       - name: Verify staging database contract
         run: npm run db:verify
+      - name: Verify Feed Control and Daily Record database behavior
+        run: npm run test:db:integration
+      - name: Install browser test runtime
+        run: npx playwright install --with-deps chromium
+      - name: Verify supported-role journeys and route authorization
+        run: npm run test:browser
       - name: Smoke-test staging application
         shell: bash
         run: |

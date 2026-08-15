@@ -12,6 +12,16 @@ Create a protected GitHub environment named `staging` with an approval requireme
 - `STAGING_SUPABASE_PROJECT_REF`
 - `STAGING_DATABASE_URL`
 - `STAGING_ADMIN_ACCESS_CODE`
+- `STAGING_E2E_CEO_EMAIL`
+- `STAGING_E2E_CEO_PASSWORD`
+- `STAGING_E2E_FARM_MANAGER_EMAIL`
+- `STAGING_E2E_FARM_MANAGER_PASSWORD`
+- `STAGING_E2E_SYSTEM_ADMIN_EMAIL`
+- `STAGING_E2E_SYSTEM_ADMIN_PASSWORD`
+
+The three E2E accounts must be dedicated staging-only users representing the
+supported roles. The Farm Manager account needs at least one active farm and
+warehouse assignment. Do not reuse production credentials.
 
 Deploy the candidate commit through the hosting provider's immutable preview or staging deployment. Then manually run **Staging release gate** and supply that deployment's HTTPS URL.
 
@@ -57,3 +67,12 @@ For the first staging setup, restore the verified data-free baseline with `npm r
 - Alert dropdown and `/app/reconciliation` load without server errors.
 
 Record screenshots or test output, the release manifest, the database preflight output, and the reviewer decision. Test data must be clearly marked and must not contain copied production personal data.
+
+The protected workflow now enforces this evidence automatically:
+
+- `npm run test:db:integration` creates isolated fixtures inside a transaction,
+  verifies Feed Control close/reopen and Daily Record synchronization, and
+  rolls everything back.
+- `npm run test:browser` signs in as CEO, Farm Manager, and System Administrator,
+  verifies their landing pages, and makes positive and negative API authorization
+  requests. Missing role credentials fail the staging gate.

@@ -14,7 +14,7 @@ This document is the release checklist for moving EthioPoultry from a functional
 
 ### 1. Automated verification
 
-Status: in progress
+Status: complete
 
 - [x] Locked dependency installation through `npm ci`
 - [x] Full lint command with zero warnings
@@ -22,17 +22,26 @@ Status: in progress
 - [x] Calculation test command
 - [x] GitHub Actions quality gate
 - [x] Executive calculation regression tests
-- [ ] Route authorization integration tests
-- [ ] Feed close/reopen database integration tests
-- [ ] Daily Record synchronization database integration tests
-- [ ] Browser tests for every supported role
-- [ ] Production build independent of remote font downloads
+- [x] Route authorization integration tests
+- [x] Feed close/reopen database integration tests
+- [x] Daily Record synchronization database integration tests
+- [x] Browser tests for every supported role
+- [x] Production build independent of remote font downloads
 
 Run the local gate with:
 
 ```bash
 npm run check
+npm run test:db:integration
+npm run test:browser
+npm run build
 ```
+
+The database suite creates isolated fixtures inside one transaction and rolls
+them back. The browser suite covers anonymous access plus CEO, Farm Manager,
+and System Administrator journeys, including positive and denied API calls.
+The protected staging gate requires dedicated staging credentials for all three
+supported roles.
 
 ### 2. Permissions and separation of duties
 

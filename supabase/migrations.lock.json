@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 50,
-  "latest": "20260815002000_immutable_sensitive_audit_ledger.sql",
-  "aggregateSha256": "7a97ee234550a6da068be8a690e2c32b11bb17529b8946fd011f5573bf52b110",
+  "count": 51,
+  "latest": "20260815003000_stock_source_identity.sql",
+  "aggregateSha256": "8a62661fab8af39e9ca7b5bc6dc50ac702f09ff403567812cbc4e3f812eeee64",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -130,6 +130,7 @@
     "20260814001000_simple_inventory_workflows.sql": "6e8fd85363aa33c48ecdd0abfb2fd50fb9b42715c8f0208e2c5b16b97c8dcbf7",
     "20260815000000_remove_legacy_manual_demo_cycle.sql": "447ff942101189b725912802d8296cded3a20f54e46595693aed8aac326e00c4",
     "20260815001000_repair_demo_backfill_chronology.sql": "5a537505b40d52d49e6a6c4a961d29896e7cc74cc5864afccf8ee05040220b5d",
-    "20260815002000_immutable_sensitive_audit_ledger.sql": "644b03393688388768366700c006e9d3611d9f7530ad51eb6bcf39e52a4094c2"
+    "20260815002000_immutable_sensitive_audit_ledger.sql": "644b03393688388768366700c006e9d3611d9f7530ad51eb6bcf39e52a4094c2",
+    "20260815003000_stock_source_identity.sql": "ba65d6b8622d317bfa4cf5650de76d25c218b7171d4280e5b0291d486f4a2fb6"
   }
 }

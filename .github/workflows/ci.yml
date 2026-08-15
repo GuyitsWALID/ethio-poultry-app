@@ -42,6 +42,9 @@ jobs:
       - name: Run static checks and calculation tests
         run: npm run check
 
+      - name: Validate browser test discovery
+        run: npm run test:browser:list
+
       - name: Build production application
         run: npm run build
 

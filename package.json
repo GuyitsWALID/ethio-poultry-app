@@ -14,6 +14,10 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test tests/*.test.mjs",
+    "test:db:integration": "node scripts/run-database-integration.mjs",
+    "test:browser": "playwright test",
+    "test:browser:list": "playwright test --list",
+    "test:browser:provision-local": "node scripts/provision-local-e2e.mjs",
     "check": "npm run lint && npm run typecheck && npm test",
     "env:check": "node scripts/deployment-check.mjs env",
     "migrations:verify": "node scripts/deployment-check.mjs migrations",
@@ -45,6 +49,7 @@
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "1.20.2",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

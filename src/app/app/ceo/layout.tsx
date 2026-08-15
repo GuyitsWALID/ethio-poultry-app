@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { normalizeRole, routeForRole } from "@/lib/roles";
 import { createClient } from "@/utils/supabase/server";
 
 export default async function CeoLayout({
@@ -22,14 +23,12 @@ export default async function CeoLayout({
     .eq("id", user.id)
     .maybeSingle();
 
-  const rawRole = String(profile?.role ?? user.app_metadata?.role ?? user.user_metadata?.role ?? "")
-    .trim()
-    .toLowerCase();
+  const rawRole = profile?.role ?? user.app_metadata?.role ?? user.user_metadata?.role;
 
-  const isCeoRole = rawRole === "ceo";
+  const isCeoRole = normalizeRole(rawRole) === "ceo";
 
   if (!isCeoRole) {
-    redirect("/app/farm-manager");
+    redirect(routeForRole(rawRole));
   }
 
   return <>{children}</>;
