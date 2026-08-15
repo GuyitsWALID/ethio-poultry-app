@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { getSalesContext, hasScopedAccess, json, supabaseAdmin } from "@/lib/sales";
+import {recordAuditEvent} from "@/lib/audit-ledger";
 
 const VALID_CATEGORIES = new Set([
   "feed",
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) return json({ error: error.message }, 500);
+    await recordAuditEvent(ctx,{eventType:"cost_entry.recorded",operation:"insert",entityTable:"cost_entries",entityId:String(data.id),reason:description,after:data,farmId:data.farm_id,houseId:data.house_id,flockId:data.flock_id,batchId:data.batch_id});
     return json({ costEntry: data }, 201);
   } catch (error: unknown) {
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);

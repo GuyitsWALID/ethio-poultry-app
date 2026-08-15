@@ -4,6 +4,7 @@ import { createGroq, type GroqLanguageModelChatOptions } from "@ai-sdk/groq";
 import { generateText, Output } from "ai";
 
 import { canAccessFarm, canAccessWarehouse, governanceAdmin, type AccessContext } from "@/lib/access-context";
+import {recordAuditEvent} from "@/lib/audit-ledger";
 import {
   canonicalAiEvidence,
   buildReconciliationAiPrompt,
@@ -307,16 +308,7 @@ function failureCode(error: unknown) {
 }
 
 async function writeAudit(ctx: AccessContext, eventType: string, analysisId: string, metadata: Record<string, unknown>) {
-  await governanceAdmin.from("governance_audit_events").insert({
-    org_id: ctx.orgId,
-    actor_id: ctx.userId,
-    actor_role: ctx.role,
-    support_session_id: ctx.supportSessionId,
-    event_type: eventType,
-    entity_table: "reconciliation_ai_analyses",
-    entity_id: analysisId,
-    metadata,
-  });
+  await recordAuditEvent(ctx,{eventType,operation:"execute",entityTable:"reconciliation_ai_analyses",entityId:analysisId,reason:eventType.endsWith(".failed")?"AI record-check analysis failed.":"Generated AI record-check guidance.",metadata});
 }
 
 export async function analyzeReconciliationFinding(

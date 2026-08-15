@@ -1,4 +1,5 @@
 import { accessJson,canAccessFarm,getAccessContext,governanceAdmin,isAccessResponse } from "@/lib/access-context";
+import {recordAuditEvent} from "@/lib/audit-ledger";
 
 const allowed=new Set(["daily_farm_records","feeding_session_records","daily_sales_records","health_events","vaccination_events","biosecurity_checks","batch_weight_check_tasks"]);
 
@@ -10,5 +11,5 @@ export async function POST(request:Request){
   const recordDate=String(row.record_date??row.sale_date??row.event_date??row.check_date??"");if(recordDate){const {data:day}=await governanceAdmin.from("farm_operating_days").select("status").eq("farm_id",farmId).eq("operating_date",recordDate).maybeSingle();if(day?.status==="locked")return accessJson({error:"This operating day is locked. Submit a locked-record correction request."},423)}
   const now=new Date().toISOString();const {data,error}=await governanceAdmin.from(table).update({voided_at:now,voided_by:ctx.userId,void_reason:reason}).eq("id",id).eq("org_id",ctx.orgId).select("*").single();if(error)return accessJson({error:error.message},400);
   if(table==="vaccination_events"||table==="biosecurity_checks"||table==="batch_weight_check_tasks")await governanceAdmin.from("health_events").update({voided_at:now,voided_by:ctx.userId,void_reason:`Source record voided: ${reason}`}).eq("org_id",ctx.orgId).or(`description.like.SCHEDULE_TARGET|${id}|%,description.like.SCHEDULE_STATUS|${id}|%`);
-  await governanceAdmin.from("governance_audit_events").insert({org_id:ctx.orgId,actor_id:ctx.userId,actor_role:ctx.role,event_type:"business_record.voided",entity_table:table,entity_id:id,reason,before_values:row,after_values:data});return accessJson({record:data});
+  await recordAuditEvent(ctx,{eventType:"business_record.voided",operation:"update",entityTable:table,entityId:id,reason,before:row,after:data,farmId,flockId:row.flock_id?String(row.flock_id):null});return accessJson({record:data});
 }

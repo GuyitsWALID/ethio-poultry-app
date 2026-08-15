@@ -1,5 +1,6 @@
 import { feedAdmin, feedJson, getFeedContext, resolveFeedBatch } from "@/lib/feed-control";
 import { governanceAdmin } from "@/lib/access-context";
+import {recordAuditEvent} from "@/lib/audit-ledger";
 
 const FEED_TYPES = new Set(["starter_feed", "grower_pullet_feed", "layer_feed", "broiler_feed", "medicated_feed"]);
 
@@ -52,6 +53,6 @@ export async function DELETE(request: Request) {
   const { data: closure } = await feedAdmin.from("feed_day_closures").select("id").eq("org_id", ctx.orgId).eq("flock_id", session.flock_id).eq("record_date", session.record_date).eq("status", "closed").maybeSingle();
   if (closure) return feedJson({ error: "Reopen the feeding day before removing a session." }, 409);
   const { error } = await feedAdmin.from("feeding_session_records").update({voided_at:new Date().toISOString(),voided_by:ctx.userId,void_reason:reason} as never).eq("id", id).eq("org_id", ctx.orgId);
-  if(!error)await governanceAdmin.from("governance_audit_events").insert({org_id:ctx.orgId,actor_id:ctx.userId,actor_role:ctx.role,support_session_id:ctx.supportSessionId,event_type:"business_record.voided",entity_table:"feeding_session_records",entity_id:id,reason,before_values:session});
+  if(!error)await recordAuditEvent(ctx,{eventType:"business_record.voided",operation:"update",entityTable:"feeding_session_records",entityId:id,reason,before:session,after:{voided:true},farmId:String(resolved.batch.farm_id),flockId:String(session.flock_id),batchId});
   return error ? feedJson({ error: error.message }, 400) : feedJson({ voided: true });
 }

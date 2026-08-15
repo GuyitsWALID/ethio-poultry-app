@@ -1,18 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
-
-import { normalizeRole } from "@/lib/roles";
-import { createClient as createAuthedClient } from "@/utils/supabase/server";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
+import {getAccessContext,governanceAdmin as supabaseAdmin,isAccessResponse} from "@/lib/access-context";
+import {recordAuditEvent} from "@/lib/audit-ledger";
 
 type HouseInput = {
   name: string;
@@ -22,32 +9,10 @@ type HouseInput = {
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createAuthedClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    }
-
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("org_id, role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profileError) {
-      return new Response(JSON.stringify({ error: profileError.message }), { status: 500 });
-    }
-
-    const role = normalizeRole(profile?.role);
-    if (role !== "ceo") {
+    const ctx=await getAccessContext({tenant:true});
+    if(isAccessResponse(ctx))return ctx;
+    if (ctx.role !== "ceo") {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
-    }
-
-    if (!profile?.org_id) {
-      return new Response(JSON.stringify({ error: "Profile missing org_id" }), { status: 400 });
     }
 
     const body = await req.json();
@@ -61,11 +26,13 @@ export async function POST(req: Request) {
         status: 400,
       });
     }
+    const {data:branch}=await supabaseAdmin.from("branches").select("id").eq("id",branchId).eq("org_id",ctx.orgId).maybeSingle();
+    if(!branch)return new Response(JSON.stringify({error:"The selected branch is outside this organization."}),{status:400});
 
     const { data: farm, error: farmError } = await supabaseAdmin
       .from("farms")
       .insert({
-        org_id: profile.org_id,
+        org_id: ctx.orgId,
         branch_id: branchId,
         name: farmName,
         capacity_birds: capacityBirds,
@@ -90,7 +57,7 @@ export async function POST(req: Request) {
       const { data: createdHouse, error: houseError } = await supabaseAdmin
         .from("houses")
         .insert({
-          org_id: profile.org_id,
+          org_id: ctx.orgId,
           branch_id: branchId,
           farm_id: farm.id,
           name: houseName,
@@ -112,7 +79,7 @@ export async function POST(req: Request) {
         const autoCode = `FLK-${Math.random().toString(16).slice(2, 7).toUpperCase()}`;
         const flockSize = Math.max(1, Math.floor((houseCapacity || 1) / flockCount));
         const { error: flockError } = await supabaseAdmin.from("flocks").insert({
-          org_id: profile.org_id,
+          org_id: ctx.orgId,
           farm_id: farm.id,
           house_id: createdHouse.id,
           flock_code: autoCode,
@@ -132,6 +99,8 @@ export async function POST(req: Request) {
         }
       }
     }
+
+    await recordAuditEvent(ctx,{eventType:"farm_structure.created",operation:"insert",entityTable:"farms",entityId:String(farm.id),reason:`Created farm ${farmName} with ${houses.length} planned house${houses.length===1?"":"s"}.`,after:{name:farmName,capacity_birds:capacityBirds,house_count:houses.length},farmId:String(farm.id)});
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (error: unknown) {
