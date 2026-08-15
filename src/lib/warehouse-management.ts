@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { type AccessContext, governanceAdmin } from "@/lib/access-context";
+import {recordAuditEvent} from "@/lib/audit-ledger";
 
 const warehouseTypes = ["farm_store", "pharmacy", "equipment_store", "central_warehouse"] as const;
 
@@ -126,17 +127,7 @@ export async function createInventoryWarehouse(ctx: AccessContext, input: unknow
     throw new WarehouseManagementError(error.message);
   }
 
-  await governanceAdmin.from("governance_audit_events").insert({
-    org_id: ctx.orgId,
-    actor_id: ctx.userId,
-    actor_role: ctx.role,
-    support_session_id: ctx.supportSessionId,
-    event_type: "warehouse.created",
-    entity_table: "warehouses",
-    entity_id: warehouse.id,
-    after_values: warehouse,
-    metadata: { requested_manager_id: values.managerId ?? null },
-  });
+  await recordAuditEvent(ctx,{eventType:"warehouse.created",operation:"insert",entityTable:"warehouses",entityId:String(warehouse.id),reason:"Created an inventory warehouse.",after:warehouse,farmId:warehouse.farm_id,warehouseId:String(warehouse.id),metadata:{requested_manager_id:values.managerId??null}});
 
   let assignment = null;
   let warning: string | null = null;
@@ -154,10 +145,10 @@ export async function createInventoryWarehouse(ctx: AccessContext, input: unknow
     }, { onConflict: "profile_id,warehouse_id" }).select("*").single();
     if (assignmentResult.error) {
       warning = "Warehouse created, but its Farm Manager assignment could not be completed. Assign it from Governance before posting stock.";
-      await governanceAdmin.from("governance_audit_events").insert({ org_id: ctx.orgId, actor_id: ctx.userId, actor_role: ctx.role, support_session_id: ctx.supportSessionId, event_type: "assignment.warehouse.failed", entity_table: "warehouses", entity_id: warehouse.id, reason: assignmentResult.error.message });
+      await recordAuditEvent(ctx,{eventType:"assignment.warehouse.failed",operation:"access",entityTable:"warehouses",entityId:String(warehouse.id),reason:assignmentResult.error.message,farmId:warehouse.farm_id,warehouseId:String(warehouse.id)});
     } else {
       assignment = assignmentResult.data;
-      await governanceAdmin.from("governance_audit_events").insert({ org_id: ctx.orgId, actor_id: ctx.userId, actor_role: ctx.role, support_session_id: ctx.supportSessionId, event_type: "assignment.warehouse.granted", entity_table: "user_warehouse_access", entity_id: assignment.id, after_values: assignment });
+      await recordAuditEvent(ctx,{eventType:"assignment.warehouse.granted",operation:"access",entityTable:"user_warehouse_access",entityId:String(assignment.id),reason:"Granted warehouse assignment during setup.",after:assignment,farmId:warehouse.farm_id,warehouseId:String(warehouse.id)});
     }
   }
   return { warehouse, assignment, warning };

@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { normalizeRole } from "@/lib/roles";
 import { createClient as createAuthedClient } from "@/utils/supabase/server";
 import { passwordPolicyError } from "@/lib/password-policy";
+import {recordAuditEvent} from "@/lib/audit-ledger";
 
 const adminRoles = new Set(["system_admin"]);
 
@@ -122,6 +123,8 @@ export async function POST(request: Request) {
   if (profileError) {
     return NextResponse.json({ message: profileError.message }, { status: 400 });
   }
+
+  await recordAuditEvent({orgId:String(organization.id),userId:user.id,role:"system_admin",supportSessionId:null},{eventType:"organization.onboarded",operation:"insert",entityTable:"organizations",entityId:String(organization.id),reason:"Created an organization and its initial CEO account.",after:{organization_name:payload.organization.name,ceo_name:payload.admin.full_name??null,plan:payload.organization.plan??null},metadata:{initial_ceo_user_id:authUser.user.id}});
 
   return NextResponse.json({
     organizationId: organization.id,

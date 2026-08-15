@@ -9,6 +9,7 @@ import {
   supabaseAdmin,
   type DailySalesRecord,
 } from "@/lib/sales";
+import {recordAuditEvent} from "@/lib/audit-ledger";
 
 const VALID_CATEGORIES = new Set(["egg", "bird", "training", "equipment_medicine", "consultancy", "package"]);
 
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) return json({ error: error.message }, 500);
+    await recordAuditEvent(ctx,{eventType:"sales_record.recorded",operation:"insert",entityTable:"daily_sales_records",entityId:String(data.id),reason:`Recorded sale of ${productLabel}.`,after:data,farmId:data.farm_id,houseId:data.house_id,flockId:data.flock_id,batchId:data.batch_id});
     return json({ record: data }, 201);
   } catch (error: unknown) {
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);

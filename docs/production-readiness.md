@@ -36,19 +36,19 @@ npm run check
 
 ### 2. Permissions and separation of duties
 
-Status: pending audit
+Status: complete
 
-- CEO: company-wide oversight, configuration, approval, and reconciliation
-- Farm manager: assigned-farm operational entry and correction
-- Veterinarian: health and authorized weight evidence
-- Store keeper: stock custody and approved inventory movements
-- System administrators: identity, organization, and recovery administration
+- CEO/Manager: company-wide oversight, configuration, approval, and reconciliation; no routine operational entry
+- Farm Manager: operations for explicitly assigned farms and warehouses
+- System Administrator: platform onboarding and support; tenant access only through active CEO-approved break glass
+
+Veterinarian and storekeeper are retired roles and deny access until explicitly reassigned. Branch membership alone does not authorize farm operations.
 
 The permission matrix must be enforced in route handlers and database policies. UI visibility is not an authorization control.
 
 ### 3. Operational reconciliation
 
-Status: pending
+Status: complete
 
 Required controls:
 
@@ -77,9 +77,18 @@ Status: complete
 
 ### 5. Immutable audit history
 
-Status: pending
+Status: database rollout complete; application deployment pending
 
-Sensitive mutations must capture actor, organization, action, record identity, previous values, new values, reason, and server timestamp.
+- [x] Atomic database capture for governed operational, financial, inventory, lifecycle, configuration, and access tables
+- [x] Central server module for actor-attributed semantic workflow events and secret redaction
+- [x] Organization, farm, warehouse, actor, role, support-session, action, record, reason, before-value, after-value, and server-time evidence
+- [x] Append-only database enforcement and revoked direct client mutations
+- [x] Per-organization SHA-256 hash chain with CEO integrity verification
+- [x] Assignment-aware and active break-glass-aware audit visibility
+- [x] Human-readable Governance history without exposed database identifiers
+- [x] Focused contract, redaction, coverage, and presentation tests
+- [ ] Apply `20260815002000_immutable_sensitive_audit_ledger.sql` to staging and complete role-based browser checks
+- [x] Apply the verified migration to production and confirm the first tenant chain verification
 
 ### 6. Monitoring and recovery
 

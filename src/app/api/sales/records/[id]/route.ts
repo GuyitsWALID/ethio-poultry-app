@@ -9,6 +9,7 @@ import {
   type DailySalesRecord,
 } from "@/lib/sales";
 import { governanceAdmin } from "@/lib/access-context";
+import {recordAuditEvent} from "@/lib/audit-ledger";
 
 const VALID_CATEGORIES = new Set(["egg", "bird", "training", "equipment_medicine", "consultancy", "package"]);
 
@@ -104,6 +105,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .single();
 
     if (error) return json({ error: error.message }, 500);
+    await recordAuditEvent(ctx,{eventType:"sales_record.updated",operation:"update",entityTable:"daily_sales_records",entityId:id,reason:"Updated a daily sales record.",before:existing.record,after:data,farmId:data.farm_id,houseId:data.house_id,flockId:data.flock_id,batchId:data.batch_id});
     return json({ record: data });
   } catch (error: unknown) {
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
@@ -122,7 +124,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (existing.response) return existing.response;
 
     const body=await request.json().catch(()=>null) as {reason?:string}|null;const reason=String(body?.reason??"").trim();if(reason.length<8)return json({error:"A void reason of at least eight characters is required."},400);
-    const now=new Date().toISOString();const {data,error}=await governanceAdmin.from("daily_sales_records").update({voided_at:now,voided_by:ctx.userId,void_reason:reason}).eq("id",id).eq("org_id",ctx.orgId).select("*").single();if(error)return json({error:error.message},400);await governanceAdmin.from("governance_audit_events").insert({org_id:ctx.orgId,actor_id:ctx.userId,actor_role:ctx.role,event_type:"business_record.voided",entity_table:"daily_sales_records",entity_id:id,reason,before_values:existing.record,after_values:data});return json({voided:true});
+    const now=new Date().toISOString();const {data,error}=await governanceAdmin.from("daily_sales_records").update({voided_at:now,voided_by:ctx.userId,void_reason:reason}).eq("id",id).eq("org_id",ctx.orgId).select("*").single();if(error)return json({error:error.message},400);await recordAuditEvent(ctx,{eventType:"business_record.voided",operation:"update",entityTable:"daily_sales_records",entityId:id,reason,before:existing.record,after:data,farmId:data.farm_id,houseId:data.house_id,flockId:data.flock_id,batchId:data.batch_id});return json({voided:true});
   } catch (error: unknown) {
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
   }
