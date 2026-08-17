@@ -58,14 +58,16 @@ export default function FarmManagerDashboardPage() {
 
     const statusFlockId = row.flock_id ?? scope.flockId;
     if (statusFlockId) {
-      await supabase.from("health_events").insert({
-        org_id: profile.org_id,
-        flock_id: statusFlockId,
-        event_date: row.date,
-        event_type: "observation",
-        description: `SCHEDULE_STATUS|${row.id}|${status}|${row.type}`,
-        diagnosis: reason ?? null,
-        vet_id: user.id,
+      await fetch("/api/health/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          flock_id: statusFlockId,
+          event_date: row.date,
+          event_type: "observation",
+          description: `SCHEDULE_STATUS|${row.id}|${status}|${row.type}`,
+          diagnosis: reason ?? null,
+        }),
       });
     }
 
@@ -108,14 +110,6 @@ export default function FarmManagerDashboardPage() {
         .eq("org_id", orgId)
         .order("checklist_date", { ascending: false })
         .limit(100);
-      const healthQuery = supabase
-        .from("health_events")
-        .select("description, diagnosis, event_date")
-        .eq("org_id", orgId)
-        .or("description.like.SCHEDULE_STATUS|%,description.like.SCHEDULE_TARGET|%")
-        .order("event_date", { ascending: false })
-        .limit(600);
-
       if (scope.flockId) {
         vaccineQuery = vaccineQuery.eq("flock_id", scope.flockId);
       } else if (scopedFlockIds.length > 0) {
@@ -128,15 +122,17 @@ export default function FarmManagerDashboardPage() {
 
       if (scope.farmId) cleanupQuery = cleanupQuery.eq("farm_id", scope.farmId);
 
-      const [{ data: vaccineEvents }, { data: cleanupRows }, { data: healthRows }] = await Promise.all([
+      const [{ data: vaccineEvents }, { data: cleanupRows }, healthResponse] = await Promise.all([
         vaccineQuery,
         cleanupQuery,
-        healthQuery,
+        fetch("/api/health/events"),
       ]);
+      const healthPayload = healthResponse.ok ? await healthResponse.json() : { events: [] };
+      const healthRows = healthPayload.events ?? [];
 
       const statusMap = new Map<string, { status: "completed" | "missed"; reason: string | null }>();
       const targetMap = new Map<string, { farm_id: string | null; house_id: string | null; flock_id: string | null }>();
-      (healthRows ?? []).forEach((row) => {
+      (healthRows ?? []).forEach((row: { description: string | null; diagnosis: string | null }) => {
         const d = row.description ?? "";
         if (d.startsWith("SCHEDULE_STATUS|")) {
           const parts = d.split("|");

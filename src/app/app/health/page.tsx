@@ -22,6 +22,17 @@ import {
 import { useFarmScope } from "@/components/farm-scope-context";
 import { createClient } from "@/utils/supabase/client";
 
+async function saveHealthEvent(payload: Record<string, unknown>) {
+  const response = await fetch("/api/health/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error ?? "Health evidence could not be saved.");
+  return body;
+}
+
 type ScheduleItem = {
   id: string;
   type: "vaccination" | "cleanup" | "weight";
@@ -197,7 +208,7 @@ export default function HealthPage() {
     }
 
     const db = supabase as any;
-    const [{ data: vaccineEvents }, { data: cleanupRows }, { data: healthRows }, { data: weightTasks }] = await Promise.all([
+    const [{ data: vaccineEvents }, { data: cleanupRows }, healthResponse, { data: weightTasks }] = await Promise.all([
       supabase
         .from("vaccination_events")
         .select("id, event_date, flock_id, vaccine_name, dosage, route, batch_number")
@@ -210,12 +221,7 @@ export default function HealthPage() {
         .eq("org_id", profile.org_id)
         .order("checklist_date", { ascending: false })
         .limit(100),
-      supabase
-        .from("health_events")
-        .select("id, event_date, description, diagnosis, treatment, flock_id")
-        .eq("org_id", profile.org_id)
-        .order("event_date", { ascending: false })
-        .limit(200),
+      fetch("/api/health/events"),
       db
         .from("batch_weight_check_tasks")
         .select("id, batch_id, flock_id, due_week_number, due_date, status, weight_record_id")
@@ -223,10 +229,12 @@ export default function HealthPage() {
         .order("due_date", { ascending: false })
         .limit(200),
     ]);
+    const healthPayload = healthResponse.ok ? await healthResponse.json() : { events: [] };
+    const healthRows = healthPayload.events ?? [];
 
     const statusBySchedule = new Map<string, { status: "completed" | "missed"; reason: string | null }>();
     const targetBySchedule = new Map<string, { farmId: string | null; houseId: string | null; flockId: string | null }>();
-    (healthRows ?? []).forEach((row) => {
+    (healthRows ?? []).forEach((row: { description: string | null; diagnosis: string | null }) => {
       const d = row.description ?? "";
       if (d.startsWith("SCHEDULE_STATUS|")) {
         const parts = d.split("|");
@@ -411,13 +419,11 @@ export default function HealthPage() {
         .single();
       if (vaccineError) throw new Error(vaccineError.message);
       if (newVaccine?.id) {
-        await supabase.from("health_events").insert({
-          org_id: profile.org_id,
+        await saveHealthEvent({
           flock_id: selectedFlockId,
           event_date: plannedDate,
           event_type: "observation",
           description: `SCHEDULE_TARGET|${newVaccine.id}|${selectedFarmId}|${selectedHouseId}|${selectedFlockId}`,
-          vet_id: user.id,
         });
       }
 
@@ -473,13 +479,11 @@ export default function HealthPage() {
       if (cleanupError) throw new Error(cleanupError.message);
       const targetFlockId = cleanFlockId || scope.flockId;
       if (newCleanup?.id && targetFlockId) {
-        await supabase.from("health_events").insert({
-          org_id: profile.org_id,
+        await saveHealthEvent({
           flock_id: targetFlockId,
           event_date: date,
           event_type: "observation",
           description: `SCHEDULE_TARGET|${newCleanup.id}|${selectedFarmId}|${cleanHouseId || ""}|${cleanFlockId || ""}`,
-          vet_id: user.id,
         });
       }
 
@@ -644,16 +648,13 @@ export default function HealthPage() {
         if (upd) throw new Error(upd.message);
       }
 
-      const { error: statusError } = await supabase.from("health_events").insert({
-        org_id: profile.org_id,
+      await saveHealthEvent({
         flock_id: item.flockId ?? scope.flockId ?? null,
         event_date: item.date,
         event_type: "observation",
         description: `SCHEDULE_STATUS|${item.id}|${status}|${item.type}`,
         diagnosis: reason ?? null,
-        vet_id: user.id,
       });
-      if (statusError) throw new Error(statusError.message);
 
       setSuccess(status === "completed" ? "Marked as completed." : "Marked as missed.");
       await loadSchedules();
@@ -762,26 +763,13 @@ export default function HealthPage() {
         if (updateError) throw new Error(updateError.message);
       }
 
-      const targetDescription = `SCHEDULE_TARGET|${editModal.item.id}|${editModal.farmId}|${editModal.houseId || ""}|${editModal.flockId || ""}`;
-      const targetUpdate: { event_date: string; description: string; flock_id?: string } = {
-        event_date: editModal.date,
-        description: targetDescription,
-      };
-      if (editModal.flockId) targetUpdate.flock_id = editModal.flockId;
-      const { error: targetUpdateError } = await supabase
-        .from("health_events")
-        .update(targetUpdate)
-        .eq("org_id", profile.org_id)
-        .like("description", `SCHEDULE_TARGET|${editModal.item.id}|%`);
-      if (targetUpdateError) throw new Error(targetUpdateError.message);
-      const statusUpdate: { event_date: string; flock_id?: string } = { event_date: editModal.date };
-      if (editModal.flockId) statusUpdate.flock_id = editModal.flockId;
-      const { error: statusUpdateError } = await supabase
-        .from("health_events")
-        .update(statusUpdate)
-        .eq("org_id", profile.org_id)
-        .like("description", `SCHEDULE_STATUS|${editModal.item.id}|%`);
-      if (statusUpdateError) throw new Error(statusUpdateError.message);
+      const evidenceResponse = await fetch("/api/health/events", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedule_id: editModal.item.id, event_date: editModal.date, farm_id: editModal.farmId, house_id: editModal.houseId, flock_id: editModal.flockId }),
+      });
+      const evidenceBody = await evidenceResponse.json().catch(() => ({}));
+      if (!evidenceResponse.ok) throw new Error(evidenceBody.error ?? "Schedule evidence could not be updated.");
 
       setEditModal({
         open: false,

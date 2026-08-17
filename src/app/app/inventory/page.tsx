@@ -20,7 +20,6 @@ import {
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import type { Database } from "@/types/supabase";
-import { createClient } from "@/utils/supabase/client";
 
 type InventoryItem = {
   id: string;
@@ -181,6 +180,7 @@ export default function InventoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [currentRole, setCurrentRole] = useState("");
+  const [warehouseAssignmentRequired, setWarehouseAssignmentRequired] = useState(false);
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState<InventoryCategory>("feed");
@@ -291,56 +291,36 @@ export default function InventoryPage() {
       return;
     }
 
-    const supabase = createClient();
-    let ledgerQuery = supabase
-      .from("stock_ledger")
-      .select("item_id, warehouse_id, quantity, transaction_type, unit_cost, transaction_date, flock_id, reference_doc, supplier_name, invoice_number, procurement_type, notes")
-      .eq("org_id", nextOrgId)
-      .order("transaction_date", { ascending: false })
-      .limit(1000);
-    if (scope.flockId) {
-      ledgerQuery = ledgerQuery.eq("flock_id", scope.flockId);
-    } else if (scopedFlockIds.length > 0) {
-      ledgerQuery = ledgerQuery.in("flock_id", scopedFlockIds);
-    } else if (scope.branchId || scope.farmId || scope.houseId || scope.batchId) {
-      setItems([]);
-      setLedger([]);
-      setBalanceLedger([]);
-      setWarehouses([]);
-      setCostEntries([]);
-      setPeriods([]);
-      setLoading(false);
-      return;
-    }
-
-    const [itemsRes, ledgerRes, balanceLedgerRes, warehousesResponse, costsResponse, periodsResponse] = await Promise.all([
-      supabase
-        .from("inventory_items")
-        .select("id, name, category, unit, reorder_level, unit_cost")
-        .eq("org_id", nextOrgId)
-        .order("name"),
-      ledgerQuery,
-      supabase
-        .from("stock_ledger")
-        .select("item_id, warehouse_id, quantity, transaction_type, unit_cost, transaction_date, flock_id, reference_doc, supplier_name, invoice_number, procurement_type, notes")
-        .eq("org_id", nextOrgId)
-        .limit(10000),
+    const [catalogResponse, warehousesResponse, costsResponse, periodsResponse] = await Promise.all([
+      fetch("/api/inventory/catalog"),
       fetch("/api/inventory/warehouses"),
       fetch(`/api/profit/cost-entries?${scopeParams.toString()}`),
       fetch(`/api/profit/monthly?${scopeParams.toString()}`),
     ]);
 
+    const catalogJson = catalogResponse.ok ? await catalogResponse.json() : { items: [], ledger: [] };
     const costsJson = costsResponse.ok ? await costsResponse.json() : { costEntries: [] };
     const periodsJson = periodsResponse.ok ? await periodsResponse.json() : { periods: [] };
     const warehousesJson = warehousesResponse.ok ? await warehousesResponse.json() : { warehouses: [], branches: [], farms: [], managers: [] };
-    if (!warehousesResponse.ok) setError(warehousesJson.error ?? "Could not load assigned warehouses.");
-    setItems((itemsRes.data ?? []) as InventoryItem[]);
+    const failures = [
+      !catalogResponse.ok ? catalogJson.error ?? "Could not load inventory items." : null,
+      !warehousesResponse.ok ? warehousesJson.error ?? "Could not load assigned warehouses." : null,
+    ].filter(Boolean);
+    if (failures.length) setError(failures.join(" "));
+    setItems((catalogJson.items ?? []) as InventoryItem[]);
+    setWarehouseAssignmentRequired(Boolean(catalogJson.warehouseAssignmentRequired));
     const warehouseRows = ((warehousesJson.warehouses ?? []) as WarehouseRow[]).filter((warehouse) =>
       (!scope.branchId || warehouse.branch_id === scope.branchId) && (!scope.farmId || warehouse.farm_id === scope.farmId)
     );
-    const balanceRows = (balanceLedgerRes.data ?? []) as StockLedgerRow[];
+    const balanceRows = (catalogJson.ledger ?? []) as StockLedgerRow[];
     const scopedWarehouseIds = new Set(warehouseRows.map((warehouse) => warehouse.id));
-    setLedger(((ledgerRes.data ?? []) as StockLedgerRow[]).filter((row) => scopedWarehouseIds.has(row.warehouse_id)));
+    const scopedLedger = balanceRows.filter((row) => {
+      if (!scopedWarehouseIds.has(row.warehouse_id)) return false;
+      if (scope.flockId) return row.flock_id === scope.flockId;
+      if (scopedFlockIds.length && (scope.houseId || scope.batchId)) return Boolean(row.flock_id && scopedFlockIds.includes(row.flock_id));
+      return true;
+    });
+    setLedger(scopedLedger);
     setBalanceLedger(balanceRows.filter((row) => scopedWarehouseIds.has(row.warehouse_id)));
     setWarehouses(warehouseRows);
     setWarehouseBranches((warehousesJson.branches ?? []) as WarehouseOption[]);
@@ -351,7 +331,7 @@ export default function InventoryPage() {
     setPeriods((periodsJson.periods ?? []) as MonthlyPeriod[]);
     if (!txnWarehouseId && warehouseRows[0]) setTxnWarehouseId(warehouseRows[0].id);
     if (!countWarehouseId && warehouseRows[0]) setCountWarehouseId(warehouseRows[0].id);
-    if (!countItemId && itemsRes.data?.[0]) setCountItemId(String(itemsRes.data[0].id));
+    if (!countItemId && catalogJson.items?.[0]) setCountItemId(String(catalogJson.items[0].id));
     if (stockWarehouseId && !warehouseRows.some((warehouse) => warehouse.id === stockWarehouseId)) setStockWarehouseId("");
     setLoading(false);
   };
@@ -437,18 +417,21 @@ export default function InventoryPage() {
     setSaving(true);
     setError(null);
     setSuccess(null);
-    const supabase = createClient();
-    const { error: insertError } = await supabase.from("inventory_items").insert({
-      org_id: orgId,
+    const response = await fetch("/api/inventory/catalog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
       name: name.trim(),
       category,
       unit: unit.trim(),
-      reorder_level: reorderLevel || 0,
-      unit_cost: unitCost || 0,
+        reorderLevel: reorderLevel || 0,
+        unitCost: unitCost || 0,
+      }),
     });
+    const result = await response.json().catch(() => ({}));
     setSaving(false);
-    if (insertError) {
-      setError(insertError.message);
+    if (!response.ok) {
+      setError(result.error ?? "Could not add the inventory item.");
       return;
     }
     setSuccess("Inventory item added.");
@@ -788,7 +771,7 @@ export default function InventoryPage() {
           <aside className="space-y-5">
           <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-forest-500">Catalogue setup</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">Add an inventory item</h2><p className="mt-1 text-sm text-forest-600">Set a reorder point so the item can enter the risk queue before it runs out.</p>
-            {!canManageStock ? <p className="mt-3 rounded-lg bg-sand-50 p-3 text-xs text-forest-600">Your role has view-only access.</p> : null}
+            {!canManageStock ? <p className="mt-3 rounded-lg bg-sand-50 p-3 text-xs text-forest-600">Your role has view-only access.</p> : warehouseAssignmentRequired ? <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">A CEO must assign you at least one warehouse before you can add catalogue items or post stock.</p> : null}
             <form className="mt-4 grid gap-3" onSubmit={onAddItem}>
               <input required aria-label="Item name" className={inputClass} placeholder="Item name" value={name} onChange={(e) => setName(e.target.value)} />
               <select aria-label="Item category" className={inputClass} value={category} onChange={(e) => setCategory(e.target.value as InventoryCategory)}>
@@ -804,7 +787,7 @@ export default function InventoryPage() {
               </select>
               <input aria-label="Unit of measure" className={inputClass} placeholder="Unit (kg, bag, litre, piece)" value={unit} onChange={(e) => setUnit(e.target.value)} />
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1"><input aria-label="Reorder level" type="number" min={0} className={inputClass} placeholder="Reorder level" value={reorderLevel || ""} onChange={(e) => setReorderLevel(Number(e.target.value) || 0)} /><input aria-label="Unit cost" type="number" min={0} step="0.01" className={inputClass} placeholder="Unit cost (ETB)" value={unitCost || ""} onChange={(e) => setUnitCost(Number(e.target.value) || 0)} /></div>
-              <button className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 transition hover:bg-forest-800 disabled:opacity-60" type="submit" disabled={saving || !canManageStock}>
+              <button className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 transition hover:bg-forest-800 disabled:opacity-60" type="submit" disabled={saving || !canManageStock || warehouseAssignmentRequired}>
                 {saving ? "Saving…" : "Add to catalogue"}
               </button>
             </form>
@@ -926,11 +909,11 @@ export default function InventoryPage() {
                 <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-xs font-semibold text-forest-700">Supplier<input className={inputClass} placeholder="Supplier name" value={txnSupplier} onChange={(e) => setTxnSupplier(e.target.value)} /></label><label className="grid gap-1.5 text-xs font-semibold text-forest-700">Invoice or receipt<input className={inputClass} placeholder="Optional number" value={txnInvoice} onChange={(e) => setTxnInvoice(e.target.value)} /></label></div>
               </> : null}
               <details className="rounded-xl border border-sand-200 bg-sand-50 p-3"><summary className="cursor-pointer text-sm font-semibold text-forest-800">Optional allocation and supporting details</summary><div className="mt-3 grid gap-3"><select className={inputClass} value={txnFlockId} onChange={(e) => setTxnFlockId(e.target.value)}><option value="">No specific flock</option>{filteredFlocks.map((flock) => <option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}</select><select className={inputClass} value={txnBatchId} onChange={(e) => setTxnBatchId(e.target.value)}><option value="">No specific batch</option>{filteredBatches.map((batch) => <option key={batch.id} value={batch.id}>{batch.batch_code}</option>)}</select><input className={inputClass} placeholder="Reference document" value={txnReference} onChange={(e) => setTxnReference(e.target.value)} /><input className={inputClass} placeholder="Note or reason" value={txnNotes} onChange={(e) => setTxnNotes(e.target.value)} /></div></details>
-              <button className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 transition hover:bg-forest-800 disabled:opacity-60" type="submit" disabled={saving || !canManageStock}>
+              <button className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 transition hover:bg-forest-800 disabled:opacity-60" type="submit" disabled={saving || !canManageStock || !warehouses.length || !items.length}>
                 {saving ? "Saving…" : txnType === "receipt" ? "Save stock received" : txnType === "issue" ? "Save stock used" : txnType === "return" ? "Save stock returned" : txnType === "transfer" ? "Save warehouse transfer" : "Save balance correction"}
               </button>
             </form>
-            {warehouses.length === 0 ? <p className="mt-3 text-sm text-ember-500">Create at least one warehouse before recording stock movement.</p> : null}
+            {warehouses.length === 0 ? <p className="mt-3 text-sm text-ember-500">{currentRole === "farm_manager" ? "No active warehouse is assigned in this scope. Ask the CEO to grant the correct warehouse assignment." : "Create at least one warehouse before recording stock movement."}</p> : null}
           </section>
 
           <section className="min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">

@@ -23,6 +23,7 @@ import {
   Warehouse,
   ShieldCheck,
   Scale,
+  Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -60,6 +61,7 @@ const itemIcons: Record<string, LucideIcon> = {
   "Operating Days": ClipboardList,
   "Daily Close": ClipboardList,
   "Record Checks": Scale,
+  "Access & Users": Users,
 };
 
 const ceoNavSections: NavSection[] = [
@@ -71,6 +73,7 @@ const ceoNavSections: NavSection[] = [
       { label: "Analytics", href: "/app/analytics" },
       { label: "Reports", href: "/app/reports" },
       { label: "Governance", href: "/app/governance" },
+      { label: "Access & Users", href: "/app/users" },
       { label: "Operating Days", href: "/app/operating-days" },
       { label: "Record Checks", href: "/app/reconciliation" },
     ],

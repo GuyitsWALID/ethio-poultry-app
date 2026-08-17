@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { Database } from "@/types/supabase";
-import { createClient } from "@/utils/supabase/client";
 
 type AppRole = Database["public"]["Enums"]["user_role"];
 
@@ -66,6 +65,8 @@ export default function UsersPage() {
   const canManage = currentRole === "ceo";
   const branchNameMap = useMemo(() => new Map(branches.map((branch) => [branch.id, branch.name])), [branches]);
   const farmNameMap = useMemo(() => new Map(farms.map((farm) => [farm.id, farm.name])), [farms]);
+  const profileNameMap = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile.full_name ?? "Unnamed manager"])), [profiles]);
+  const warehouseNameMap = useMemo(() => new Map(warehouses.map((warehouse) => [warehouse.id, warehouse.name])), [warehouses]);
 
   const load = async () => {
     setLoading(true);
@@ -80,23 +81,15 @@ export default function UsersPage() {
       return;
     }
 
-    const supabase = createClient();
-    const [profilesRes, branchesRes, farmsRes, farmAccessRes,warehousesRes,assignmentRes] = await Promise.all([
-      supabase.from("profiles").select("id, full_name, phone, role, is_active").eq("org_id", nextOrgId).order("full_name"),
-      supabase.from("branches").select("id, name").eq("org_id", nextOrgId).order("name"),
-      supabase.from("farms").select("id, name, branch_id").eq("org_id", nextOrgId).order("name"),
-      supabase.from("user_farm_access").select("profile_id, farm_id").eq("org_id", nextOrgId),
-      supabase.from("warehouses").select("id,name").eq("org_id",nextOrgId).order("name"),
-      fetch("/api/governance/assignments",{cache:"no-store"}),
-    ]);
-    const firstError = profilesRes.error ?? branchesRes.error ?? farmsRes.error ?? farmAccessRes.error ?? warehousesRes.error;
-    if (firstError) setError(firstError.message);
-    setProfiles((profilesRes.data ?? []) as ProfileRow[]);
-    setBranches((branchesRes.data ?? []) as BranchRow[]);
-    setFarms((farmsRes.data ?? []) as FarmRow[]);
-    setFarmAccess((farmAccessRes.data ?? []) as FarmAccessRow[]);
-    setWarehouses((warehousesRes.data??[]) as WarehouseRow[]);
-    if(assignmentRes.ok){const payload=await assignmentRes.json();setWarehouseAccess(payload.warehouseAssignments??[]);setFarmAccess(payload.farmAssignments??[])}
+    const assignmentResponse=await fetch("/api/governance/assignments",{cache:"no-store"});
+    const payload=await assignmentResponse.json().catch(()=>({}));
+    if(!assignmentResponse.ok)setError(payload.error??"Operational access data could not be loaded.");
+    setProfiles((payload.profiles??[]) as ProfileRow[]);
+    setBranches((payload.branches??[]) as BranchRow[]);
+    setFarms((payload.farms??[]) as FarmRow[]);
+    setWarehouses((payload.warehouses??[]) as WarehouseRow[]);
+    setWarehouseAccess((payload.warehouseAssignments??[]) as WarehouseAccessRow[]);
+    setFarmAccess((payload.farmAssignments??[]) as FarmAccessRow[]);
     setLoading(false);
   };
 
@@ -123,14 +116,39 @@ export default function UsersPage() {
 
   const addAssignment = async (scopeType:"farm"|"warehouse") => {
     const scopeId=scopeType==="farm"?selectedFarmId:selectedWarehouseId;
-    if (!canManage || !orgId || !selectedProfileId || !scopeId) return;
+    if (!canManage || !orgId) {
+      setError("Only the organization CEO can grant operational access.");
+      return;
+    }
+    if (!selectedProfileId) {
+      setError("Select an active Farm Manager before granting access.");
+      return;
+    }
+    if (!scopeId) {
+      setError(`Select the ${scopeType} that this Farm Manager should access.`);
+      return;
+    }
     setSaving(true);
     setError(null);
-    const response=await fetch("/api/governance/assignments",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:selectedProfileId,scope_type:scopeType,scope_id:scopeId,expires_at:expiresAt||null})});const payload=await response.json();
-    if (!response.ok) setError(payload.error??"Assignment failed.");
-    else setSuccess(`${scopeType==="farm"?"Farm":"Warehouse"} access assigned and audited.`);
-    setSaving(false);
-    await load();
+    setSuccess(null);
+    try {
+      const response=await fetch("/api/governance/assignments",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({profile_id:selectedProfileId,scope_type:scopeType,scope_id:scopeId,expires_at:expiresAt||null})});
+      const payload=await response.json().catch(()=>({}));
+      if (!response.ok) {
+        setError(payload.error??"Access was not granted. Please try again.");
+        return;
+      }
+      const managerName=profileNameMap.get(selectedProfileId)??"The Farm Manager";
+      const scopeName=scopeType==="farm"?(farmNameMap.get(scopeId)??"the selected farm"):(warehouseNameMap.get(scopeId)??"the selected warehouse");
+      await load();
+      setSuccess(`${managerName} now has active access to ${scopeName}. The grant is recorded in assignment history.`);
+      if(scopeType==="farm")setSelectedFarmId("");else setSelectedWarehouseId("");
+      setExpiresAt("");
+    } catch {
+      setError("Access was not granted because the request could not reach the server.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const revokeAssignment=async(scopeType:"farm"|"warehouse",assignmentId:string,label:string)=>{if(!canManage)return;const reason=window.prompt(`Why should access to ${label} end?` )?.trim();if(!reason)return;if(reason.length<8){setError("Revocation reason must be at least eight characters.");return}setSaving(true);setError(null);const response=await fetch("/api/governance/assignments",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope_type:scopeType,assignment_id:assignmentId,reason})});const payload=await response.json();if(!response.ok)setError(payload.error??"Assignment could not be revoked.");else setSuccess(`${label} access revoked and retained in history.`);setSaving(false);await load()};
@@ -161,7 +179,7 @@ export default function UsersPage() {
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={selectedProfileId} onChange={(event) => setSelectedProfileId(event.target.value)}>
             <option value="">Select user</option>
-            {profiles.map((profile) => (
+            {profiles.filter((profile)=>profile.role==="farm_manager"&&profile.is_active).map((profile) => (
               <option key={profile.id} value={profile.id}>{profile.full_name ?? profile.id} · {profile.role}</option>
             ))}
           </select>
@@ -180,12 +198,12 @@ export default function UsersPage() {
               <option key={farm.id} value={farm.id}>{farm.name} · {branchNameMap.get(farm.branch_id) ?? "Branch"}</option>
             ))}
           </select>
-          <button type="button" disabled={saving || !canManage} onClick={() => void addAssignment("farm")} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
+          <button type="button" disabled={saving || !canManage || !selectedProfileId || !selectedFarmId} onClick={() => void addAssignment("farm")} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
             Add Farm Access
           </button>
           <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={selectedWarehouseId} onChange={(event)=>setSelectedWarehouseId(event.target.value)}><option value="">Select warehouse</option>{warehouses.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select>
-          <input type="datetime-local" aria-label="Assignment expiry" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={expiresAt} onChange={(event)=>setExpiresAt(event.target.value)}/>
-          <button type="button" disabled={saving||!canManage} onClick={()=>void addAssignment("warehouse")} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">Add Warehouse Access</button>
+          <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-600"><span>Access expiry (optional)</span><input type="datetime-local" aria-label="Assignment expiry" className="h-8 rounded-xl border border-sand-200 px-3 text-sm font-normal normal-case tracking-normal text-forest-900" value={expiresAt} onChange={(event)=>setExpiresAt(event.target.value)}/></label>
+          <button type="button" disabled={saving||!canManage||!selectedProfileId||!selectedWarehouseId} onClick={()=>void addAssignment("warehouse")} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">{saving?"Granting access…":"Add Warehouse Access"}</button>
         </div>
       </section>
 

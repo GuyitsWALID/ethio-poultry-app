@@ -283,26 +283,15 @@ export default function DailyRecordsPage() {
       const orgId = context?.orgId as string | null;
       if (!orgId) return;
 
-      const supabase = createClient();
-      let warehouseQuery = supabase
-        .from("warehouses")
-        .select("id, branch_id, name, type")
-        .eq("org_id", orgId)
-        .order("name");
-      if (scope.branchId) warehouseQuery = warehouseQuery.eq("branch_id", scope.branchId);
-
-      const [itemsRes, warehousesRes] = await Promise.all([
-        supabase
-          .from("inventory_items")
-          .select("id, name, category, unit, unit_cost")
-          .eq("org_id", orgId)
-          .in("category", ["medicine", "vaccine", "vitamin", "supplement", "packaging", "miscellaneous"])
-          .order("name"),
-        warehouseQuery,
+      const [catalogResponse, warehousesResponse] = await Promise.all([
+        fetch("/api/inventory/catalog"),
+        fetch("/api/inventory/warehouses"),
       ]);
-
-      setInventoryItems((itemsRes.data ?? []) as InventoryUsageItem[]);
-      setWarehouses((warehousesRes.data ?? []) as WarehouseRow[]);
+      const catalog = catalogResponse.ok ? await catalogResponse.json() : { items: [] };
+      const warehouseData = warehousesResponse.ok ? await warehousesResponse.json() : { warehouses: [] };
+      const supportedCategories = new Set(["medicine", "vaccine", "vitamin", "supplement", "packaging", "miscellaneous"]);
+      setInventoryItems(((catalog.items ?? []) as InventoryUsageItem[]).filter((item) => supportedCategories.has(item.category)));
+      setWarehouses(((warehouseData.warehouses ?? []) as WarehouseRow[]).filter((warehouse) => !scope.branchId || warehouse.branch_id === scope.branchId));
     };
 
     void loadInventoryOptions();
