@@ -16,6 +16,14 @@ const openingRow = z.object({
 });
 const openingInput = z.object({ warehouseId: z.string().uuid(), openedOn: z.string().date(), idempotencyKey: z.string().trim().min(8).max(160), rows: z.array(openingRow).min(1).max(150) });
 const countInput = z.object({ warehouseId: z.string().uuid(), countedOn: z.string().date(), idempotencyKey: z.string().trim().min(8).max(160), notes: z.string().trim().max(500).nullable().optional(), rows: z.array(z.object({ itemId: z.string().uuid(), countedQuantity: z.number().finite().nonnegative() })).min(1).max(500) });
+const receiptInput = z.object({
+  warehouseId:z.string().uuid(), itemId:z.string().uuid().nullable().optional(),
+  newItem:openingRow.pick({name:true,category:true,unit:true,reorderLevel:true}).nullable().optional(),
+  quantity:z.number().finite().positive(), unitCost:z.number().finite().nonnegative(), transactionDate:z.string().date(),
+  procurementType:z.enum(["monthly","emergency","miscellaneous"]), supplierName:z.string().trim().max(160).nullable().optional(),
+  invoiceNumber:z.string().trim().max(120).nullable().optional(), notes:z.string().trim().max(500).nullable().optional(),
+  idempotencyKey:z.string().trim().min(8).max(160),
+}).refine(value=>Boolean(value.itemId)!==Boolean(value.newItem),"Choose either an existing item or enter one new item.");
 
 export class InventoryOperationsError extends Error { constructor(message: string, readonly status = 400) { super(message); } }
 
@@ -99,4 +107,19 @@ export async function submitMonthlyCount(ctx:AccessContext,input:unknown){
   if(error)throw new InventoryOperationsError(error.message,error.code==="42501"?403:error.code==="23505"?409:400);
   await recordAuditEvent(ctx,{eventType:"inventory.monthly_count.submitted",operation:"insert",entityTable:"inventory_count_sessions",entityId:String(data.session_id),reason:parsed.data.notes??"Submitted the complete warehouse shelf count.",after:data,warehouseId:parsed.data.warehouseId});
   await ensureFreshReconciliation(ctx,true); return data;
+}
+
+export async function receiveInventoryStock(ctx:AccessContext,input:unknown){
+  if(ctx.role!=="farm_manager"&&!ctx.supportSessionId)throw new InventoryOperationsError("Only a Farm Manager can receive stock.",403);
+  const parsed=receiptInput.safeParse(input);if(!parsed.success)throw new InventoryOperationsError(parsed.error.issues[0]?.message??"The stock receipt is invalid.");
+  if(!ctx.supportSessionId&&!await canAccessWarehouse(ctx,parsed.data.warehouseId))throw new InventoryOperationsError("An active warehouse assignment is required.",403);
+  const value=parsed.data;
+  const {data,error}=await (governanceAdmin as any).rpc("receive_inventory_stock",{
+    p_actor_id:ctx.userId,p_warehouse_id:value.warehouseId,p_item_id:value.itemId??null,p_new_item:value.newItem??null,
+    p_quantity:value.quantity,p_unit_cost:value.unitCost,p_transaction_date:value.transactionDate,p_procurement_type:value.procurementType,
+    p_supplier_name:value.supplierName??null,p_invoice_number:value.invoiceNumber??null,p_notes:value.notes??null,p_idempotency_key:value.idempotencyKey,
+  });
+  if(error)throw new InventoryOperationsError(error.message,error.code==="42501"?403:error.code==="23505"?409:400);
+  await recordAuditEvent(ctx,{eventType:"inventory.stock.received",operation:"insert",entityTable:"stock_ledger",entityId:String(data.movement_id),reason:`Received stock into the assigned warehouse${value.invoiceNumber?` against ${value.invoiceNumber}`:""}.`,after:data,warehouseId:value.warehouseId});
+  return data;
 }

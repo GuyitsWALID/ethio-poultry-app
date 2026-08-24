@@ -10,6 +10,7 @@ const catalogRoute = await readFile(new URL("../src/app/api/inventory/catalog/ro
 const dailyRecords = await readFile(new URL("../src/app/app/daily-records/page.tsx", import.meta.url), "utf8");
 const healthEventsRoute = await readFile(new URL("../src/app/api/health/events/route.ts", import.meta.url), "utf8");
 const warehouseFirstMigration = await readFile(new URL("../supabase/migrations/20260824000000_warehouse_first_inventory.sql", import.meta.url), "utf8");
+const receiptMigration = await readFile(new URL("../supabase/migrations/20260824001000_atomic_inventory_receipts.sql", import.meta.url), "utf8");
 const operations = await readFile(new URL("../src/lib/inventory-operations.ts", import.meta.url), "utf8");
 
 test("inventory begins with four plain operational jobs", () => {
@@ -66,6 +67,15 @@ test("opening setup and automatic usage have atomic governed ownership",()=>{
   assert.match(operations,/Daily supplies/);
   assert.match(operations,/Treatment/);
   assert.match(operations,/Vaccination/);
+});
+
+test("new catalogue items and their first receipt are one warehouse-authorized transaction",()=>{
+  assert.match(receiptMigration,/receive_inventory_stock/);
+  assert.match(receiptMigration,/user_warehouse_access/);
+  assert.match(receiptMigration,/inventory_receipt/);
+  assert.match(receiptMigration,/record_assigned_inventory_movement/);
+  assert.match(page,/\/api\/inventory\/receipts/);
+  assert.doesNotMatch(page,/created\.item\.id/);
 });
 
 test("inventory option consumers no longer rely on browser RLS reads", () => {

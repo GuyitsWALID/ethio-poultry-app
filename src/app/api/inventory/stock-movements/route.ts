@@ -3,8 +3,7 @@ import { NextRequest } from "next/server";
 import { getSalesContext, json, supabaseAdmin } from "@/lib/sales";
 import { governanceAdmin } from "@/lib/access-context";
 
-const VALID_TRANSACTION_TYPES = new Set(["receipt", "issue", "return", "adjustment", "transfer"]);
-const VALID_PROCUREMENT_TYPES = new Set(["monthly", "emergency", "miscellaneous"]);
+const VALID_TRANSACTION_TYPES = new Set(["issue", "return", "adjustment", "transfer"]);
 
 function cleanText(value: unknown) {
   if (typeof value !== "string") return null;
@@ -36,7 +35,6 @@ export async function POST(request: NextRequest) {
     const warehouseId = cleanText(body.warehouse_id);
     const transactionType = cleanText(body.transaction_type);
     const destinationWarehouseId = cleanText(body.destination_warehouse_id);
-    const procurementType = cleanText(body.procurement_type);
     const quantity = numberFrom(body.quantity);
 
     if (!itemId) return json({ error: "Select an inventory item." }, 400);
@@ -56,11 +54,9 @@ export async function POST(request: NextRequest) {
     }
     if(transactionType==="transfer"&&destinationWarehouseId&&!await assigned(destinationWarehouseId))return json({error:"An active assignment to the destination warehouse is required."},403);
     if(transactionType==="transfer"&&destinationWarehouseId&&!await activeWarehouse(destinationWarehouseId))return json({error:"The destination warehouse is inactive or outside this organization."},400);
-    if (transactionType === "receipt" && (!procurementType || !VALID_PROCUREMENT_TYPES.has(procurementType))) {
-      return json({ error: "Select monthly, emergency, or miscellaneous procurement." }, 400);
-    }
-
-    const { data, error } = await supabaseAdmin.rpc("record_inventory_movement", {
+    const idempotencyKey=cleanText(body.idempotency_key);
+    if(!idempotencyKey)return json({error:"A stock action request identity is required."},400);
+    const { data, error } = await supabaseAdmin.rpc("record_assigned_inventory_movement", {
       p_actor_id: ctx.userId,
       p_item_id: itemId,
       p_warehouse_id: warehouseId,
@@ -69,16 +65,8 @@ export async function POST(request: NextRequest) {
       p_unit_cost: numberFrom(body.unit_cost),
       p_transaction_date: cleanText(body.transaction_date) ?? new Date().toISOString().slice(0, 10),
       p_destination_warehouse_id: destinationWarehouseId,
-      p_branch_id: cleanText(body.branch_id),
-      p_farm_id: cleanText(body.farm_id),
-      p_house_id: cleanText(body.house_id),
-      p_flock_id: cleanText(body.flock_id),
-      p_batch_id: cleanText(body.batch_id),
-      p_procurement_type: transactionType === "receipt" ? procurementType : null,
-      p_supplier_name: cleanText(body.supplier_name),
-      p_invoice_number: cleanText(body.invoice_number),
-      p_reference_doc: cleanText(body.reference_doc) ?? cleanText(body.invoice_number),
       p_notes: cleanText(body.notes),
+      p_idempotency_key:idempotencyKey,
     });
 
     if (error) return json({ error: error.message }, errorStatus(error.code));
