@@ -31,9 +31,10 @@ test("CEO setup can assign an active farm manager and emits an audit event", () 
 });
 
 test("inventory presents warehouse-specific balances and setup", () => {
-  assert.match(page, /All assigned warehouses/);
-  assert.match(page, /Where inventory physically belongs/);
-  assert.match(page, /create or assign the appropriate farm or central store/i);
+  assert.match(page, /Working warehouse/);
+  assert.match(page, /Enter everything currently on the shelf/);
+  assert.match(page, /create and assign a warehouse/i);
+  assert.match(page,/inventory:last-warehouse/);
 });
 
 test("CEO can discover the access page and load assignable farm managers through the governed API", () => {

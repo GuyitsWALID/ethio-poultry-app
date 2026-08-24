@@ -157,6 +157,8 @@ type WarehouseRow = {
   type: string;
 };
 
+type RoutineUsageRow = { key:string; itemId:string; warehouseId:string; quantity:string; notes:string };
+
 export default function DailyRecordsPage() {
   const { role, scope, setScope, branches, filteredFarms, filteredFlocks, filteredBatches, filteredHouses } =
     useFarmScope();
@@ -180,6 +182,7 @@ export default function DailyRecordsPage() {
   const [editAgeSource, setEditAgeSource] = useState<AgeSource | null>(null);
   const [inventoryItems, setInventoryItems] = useState<InventoryUsageItem[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
+  const [routineUsages,setRoutineUsages]=useState<RoutineUsageRow[]>([]);
   const [closedFeedDayKeys, setClosedFeedDayKeys] = useState<Set<string>>(() => new Set());
   const canCreateRecord = currentRole === "farm_manager";
 
@@ -474,8 +477,10 @@ export default function DailyRecordsPage() {
     currentLiveBirds && currentLiveBirds > 0 && formDeaths !== ""
       ? Number(((Number(formDeaths) / currentLiveBirds) * 100).toFixed(2))
       : "";
-  const healthInventoryItems = inventoryItems;
+  const healthInventoryItems = inventoryItems.filter((item)=>["vitamin","supplement","packaging","miscellaneous"].includes(item.category));
   const defaultWarehouseId = warehouses[0]?.id ?? "";
+  const addRoutineUsage=()=>setRoutineUsages((rows)=>[...rows,{key:crypto.randomUUID(),itemId:"",warehouseId:defaultWarehouseId,quantity:"",notes:""}]);
+  const updateRoutineUsage=(key:string,field:keyof Omit<RoutineUsageRow,"key">,value:string)=>setRoutineUsages((rows)=>rows.map((row)=>row.key===key?{...row,[field]:value}:row));
   const flockLabelMap = useMemo(
     () => new Map(filteredFlocks.map((flock) => [flock.id, flock.flock_code])),
     [filteredFlocks]
@@ -515,11 +520,7 @@ export default function DailyRecordsPage() {
     };
   }, [closedFeedDayKeys, rows]);
 
-  const buildDailyInventoryUsages = (formData: FormData) => {
-    const healthItemId = parseText(formData.get("health_inventory_item_id"));
-    const healthWarehouseId = parseText(formData.get("health_warehouse_id")) ?? defaultWarehouseId;
-    const healthIssueQuantity = parseNumber(formData.get("health_issue_quantity")) ?? 0;
-    const healthUsageReason = parseText(formData.get("health_usage_reason"));
+  const buildDailyInventoryUsages = () => {
     const usages: Array<{
       item_id: string;
       warehouse_id: string;
@@ -528,15 +529,18 @@ export default function DailyRecordsPage() {
       notes: string;
     }> = [];
 
-    if (healthIssueQuantity > 0) {
-      if (!healthItemId || !healthWarehouseId) throw new Error("Select medication, supplement, or vaccine item and warehouse before issuing stock.");
-      const item = inventoryItems.find((candidate) => candidate.id === healthItemId);
+    for(const usage of routineUsages){
+      const quantity=Number(usage.quantity);
+      if(!usage.itemId&&!usage.warehouseId&&!usage.quantity&&!usage.notes)continue;
+      if(!usage.itemId||!usage.warehouseId||!Number.isFinite(quantity)||quantity<=0)throw new Error("Complete the item, warehouse, and positive quantity for every routine supply row.");
+      const item=healthInventoryItems.find((candidate)=>candidate.id===usage.itemId);
+      if(!item)throw new Error("Daily Records accepts only vitamins, supplements, packaging, and general supplies.");
       usages.push({
-        item_id: healthItemId,
-        warehouse_id: healthWarehouseId,
-        quantity: healthIssueQuantity,
+        item_id: usage.itemId,
+        warehouse_id: usage.warehouseId,
+        quantity,
         unit_cost: item?.unit_cost ?? 0,
-        notes: healthUsageReason ?? "Daily health/supplement issue",
+        notes: usage.notes.trim() || "Routine Daily Record supply usage",
       });
     }
 
@@ -695,7 +699,7 @@ export default function DailyRecordsPage() {
 
     let usages;
     try {
-      usages = buildDailyInventoryUsages(formData);
+      usages = buildDailyInventoryUsages();
     } catch (usageError) {
       setFormError(usageError instanceof Error ? usageError.message : "Inventory usage is invalid.");
       setIsSubmitting(false);
@@ -731,6 +735,7 @@ export default function DailyRecordsPage() {
     setEditRecordDate("");
     setFormTotalEggs("");
     setFormDeaths("");
+    setRoutineUsages([]);
     setEditingRow(null);
     setIsSubmitting(false);
     setIsModalOpen(false);
@@ -1072,38 +1077,10 @@ export default function DailyRecordsPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 rounded-2xl border border-sand-200 bg-white p-4 md:grid-cols-4">
-                <div className="md:col-span-4"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-forest-500">04 · Health stock</p><h4 className="mt-1 font-display text-lg font-semibold text-forest-900">Issue non-feed inventory only when used</h4><p className="mt-1 text-xs text-forest-600">Medicine, vaccine, vitamins and supplements can be posted with this record.</p></div>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Non-feed Inventory Item
-                  <select name="health_inventory_item_id" className={inputClass}>
-                    <option value="">No health stock issue</option>
-                    {healthInventoryItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name} ({item.unit})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Health Stock Warehouse
-                  <select name="health_warehouse_id" defaultValue={defaultWarehouseId} className={inputClass}>
-                    <option value="">Select warehouse</option>
-                    {warehouses.map((warehouse) => (
-                      <option key={warehouse.id} value={warehouse.id}>
-                        {warehouse.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Health Stock Issued
-                  <input name="health_issue_quantity" type="number" min={0} step="0.01" placeholder="Item unit quantity" className={inputClass} />
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700 md:col-span-2">
-                  Usage Reason
-                  <input name="health_usage_reason" type="text" placeholder="Treatment, supplement, vaccination..." className={inputClass} />
-                </label>
+              <div className="rounded-2xl border border-sand-200 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-forest-500">04 · Routine supplies</p><h4 className="mt-1 font-display text-lg font-semibold text-forest-900">Record every routine item used today</h4><p className="mt-1 text-xs text-forest-600">Vitamins, supplements, packaging, and general supplies only. Treatments and vaccines belong in Health Log.</p></div><button type="button" onClick={addRoutineUsage} className="rounded-xl border border-forest-900 px-4 py-2 text-xs font-semibold text-forest-900">+ Add usage row</button></div>
+                <div className="mt-4 space-y-3">{routineUsages.map((usage)=><div key={usage.key} className="grid gap-3 rounded-xl bg-sand-50 p-3 md:grid-cols-[1.2fr_1fr_.7fr_1.2fr_auto]"><select aria-label="Routine supply item" value={usage.itemId} onChange={(event)=>updateRoutineUsage(usage.key,"itemId",event.target.value)} className={inputClass}><option value="">Select item</option>{healthInventoryItems.map((item)=><option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select><select aria-label="Routine supply warehouse" value={usage.warehouseId} onChange={(event)=>updateRoutineUsage(usage.key,"warehouseId",event.target.value)} className={inputClass}><option value="">Select warehouse</option>{warehouses.map((warehouse)=><option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select><input aria-label="Routine supply quantity" value={usage.quantity} onChange={(event)=>updateRoutineUsage(usage.key,"quantity",event.target.value)} type="number" min={0} step="0.001" placeholder="Quantity" className={inputClass}/><input aria-label="Routine supply reason" value={usage.notes} onChange={(event)=>updateRoutineUsage(usage.key,"notes",event.target.value)} placeholder="Purpose or area used" className={inputClass}/><button type="button" aria-label="Remove usage row" onClick={()=>setRoutineUsages((rows)=>rows.filter((row)=>row.key!==usage.key))} className="h-11 rounded-xl border border-red-200 px-3 text-red-600">Remove</button></div>)}</div>
+                {!routineUsages.length?<p className="mt-4 rounded-xl bg-sand-50 p-4 text-sm text-forest-600">No routine supplies recorded. Add a row only when stock was actually used.</p>:null}
               </div>
 
               <div className="grid gap-4 rounded-2xl border border-sand-200 bg-white p-4 md:grid-cols-4">
@@ -1316,38 +1293,9 @@ export default function DailyRecordsPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 rounded-2xl border border-sand-200 bg-white p-4 md:grid-cols-4">
-                <div className="md:col-span-4"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-forest-500">04 · Health stock</p><h4 className="mt-1 font-display text-lg font-semibold text-forest-900">Replace usage only when explicitly entered</h4><p className="mt-1 text-xs text-forest-600">Leaving these controls empty preserves the existing health inventory issue.</p></div>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Non-feed Inventory Item
-                  <select name="health_inventory_item_id" className={inputClass}>
-                    <option value="">Leave existing health issue unchanged</option>
-                    {healthInventoryItems.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name} ({item.unit})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Health Stock Warehouse
-                  <select name="health_warehouse_id" defaultValue={defaultWarehouseId} className={inputClass}>
-                    <option value="">Select warehouse</option>
-                    {warehouses.map((warehouse) => (
-                      <option key={warehouse.id} value={warehouse.id}>
-                        {warehouse.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700">
-                  Health Stock Issued
-                  <input name="health_issue_quantity" type="number" min={0} step="0.01" placeholder="Only fill to replace usage issue" className={inputClass} />
-                </label>
-                <label className="grid gap-2 text-sm text-forest-700 md:col-span-2">
-                  Usage Reason
-                  <input name="health_usage_reason" type="text" placeholder="Treatment, supplement, vaccination..." className={inputClass} />
-                </label>
+              <div className="rounded-2xl border border-sand-200 bg-white p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-forest-500">04 · Routine supplies</p><h4 className="mt-1 font-display text-lg font-semibold text-forest-900">Replace usage only when explicitly entered</h4><p className="mt-1 text-xs text-forest-600">Leaving this list empty preserves existing usage. Adding rows explicitly replaces it with routine supplies only.</p></div><button type="button" onClick={addRoutineUsage} className="rounded-xl border border-forest-900 px-4 py-2 text-xs font-semibold text-forest-900">+ Add replacement row</button></div>
+                <div className="mt-4 space-y-3">{routineUsages.map((usage)=><div key={usage.key} className="grid gap-3 rounded-xl bg-sand-50 p-3 md:grid-cols-[1.2fr_1fr_.7fr_1.2fr_auto]"><select aria-label="Routine supply item" value={usage.itemId} onChange={(event)=>updateRoutineUsage(usage.key,"itemId",event.target.value)} className={inputClass}><option value="">Select item</option>{healthInventoryItems.map((item)=><option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select><select aria-label="Routine supply warehouse" value={usage.warehouseId} onChange={(event)=>updateRoutineUsage(usage.key,"warehouseId",event.target.value)} className={inputClass}><option value="">Select warehouse</option>{warehouses.map((warehouse)=><option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select><input aria-label="Routine supply quantity" value={usage.quantity} onChange={(event)=>updateRoutineUsage(usage.key,"quantity",event.target.value)} type="number" min={0} step="0.001" placeholder="Quantity" className={inputClass}/><input aria-label="Routine supply reason" value={usage.notes} onChange={(event)=>updateRoutineUsage(usage.key,"notes",event.target.value)} placeholder="Purpose or area used" className={inputClass}/><button type="button" aria-label="Remove usage row" onClick={()=>setRoutineUsages((rows)=>rows.filter((row)=>row.key!==usage.key))} className="h-11 rounded-xl border border-red-200 px-3 text-red-600">Remove</button></div>)}</div>
               </div>
 
               <div className="grid gap-4 rounded-2xl border border-sand-200 bg-white p-4 md:grid-cols-4">
