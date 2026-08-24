@@ -31,9 +31,11 @@ export async function POST(request:Request){
   const body=await request.json().catch(()=>null) as Record<string,unknown>|null;
   const vaccinationScheduleId=String(body?.vaccination_schedule_id??"").trim();
   if(vaccinationScheduleId){
-    const itemId=String(body?.inventory_item_id??"").trim();const warehouseId=String(body?.warehouse_id??"").trim();const quantity=Number(body?.quantity);
-    if(!itemId||!warehouseId||!Number.isFinite(quantity)||quantity<=0)return accessJson({error:"Vaccine item, warehouse, and administered quantity are required."},400);
-    const {data,error}=await (governanceAdmin as any).rpc("complete_vaccination_with_inventory",{p_actor_id:ctx.userId,p_schedule_id:vaccinationScheduleId,p_item_id:itemId,p_warehouse_id:warehouseId,p_quantity:quantity});
+    const itemId=String(body?.inventory_item_id??"").trim();const warehouseId=String(body?.warehouse_id??"").trim();const quantity=Number(body?.quantity);const administeredOn=String(body?.administered_on??"").trim();
+    if(!itemId||!warehouseId||!Number.isFinite(quantity)||quantity<=0||!DATE.test(administeredOn))return accessJson({error:"Vaccine item, warehouse, administered quantity, and actual administration date are required."},400);
+    const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Addis_Ababa",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+    if(administeredOn>today)return accessJson({error:"The administration date cannot be in the future."},400);
+    const {data,error}=await (governanceAdmin as any).rpc("complete_vaccination_with_inventory",{p_actor_id:ctx.userId,p_schedule_id:vaccinationScheduleId,p_item_id:itemId,p_warehouse_id:warehouseId,p_quantity:quantity,p_administered_on:administeredOn});
     if(error)return accessJson({error:error.message},error.code==="42501"?403:error.code==="55000"?423:400);
     await recordAuditEvent(ctx,{eventType:"vaccination.completed_with_inventory",operation:"insert",entityTable:"vaccination_events",entityId:vaccinationScheduleId,reason:"Completed vaccination and issued vaccine stock atomically.",after:data,warehouseId});
     return accessJson({completion:data},201);

@@ -11,6 +11,8 @@ const dailyRecords = await readFile(new URL("../src/app/app/daily-records/page.t
 const healthEventsRoute = await readFile(new URL("../src/app/api/health/events/route.ts", import.meta.url), "utf8");
 const warehouseFirstMigration = await readFile(new URL("../supabase/migrations/20260824000000_warehouse_first_inventory.sql", import.meta.url), "utf8");
 const receiptMigration = await readFile(new URL("../supabase/migrations/20260824001000_atomic_inventory_receipts.sql", import.meta.url), "utf8");
+const vaccinationDateMigration = await readFile(new URL("../supabase/migrations/20260824002000_weekly_operating_grace_and_vaccination_date.sql", import.meta.url), "utf8");
+const healthPage = await readFile(new URL("../src/app/app/health/page.tsx", import.meta.url), "utf8");
 const operations = await readFile(new URL("../src/lib/inventory-operations.ts", import.meta.url), "utf8");
 
 test("inventory begins with four plain operational jobs", () => {
@@ -83,4 +85,19 @@ test("inventory option consumers no longer rely on browser RLS reads", () => {
   assert.doesNotMatch(dailyRecords, /\.from\("inventory_items"\)/);
   assert.match(healthEventsRoute, /export async function GET/);
   assert.match(healthEventsRoute, /user_farm_access/);
+});
+
+test("vaccination completion records the actual date without rewriting its planned date",()=>{
+  assert.match(vaccinationDateMigration,/p_administered_on date/);
+  assert.match(vaccinationDateMigration,/operating_date=p_administered_on and status='locked'/);
+  assert.match(vaccinationDateMigration,/values\(v_org_id,v_flock_id,p_administered_on/);
+  assert.match(healthEventsRoute,/p_administered_on:administeredOn/);
+  assert.match(healthPage,/name="administered_on"/);
+  assert.match(healthPage,/Scheduled for/);
+});
+
+test("automatic operating-day locking keeps a governed seven-day entry window",()=>{
+  assert.match(vaccinationDateMigration,/operational_day_lock_grace_days integer not null default 7/);
+  assert.match(vaccinationDateMigration,/o\.operational_day_lock_grace_days \+ 1/);
+  assert.match(vaccinationDateMigration,/d\.closed_by is null/);
 });
