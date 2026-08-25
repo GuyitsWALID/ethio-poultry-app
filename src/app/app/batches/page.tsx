@@ -48,87 +48,27 @@ function BatchManagement({ embedded = false }: { embedded?: boolean }) {
   const houseNameById = useMemo(() => new Map(filteredHouses.map((house) => [house.id, house.name])), [filteredHouses]);
 
   const loadRows = async () => {
-    const supabase = createClient();
-    const { data: auth } = await supabase.auth.getUser();
-    const user = auth.user;
-    if (!user) return;
-    const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-    if (!profile?.org_id) return;
-
-    let q = supabase
-      .from("batches")
-      .select("id, batch_code, branch_id, farm_id, house_id, placement_date, source, total_count, status, updated_at")
-      .eq("org_id", profile.org_id)
-      .order("placement_date", { ascending: false })
-      .limit(50);
-    if (scope.branchId) q = q.eq("branch_id", scope.branchId);
-    if (scope.farmId) q = q.eq("farm_id", scope.farmId);
-    if (scope.houseId) q = q.eq("house_id", scope.houseId);
-    const { data } = await q;
-    const batchRows = (data ?? []) as Array<{
-      id: string;
-      batch_code: string;
-      branch_id: string;
-      farm_id: string;
-      house_id: string;
-      placement_date: string;
-      source: "internal_transfer" | "external_purchase";
-      total_count: number;
-      status: string;
-      updated_at:string;
-    }>;
-
-    const batchIds = batchRows.map((row) => row.id);
-    const { data: linkedFlocks } = batchIds.length
-      ? await supabase
-          .from("flocks")
-          .select("batch_id, current_count")
-          .eq("org_id", profile.org_id)
-          .in("batch_id", batchIds)
-      : { data: [] as Array<{ batch_id: string | null; current_count: number | null }> };
-
-    const flockAgg = new Map<string, { flockTotal: number; chicksTotal: number }>();
-    (linkedFlocks ?? []).forEach((flock) => {
-      const batchId = flock.batch_id;
-      if (!batchId) return;
-      const prev = flockAgg.get(batchId) ?? { flockTotal: 0, chicksTotal: 0 };
-      flockAgg.set(batchId, {
-        flockTotal: prev.flockTotal + 1,
-        chicksTotal: prev.chicksTotal + (flock.current_count ?? 0),
-      });
-    });
-
-    const mapped = batchRows.map((row) => {
-      const agg = flockAgg.get(row.id);
-      const flockTotal = agg?.flockTotal ?? 0;
-      const chicksPerFlock = flockTotal > 0 ? Math.round((agg?.chicksTotal ?? 0) / flockTotal) : 0;
-      return {
-        ...row,
-        flock_total: flockTotal,
-        total_chicks: agg?.chicksTotal ?? 0,
-        chicks_per_flock: chicksPerFlock,
-      };
-    }) as BatchRow[];
+    setLoading(true);setError(null);
+    const response=await fetch("/api/flocks/workspace",{method:"GET",cache:"no-store"});
+    const payload=await response.json();
+    if(!response.ok){setRows([]);setSlotRows([]);setError(payload.error??"Unable to load batch cycles.");setLoading(false);return;}
+    let mapped=(payload.batches??[]) as BatchRow[];
+    if(scope.branchId)mapped=mapped.filter((row)=>row.branch_id===scope.branchId);
+    if(scope.farmId)mapped=mapped.filter((row)=>row.farm_id===scope.farmId);
+    if(scope.houseId)mapped=mapped.filter((row)=>row.house_id===scope.houseId);
     const scopedRows = scope.flockId
       ? mapped.filter((row) => filteredFlocks.some((flock) => flock.id === scope.flockId && flock.batch_id === row.id))
       : mapped;
     setRows(scopedRows);
 
     if (scope.branchId) {
-      const farmIds = filteredFarms.map((farm) => farm.id);
-      const { data: activeSlots } = farmIds.length
-        ? await supabase
-            .from("flocks")
-            .select("id, flock_code, flock_type, source, farm_id, house_id, current_count")
-            .eq("org_id", profile.org_id)
-            .eq("status", "active")
-            .in("farm_id", farmIds)
-            .order("flock_code")
-        : { data: [] as SlotRow[] };
-      setSlotRows((activeSlots ?? []) as SlotRow[]);
+      const farmIds = new Set(filteredFarms.map((farm) => farm.id));
+      const activeSlots=((payload.flocks??[]) as Array<SlotRow&{status:string}>).filter((flock)=>flock.status==="active"&&farmIds.has(flock.farm_id)).sort((a,b)=>a.flock_code.localeCompare(b.flock_code));
+      setSlotRows(activeSlots);
     } else {
       setSlotRows([]);
     }
+    setLoading(false);
   };
 
   const onEditBatch = async (row: BatchRow) => {
