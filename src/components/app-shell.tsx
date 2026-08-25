@@ -10,6 +10,7 @@ import { useFarmScope } from "@/components/farm-scope-context";
 import { HeaderAlertBell } from "@/components/header-alert-bell";
 import { HeaderOrgBrand } from "@/components/header-org-brand";
 import { SignOutButton } from "@/components/sign-out-button";
+import { GovernanceAuthorizationBanner } from "@/components/governance-authorization-banner";
 
 const routeTitles = [
   ["/app/farm-manager", "Manager dashboard", "Farm operations"],
@@ -102,6 +103,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </header>
 
           <div className="px-4 pt-5 sm:px-6 lg:px-8"><FarmScopeFilters /></div>
+          <GovernanceAuthorizationBanner />
           <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
         </div>
       </div>

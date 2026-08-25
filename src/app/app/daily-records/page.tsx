@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
+import { governanceGuidanceUrl, type GovernanceGuidance } from "@/lib/governance-guidance";
 import type { Database } from "@/types/supabase";
 import { createClient } from "@/utils/supabase/client";
 
@@ -718,6 +719,10 @@ export default function DailyRecordsPage() {
     });
     const saveResult = await saveResponse.json();
     if (!saveResponse.ok) {
+      if (saveResponse.status === 423 && saveResult?.governance) {
+        window.location.assign(governanceGuidanceUrl(saveResult.governance as GovernanceGuidance));
+        return;
+      }
       setFormError(saveResult?.error ?? "Could not save the daily record and inventory usage.");
       setIsSubmitting(false);
       return;
@@ -762,6 +767,7 @@ export default function DailyRecordsPage() {
     setFormError(null);
     const response=await fetch("/api/governance/void",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({table:"daily_farm_records",id:row.id,reason})});const payload=await response.json();
     if (!response.ok) {
+      if(response.status===423&&payload?.governance){window.location.assign(governanceGuidanceUrl(payload.governance as GovernanceGuidance));return}
       setFormError(payload.error??"Unable to void record.");
       return;
     }

@@ -56,7 +56,29 @@ export async function POST(request: NextRequest) {
       p_usages: usages as Json,
     });
 
-    if (error) return json({ error: error.message }, errorStatus(error.code));
+    if (error) {
+      if (/operating day is locked/i.test(error.message)) {
+        const { data: flock } = await supabaseAdmin.from("flocks").select("farm_id,flock_code").eq("id", flockId).eq("org_id", ctx.orgId).maybeSingle();
+        const correctionFields = new Set(["normal_eggs", "broken_eggs", "dirty_eggs", "average_egg_weight_g", "deaths", "deaths_cause", "opening_birds", "closing_birds", "culls", "transfers_in", "transfers_out", "other_removals", "water_consumed_liters", "feed_leftover_grams", "vaccination_status", "medication_vitamins"]);
+        const proposed = Object.fromEntries(Object.entries(record as Record<string, unknown>).filter(([key]) => correctionFields.has(key)));
+        if (!dailyRecordId) Object.assign(proposed, { flock_id: flockId, record_date: (record as Record<string, unknown>).record_date });
+        return json({
+          error: "This Daily Record is locked. Request approval for this exact correction.",
+          governance: {
+            request_type: "locked_correction",
+            farm_id: flock?.farm_id ?? null,
+            source_table: "daily_farm_records",
+            source_id: dailyRecordId,
+            reason: `Correct the locked Daily Record for ${String((record as Record<string, unknown>).record_date ?? "the selected date")}.`,
+            proposed_values: proposed,
+            changed_fields: Object.keys(proposed),
+            destination: `${flock?.flock_code ?? "Flock"} Daily Record · ${String((record as Record<string, unknown>).record_date ?? "selected date")}`,
+            correction_route: `/app/daily-records${dailyRecordId ? `?record=${dailyRecordId}` : ""}`,
+          },
+        }, 423);
+      }
+      return json({ error: error.message }, errorStatus(error.code));
+    }
     return json({ result: data as DailyRecordResult }, dailyRecordId ? 200 : 201);
   } catch (error: unknown) {
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);

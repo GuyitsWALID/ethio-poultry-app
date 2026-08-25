@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
+import { governanceGuidanceUrl, type GovernanceGuidance } from "@/lib/governance-guidance";
 import { createClient } from "@/utils/supabase/client";
 
 async function saveHealthEvent(payload: Record<string, unknown>) {
@@ -29,6 +30,10 @@ async function saveHealthEvent(payload: Record<string, unknown>) {
     body: JSON.stringify(payload),
   });
   const body = await response.json().catch(() => ({}));
+  if (response.status === 423 && body.governance) {
+    window.location.assign(governanceGuidanceUrl(body.governance as GovernanceGuidance));
+    throw new Error("Opening a prefilled governed-change request…");
+  }
   if (!response.ok) throw new Error(body.error ?? "Health evidence could not be saved.");
   return body;
 }
@@ -724,7 +729,7 @@ export default function HealthPage() {
     setSuccess(null);
     setSaving(true);
     try {
-      const reason=window.prompt("Enter the reason for voiding this schedule record:")?.trim();if(!reason)return;const table=item.type==="weight"?"batch_weight_check_tasks":item.type==="cleanup"?"biosecurity_checks":"vaccination_events";const response=await fetch("/api/governance/void",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({table,id:item.id,reason})});const payload=await response.json();if(!response.ok)throw new Error(payload.error??"Unable to void schedule.");
+      const reason=window.prompt("Enter the reason for voiding this schedule record:")?.trim();if(!reason)return;const table=item.type==="weight"?"batch_weight_check_tasks":item.type==="cleanup"?"biosecurity_checks":"vaccination_events";const response=await fetch("/api/governance/void",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({table,id:item.id,reason})});const payload=await response.json();if(response.status===423&&payload?.governance){window.location.assign(governanceGuidanceUrl(payload.governance as GovernanceGuidance));return}if(!response.ok)throw new Error(payload.error??"Unable to void schedule.");
       setSuccess("Schedule voided; the original record remains auditable.");
       await loadSchedules();
     } catch (e) {

@@ -6,7 +6,7 @@ export type CurrentAlert = {
   id: string;
   title: string;
   severity: "high" | "medium" | "low";
-  source: "Alert Rule" | "Inventory" | "Mortality" | "Daily Records" | "Health" | "Production" | "Reconciliation";
+  source: "Alert Rule" | "Inventory" | "Mortality" | "Daily Records" | "Health" | "Production" | "Reconciliation" | "Governance";
   context: string;
   route: string;
   createdAt: string;
