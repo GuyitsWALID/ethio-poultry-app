@@ -140,6 +140,7 @@ test.describe("Farm Manager critical workflows", () => {
     await expect(page.getByRole("heading", { name: "Flocks & batches", level: 1 }).first()).toBeVisible();
     await expectOk(await page.request.get("/api/flocks/workspace"));
     await expect(page.getByRole("heading", { name: "Batch-to-flock lineage" })).toBeVisible();
+    await page.getByRole("button", { name: "Flock registry" }).click();
     await expect(page.getByRole("heading", { name: "Flock registry" })).toBeVisible();
     runtime.assertClean();
   });
