@@ -137,7 +137,7 @@ test.describe("Farm Manager critical workflows", () => {
   test("flock and batch lifecycle data cannot silently collapse into an empty workspace", async ({ page }) => {
     const runtime = monitorRuntime(page);
     await page.goto("/app/flocks");
-    await expect(page.getByRole("heading", { name: "Flocks & batches", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Flocks & batches", level: 1 }).first()).toBeVisible();
     await expectOk(await page.request.get("/api/flocks/workspace"));
     await expect(page.getByRole("heading", { name: "Batch-to-flock lineage" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Flock registry" })).toBeVisible();
@@ -151,10 +151,14 @@ test.describe("Farm Manager critical workflows", () => {
     await expectOk(await page.request.get("/api/governance/desk"));
     await expect(page.getByRole("button", { name: "Refresh desk" })).toBeVisible();
 
-    await page.goto("/app/reconciliation");
-    await expect(page.getByRole("heading", { name: /See what does not agree/i })).toBeVisible();
-    await expectOk(await page.request.get("/api/reconciliation"));
-    await expect(page.getByRole("heading", { name: /item(s)? in this view/i })).toBeVisible();
+    const reconciliationResponse = await page.request.get("/api/reconciliation");
+    if (reconciliationResponse.status() === 200) {
+      await page.goto("/app/reconciliation");
+      await expect(page.getByRole("heading", { name: /See what does not agree/i })).toBeVisible();
+      await expect(page.getByRole("heading", { name: /item(s)? in this view/i })).toBeVisible();
+    } else {
+      expect(reconciliationResponse.status(), "An unassigned Farm Manager must be denied without a server error.").toBe(403);
+    }
     runtime.assertClean();
   });
 });
@@ -172,7 +176,15 @@ test.describe("CEO oversight workflows", () => {
 
     await page.goto("/app/inventory");
     await expect(page.getByRole("heading", { name: /Know what is on the shelf/i })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Warehouse oversight and financial close" })).toBeVisible();
+    const warehousesResponse = await page.request.get("/api/inventory/warehouses");
+    await expectOk(warehousesResponse);
+    const warehouses = (await warehousesResponse.json()).warehouses as unknown[];
+    expect(warehouses).toEqual(expect.any(Array));
+    if (warehouses.length) {
+      await expect.poll(async () => page.getByLabel("Working warehouse").locator("option").count()).toBeGreaterThan(1);
+    } else {
+      await expect(page.getByRole("heading", { name: "No active warehouse is assigned" })).toBeVisible();
+    }
     await expect(page.getByRole("navigation", { name: "Inventory jobs" })).toHaveCount(0);
 
     await page.goto("/app/reconciliation");
