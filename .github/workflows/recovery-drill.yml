@@ -1,0 +1,39 @@
+name: Isolated recovery drill
+
+on:
+  schedule:
+    - cron: "17 3 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-recovery-drill
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      APP_ENVIRONMENT: production
+      APP_RELEASE: ${{ github.sha }}
+      APP_BASE_URL: https://ethio-poultry-app.walidmurad65.workers.dev
+      MONITORING_INGEST_TOKEN: ${{ secrets.PRODUCTION_MONITORING_INGEST_TOKEN }}
+      RECOVERY_SOURCE_DATABASE_URL: ${{ secrets.PRODUCTION_RECOVERY_DATABASE_URL }}
+      RECOVERY_DESTINATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - run: npm ci
+      - name: Start isolated Supabase recovery target
+        run: npx supabase start
+      - name: Dump, restore, and verify production data
+        run: node scripts/run-recovery-drill.mjs
+      - name: Stop and remove the isolated target
+        if: always()
+        run: npx supabase stop --no-backup

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { SystemHealthPanel } from "@/components/admin/system-health-panel";
+
 type OverviewMetrics = {
   totalOrganizations: number;
   activeOrganizations: number;
@@ -102,13 +104,13 @@ export default function AdminDashboardPage() {
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-forest-500">System admin</p>
-          <h1 className="mt-2 text-2xl font-semibold text-forest-900">
-            Organization onboarding
-          </h1>
+          <h1 className="mt-2 text-2xl font-semibold text-forest-900">Platform control center</h1>
           <p className="mt-2 text-sm text-forest-600">
-            Register new companies, assign CEO/Manager accounts, and track adoption.
+            Verify platform health, manage audited support, and onboard organizations.
           </p>
         </div>
+
+        <SystemHealthPanel />
 
         <section className="grid gap-4 md:grid-cols-4">
           {[

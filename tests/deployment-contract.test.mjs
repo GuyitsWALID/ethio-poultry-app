@@ -17,6 +17,7 @@ const valid = {
   SUPABASE_SERVICE_ROLE_KEY:"service-role-key-value",
   SUPABASE_PROJECT_REF:"project-ref",
   ADMIN_ACCESS_CODE:"strong-random-code",
+  MONITORING_INGEST_TOKEN:"monitoring-ingest-token-value",
 };
 
 test("production environment accepts a complete immutable deployment identity",()=>{
@@ -55,6 +56,13 @@ test("Cloudflare builds cannot silently fall back to the local environment",()=>
   const result=validateEnvironment({...valid,APP_ENVIRONMENT:"",WORKERS_CI_COMMIT_SHA:"abcdef123456"});
   assert.equal(result.ok,false);
   assert(result.errors.some(error=>error.includes("explicitly set for a Cloudflare build")));
+});
+
+test("deployed environments require a strong server-only monitoring intake token",()=>{
+  const missing=validateEnvironment({...valid,MONITORING_INGEST_TOKEN:""});
+  assert.match(missing.errors.join("\n"),/MONITORING_INGEST_TOKEN/);
+  const short=validateEnvironment({...valid,MONITORING_INGEST_TOKEN:"too-short"});
+  assert.match(short.errors.join("\n"),/at least 24 characters/);
 });
 
 test("reviewed migration chain matches its committed cryptographic lock",async()=>{

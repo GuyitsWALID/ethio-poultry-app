@@ -101,13 +101,18 @@ Status: complete
 
 ### 6. Monitoring and recovery
 
-Status: pending
+Status: implementation verified; activation pending
 
-- Application error monitoring
-- API and database performance monitoring
-- Backup status monitoring
-- Scheduled restore drill
-- Incident and recovery runbook
+- [x] Structured server error capture in persistent Cloudflare Workers Logs without request secrets or raw records
+- [x] System Administrator health dashboard with live database latency, scheduler state, and explicit evidence freshness
+- [x] Append-only platform probe, provider-backup, and recovery-drill evidence with System Administrator-only visibility
+- [x] Fifteen-minute staging and production application probes plus daily Supabase backup checks
+- [x] Monthly production public-schema restore into an isolated local Supabase target with critical row-count and RLS checks
+- [x] Dedicated incident, rollback, database recovery, severity, ownership, and evidence runbook
+- [x] Apply `20260831000000_platform_monitoring_recovery.sql` to staging and production
+- [x] Configure separate matching Cloudflare/GitHub monitoring intake tokens and the protected recovery connection
+- [ ] Configure a fine-grained Supabase `backups_read` token in GitHub
+- [ ] Deploy the release and retain the first successful application, backup, and isolated restore evidence
 
 ## Second delivery wave
 

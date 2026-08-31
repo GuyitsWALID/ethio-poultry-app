@@ -13,7 +13,7 @@ This runbook is the authoritative order for staging and production releases. A r
 
 1. Confirm the branch is clean and the intended commit is tagged or recorded.
 2. Use Node `22.16.0`, npm `10.9.2`, and `npm ci`.
-3. Set `APP_ENVIRONMENT`, `APP_RELEASE`, `APP_BASE_URL`, and `SUPABASE_PROJECT_REF` for the target. If Record Checks AI is enabled, also set `RECONCILIATION_AI_ENABLED=true`, `GROQ_MODEL=openai/gpt-oss-120b`, and the server-only `GROQ_API_KEY` secret.
+3. Set `APP_ENVIRONMENT`, `APP_RELEASE`, `APP_BASE_URL`, `SUPABASE_PROJECT_REF`, and the server-only `MONITORING_INGEST_TOKEN` for the target. If Record Checks AI is enabled, also set `RECONCILIATION_AI_ENABLED=true`, `GROQ_MODEL=openai/gpt-oss-120b`, and the server-only `GROQ_API_KEY` secret.
 4. Run `npm run release:verify`.
 5. Run `npm run release:manifest` and retain the output with the release evidence.
 6. Compare `SUPABASE_PROJECT_REF` with the target Supabase dashboard URL. Stop on any mismatch.
@@ -70,3 +70,5 @@ Production migrations roll forward. Do not write an improvised destructive down 
 5. Restore production, rotate any credentials exposed during the incident, deploy the compatible application commit, and run all post-release checks.
 
 The existence of a backup is not release evidence. A successful disposable restore is.
+
+For detection, severity, recovery authority, and scheduled drill procedures, use [incident-recovery-runbook.md](incident-recovery-runbook.md).

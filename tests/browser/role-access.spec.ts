@@ -35,6 +35,7 @@ test("anonymous users are denied application and API access", async ({ page }) =
   const contextResponse = await page.request.get("/api/me/context");
   expect(contextResponse.status()).toBe(401);
   expect((await page.request.get("/api/governance/audit")).status()).toBe(401);
+  expect((await page.request.get("/api/admin/system-health")).status()).toBe(401);
   await page.goto("/app");
   await expect(page).toHaveURL(/\/auth\/sign-in/);
 });
@@ -53,6 +54,7 @@ test.describe("CEO authorization journey", () => {
     });
     expect(routineMutation.status()).toBe(403);
     expect((await page.request.get("/api/admin/overview")).status()).toBe(403);
+    expect((await page.request.get("/api/admin/system-health")).status()).toBe(403);
   });
 });
 
@@ -67,6 +69,7 @@ test.describe("Farm Manager authorization journey", () => {
     expect((await page.request.get("/api/farm-manager/dashboard")).status()).toBe(200);
     expect((await page.request.get("/api/ceo/dashboard")).status()).toBe(403);
     expect((await page.request.post("/api/governance/assignments", { data: {} })).status()).toBe(403);
+    expect((await page.request.get("/api/admin/system-health")).status()).toBe(403);
   });
 });
 
@@ -81,9 +84,11 @@ test.describe("System Administrator authorization journey", () => {
     await page.getByLabel("Password").fill(systemAdmin!.password);
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/admin\/dashboard/);
-    await expect(page.getByRole("heading", { name: "Organization onboarding" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Platform control center" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "System health" })).toBeVisible();
 
     expect((await page.request.get("/api/admin/overview")).status()).toBe(200);
+    expect((await page.request.get("/api/admin/system-health")).status()).toBe(200);
     expect((await page.request.get("/api/ceo/dashboard")).status()).toBe(403);
     expect((await page.request.get("/api/governance/audit")).status()).toBe(403);
     await page.goto("/app/ceo");

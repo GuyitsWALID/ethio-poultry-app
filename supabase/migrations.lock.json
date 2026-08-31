@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 55,
-  "latest": "20260825000000_contextual_governance_authorizations.sql",
-  "aggregateSha256": "b34498651626083fceedda1c915f57913a7adb92f167d6b2475fc50032a788a5",
+  "count": 56,
+  "latest": "20260831000000_platform_monitoring_recovery.sql",
+  "aggregateSha256": "fb2964a2161af007c31e2d17bad493583edcddceea2d37b413ea727722edb7a8",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -135,6 +135,7 @@
     "20260824000000_warehouse_first_inventory.sql": "aae289eee605f860d60d165c1023b1b3dec5cd499834860fe06a2af93ed58acd",
     "20260824001000_atomic_inventory_receipts.sql": "4e9c72943e8d8a73377cb3dbc21346423c3b0ebdcaa14946f5e58edacd4afea8",
     "20260824002000_weekly_operating_grace_and_vaccination_date.sql": "21dc21c9dbd9ee06f4547bc89e8e8c476ccf47da12bcbba9590745b340627531",
-    "20260825000000_contextual_governance_authorizations.sql": "24f0ba01e7b6ecd2ccfe6fdf1a03e64993c6c90a670f6dc2a4b2d599c19f7222"
+    "20260825000000_contextual_governance_authorizations.sql": "24f0ba01e7b6ecd2ccfe6fdf1a03e64993c6c90a670f6dc2a4b2d599c19f7222",
+    "20260831000000_platform_monitoring_recovery.sql": "129accefdd957793252ecda03c6a9c08d1bcaa17dbb0c4d60c6871f4faae5ae4"
   }
 }
