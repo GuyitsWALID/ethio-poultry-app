@@ -17,6 +17,7 @@ type AuditEvent = {
 };
 type Integrity = { valid: boolean; eventCount: number; firstInvalidSequence: number | null; verifiedAt: string };
 type AuditResponse = { events: AuditEvent[]; integrity: Integrity | null; meta: { role: string; limit: number } };
+type AuditResult = { data: AuditResponse | null; error: string };
 
 function dateTime(value: string) {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Addis_Ababa" }).format(new Date(value));
@@ -24,6 +25,14 @@ function dateTime(value: string) {
 
 function roleLabel(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+async function requestAudit(): Promise<AuditResult> {
+  const response = await fetch("/api/governance/audit?limit=100", { cache: "no-store" });
+  const body = await response.json().catch(() => null);
+  return response.ok
+    ? { data: body as AuditResponse, error: "" }
+    : { data: null, error: body?.error ?? "The permanent change history could not be loaded." };
 }
 
 export function GovernanceAuditHistory({ role }: { role: string }) {
@@ -34,14 +43,22 @@ export function GovernanceAuditHistory({ role }: { role: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    const response = await fetch("/api/governance/audit?limit=100", { cache: "no-store" });
-    const body = await response.json().catch(() => null);
-    if (response.ok) setData(body as AuditResponse);
-    else setError(body?.error ?? "The permanent change history could not be loaded.");
+    const result = await requestAudit();
+    if (result.data) setData(result.data);
+    else setError(result.error);
     setLoading(false);
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    void requestAudit().then((result) => {
+      if (!active) return;
+      if (result.data) setData(result.data);
+      else setError(result.error);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
 
   return <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white" aria-labelledby="audit-history-title">
     <header className="grid gap-5 border-b border-sand-200 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
