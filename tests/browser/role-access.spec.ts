@@ -34,6 +34,7 @@ async function tenantLogin(page: Page, account: Credentials) {
 test("anonymous users are denied application and API access", async ({ page }) => {
   const contextResponse = await page.request.get("/api/me/context");
   expect(contextResponse.status()).toBe(401);
+  expect((await page.request.get("/api/governance/audit")).status()).toBe(401);
   await page.goto("/app");
   await expect(page).toHaveURL(/\/auth\/sign-in/);
 });
@@ -84,6 +85,7 @@ test.describe("System Administrator authorization journey", () => {
 
     expect((await page.request.get("/api/admin/overview")).status()).toBe(200);
     expect((await page.request.get("/api/ceo/dashboard")).status()).toBe(403);
+    expect((await page.request.get("/api/governance/audit")).status()).toBe(403);
     await page.goto("/app/ceo");
     await expect(page).toHaveURL(/\/admin\/dashboard/);
   });

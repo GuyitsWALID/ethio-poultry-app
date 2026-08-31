@@ -1,4 +1,5 @@
 import {accessJson,getAccessContext,governanceAdmin,isAccessResponse} from "@/lib/access-context";
+import {auditChanges,describeAuditEvent} from "@/lib/audit-ledger-contract";
 
 const safeFilter=(value:string|null)=>value&&/^[a-z0-9_.-]+$/i.test(value)?value:null;
 
@@ -45,7 +46,20 @@ export async function GET(request:Request){
     :{data:[],error:null};
   if(profileError)return accessJson({error:profileError.message},500);
   const names=new Map((profiles??[]).map(row=>[String(row.id),String(row.full_name)]));
-  const enriched=events.map(row=>({...row,actor_name:row.actor_id?names.get(String(row.actor_id))??"Known user":"System process"}));
+  const enriched=events.map(row=>{
+    const display=describeAuditEvent(row);
+    return {
+      key:String(row.sequence_number),
+      title:display.title,
+      subject:display.subject,
+      reason:display.reason,
+      actorName:row.actor_id?names.get(String(row.actor_id))??"Known user":"System process",
+      actorRole:display.actorRole,
+      occurredAt:String(row.occurred_at),
+      evidenceType:row.source==="database_trigger"?"automatic":"workflow",
+      changes:auditChanges(row.before_values,row.after_values),
+    };
+  });
 
   let integrity:null|Record<string,unknown>=null;
   if(ctx.role==="ceo"){
@@ -54,5 +68,12 @@ export async function GET(request:Request){
     integrity=result as Record<string,unknown>;
   }
 
-  return accessJson({events:enriched,integrity,meta:{role:ctx.role,limit}});
+  const safeIntegrity=integrity?{
+    valid:Boolean(integrity.valid),
+    eventCount:Number(integrity.eventCount??0),
+    firstInvalidSequence:integrity.firstInvalidSequence===null?null:Number(integrity.firstInvalidSequence),
+    verifiedAt:String(integrity.verifiedAt),
+  }:null;
+
+  return accessJson({events:enriched,integrity:safeIntegrity,meta:{role:ctx.role,limit}});
 }

@@ -150,7 +150,14 @@ test.describe("Farm Manager critical workflows", () => {
     await page.goto("/app/governance");
     await expect(page.getByRole("heading", { name: /Approve the reason, then correct the exact record once/i })).toBeVisible();
     await expectOk(await page.request.get("/api/governance/desk"));
+    const auditResponse = await page.request.get("/api/governance/audit");
+    await expectOk(auditResponse);
+    const audit = await auditResponse.json();
+    expect(audit.integrity).toBeNull();
+    expect(audit.events).toEqual(expect.any(Array));
+    expect(JSON.stringify(audit.events)).not.toMatch(/event_hash|entity_id|before_values|after_values/);
     await expect(page.getByRole("button", { name: "Refresh desk" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Permanent change history" })).toBeVisible();
 
     const reconciliationResponse = await page.request.get("/api/reconciliation");
     if (reconciliationResponse.status() === 200) {
@@ -174,6 +181,14 @@ test.describe("CEO oversight workflows", () => {
     await page.goto("/app/governance");
     await expect(page.getByRole("heading", { name: /Approve the reason, then correct the exact record once/i })).toBeVisible();
     await expectOk(await page.request.get("/api/governance/desk"));
+    const auditResponse = await page.request.get("/api/governance/audit");
+    await expectOk(auditResponse);
+    const audit = await auditResponse.json();
+    expect(audit.integrity).toMatchObject({ valid: true });
+    expect(audit.events).toEqual(expect.any(Array));
+    expect(JSON.stringify(audit.events)).not.toMatch(/event_hash|entity_id|before_values|after_values/);
+    await expect(page.getByRole("heading", { name: "Permanent change history" })).toBeVisible();
+    await expect(page.getByText("History verified", { exact: true })).toBeVisible();
 
     await page.goto("/app/inventory");
     await expect(page.getByRole("heading", { name: /Know what is on the shelf/i })).toBeVisible();

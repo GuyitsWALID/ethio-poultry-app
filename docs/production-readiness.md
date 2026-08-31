@@ -86,7 +86,7 @@ Status: complete
 
 ### 5. Immutable audit history
 
-Status: database rollout complete; application deployment pending
+Status: complete
 
 - [x] Atomic database capture for governed operational, financial, inventory, lifecycle, configuration, and access tables
 - [x] Central server module for actor-attributed semantic workflow events and secret redaction
@@ -96,7 +96,7 @@ Status: database rollout complete; application deployment pending
 - [x] Assignment-aware and active break-glass-aware audit visibility
 - [x] Human-readable Governance history without exposed database identifiers
 - [x] Focused contract, redaction, coverage, and presentation tests
-- [ ] Apply `20260815002000_immutable_sensitive_audit_ledger.sql` to staging and complete role-based browser checks
+- [x] Apply `20260815002000_immutable_sensitive_audit_ledger.sql` to staging and complete role-based browser checks
 - [x] Apply the verified migration to production and confirm the first tenant chain verification
 
 ### 6. Monitoring and recovery
