@@ -8,6 +8,7 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 30_000 },
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: Boolean(process.env.CI),
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL,
