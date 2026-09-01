@@ -1,4 +1,5 @@
 {
+  // Runtime monitoring credentials are Worker secrets; they are never required during compilation.
   "$schema": "./node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
   "name": "ethio-poultry-app",
