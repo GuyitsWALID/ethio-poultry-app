@@ -36,7 +36,7 @@ function run(command, args, capture = false) {
 }
 
 function rowCounts(databaseUrl) {
-  const sql = "select json_build_object('organizations',(select count(*) from public.organizations),'profiles',(select count(*) from public.profiles),'dailyRecords',(select count(*) from public.daily_records),'auditEvents',(select count(*) from public.governance_audit_events))::text;";
+  const sql = "select json_build_object('organizations',(select count(*) from public.organizations),'profiles',(select count(*) from public.profiles),'dailyRecords',(select count(*) from public.daily_farm_records),'auditEvents',(select count(*) from public.governance_audit_events))::text;";
   return JSON.parse(run("psql", [databaseUrl, "-X", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1", "-c", sql], true));
 }
 

@@ -6,6 +6,7 @@ const migration = await readFile(new URL("../supabase/migrations/20260831000000_
 const instrumentation = await readFile(new URL("../src/instrumentation.ts", import.meta.url), "utf8");
 const service = await readFile(new URL("../src/lib/platform-observability.ts", import.meta.url), "utf8");
 const recovery = await readFile(new URL("../scripts/run-recovery-drill.mjs", import.meta.url), "utf8");
+const recoveryVerification = await readFile(new URL("../scripts/verify-recovery.sql", import.meta.url), "utf8");
 const monitoringWorkflow = await readFile(new URL("../.github/workflows/platform-monitoring.yml", import.meta.url), "utf8");
 const recoveryWorkflow = await readFile(new URL("../.github/workflows/recovery-drill.yml", import.meta.url), "utf8");
 
@@ -35,6 +36,12 @@ test("recovery drill refuses remote destinations and removes temporary data", ()
   assert.match(recovery, /\["127\.0\.0\.1", "localhost"\]/i);
   assert.match(recovery, /Recovery drills may restore only into an isolated local database/i);
   assert.match(recovery, /rm\(work, \{ recursive: true, force: true \}\)/i);
+});
+
+test("recovery drill verifies the canonical Daily Record table", () => {
+  assert.match(recovery, /public\.daily_farm_records/i);
+  assert.match(recoveryVerification, /daily_farm_records/i);
+  assert.doesNotMatch(recoveryVerification, /\bdaily_records\b/i);
 });
 
 test("monitoring and restore drills have recurring schedules", () => {
