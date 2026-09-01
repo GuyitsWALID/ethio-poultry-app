@@ -35,7 +35,6 @@ jobs:
         run: |
           mv supabase/migrations "${RUNNER_TEMP}/recovery-source-migrations"
           mkdir supabase/migrations
-          mv supabase/seed.sql "${RUNNER_TEMP}/recovery-source-seed.sql"
           : > supabase/seed.sql
       - name: Start isolated Supabase recovery target
         run: npx supabase start
