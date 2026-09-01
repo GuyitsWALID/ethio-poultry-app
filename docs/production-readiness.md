@@ -101,7 +101,7 @@ Status: complete
 
 ### 6. Monitoring and recovery
 
-Status: implementation verified; activation pending
+Status: operational; managed backup retention pending
 
 - [x] Structured server error capture in persistent Cloudflare Workers Logs without request secrets or raw records
 - [x] System Administrator health dashboard with live database latency, scheduler state, and explicit evidence freshness
@@ -112,7 +112,8 @@ Status: implementation verified; activation pending
 - [x] Apply `20260831000000_platform_monitoring_recovery.sql` to staging and production
 - [x] Configure separate matching Cloudflare/GitHub monitoring intake tokens and the protected recovery connection
 - [x] Configure a fine-grained Supabase `backups_read` token in GitHub
-- [ ] Deploy the release and retain the first successful application, backup, and isolated restore evidence
+- [x] Deploy the release and retain the first successful application-probe and isolated-restore evidence
+- [ ] Establish retained production backups: upgrade Supabase to a plan with managed backups, or approve a separately secured off-site logical-backup destination
 
 ## Second delivery wave
 
