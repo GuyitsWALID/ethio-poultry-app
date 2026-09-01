@@ -71,6 +71,12 @@ export function validateEnvironment(env = process.env) {
   if (present(env.NEXT_PUBLIC_GROQ_API_KEY)) {
     errors.push("NEXT_PUBLIC_GROQ_API_KEY is forbidden; GROQ_API_KEY must remain server-only.");
   }
+  if (present(env.NEXT_PUBLIC_MONITORING_INGEST_TOKEN)) {
+    errors.push("NEXT_PUBLIC_MONITORING_INGEST_TOKEN is forbidden; MONITORING_INGEST_TOKEN must remain server-only.");
+  }
+  if (present(env.MONITORING_INGEST_TOKEN) && env.MONITORING_INGEST_TOKEN.trim().length < 24) {
+    errors.push("MONITORING_INGEST_TOKEN must contain at least 24 characters when set.");
+  }
   for (const key of required) if (!present(env[key])) errors.push(`${key} is required.`);
 
   if (present(env.NEXT_PUBLIC_SUPABASE_URL) && !validHttpUrl(env.NEXT_PUBLIC_SUPABASE_URL)) {
@@ -102,9 +108,6 @@ export function validateEnvironment(env = process.env) {
       if (value && !value.startsWith("https://")) errors.push(`${key} must use HTTPS in ${environment}.`);
     }
     if (!present(env.SUPABASE_PROJECT_REF)) errors.push("SUPABASE_PROJECT_REF is required to bind the release to the intended database project.");
-    if (!present(env.MONITORING_INGEST_TOKEN) || env.MONITORING_INGEST_TOKEN.trim().length < 24) {
-      errors.push("MONITORING_INGEST_TOKEN must contain at least 24 characters in staging and production.");
-    }
     if (reconciliationAi === "true" && !present(env.GROQ_API_KEY)) errors.push("GROQ_API_KEY is required when Record Checks AI is enabled.");
     if (present(env.SUPABASE_PROJECT_REF) && present(env.NEXT_PUBLIC_SUPABASE_URL)) {
       const host = new URL(env.NEXT_PUBLIC_SUPABASE_URL).hostname;

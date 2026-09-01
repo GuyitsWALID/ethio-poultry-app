@@ -58,11 +58,13 @@ test("Cloudflare builds cannot silently fall back to the local environment",()=>
   assert(result.errors.some(error=>error.includes("explicitly set for a Cloudflare build")));
 });
 
-test("deployed environments require a strong server-only monitoring intake token",()=>{
-  const missing=validateEnvironment({...valid,MONITORING_INGEST_TOKEN:""});
-  assert.match(missing.errors.join("\n"),/MONITORING_INGEST_TOKEN/);
+test("monitoring intake tokens are strong and remain server-only when configured",()=>{
   const short=validateEnvironment({...valid,MONITORING_INGEST_TOKEN:"too-short"});
   assert.match(short.errors.join("\n"),/at least 24 characters/);
+  const exposed=validateEnvironment({...valid,NEXT_PUBLIC_MONITORING_INGEST_TOKEN:"never-public"});
+  assert.match(exposed.errors.join("\n"),/NEXT_PUBLIC_MONITORING_INGEST_TOKEN is forbidden/);
+  const buildWithoutRuntimeBindings=validateEnvironment({...valid,MONITORING_INGEST_TOKEN:""});
+  assert.equal(buildWithoutRuntimeBindings.errors.some(error=>error.includes("MONITORING")),false);
 });
 
 test("reviewed migration chain matches its committed cryptographic lock",async()=>{
