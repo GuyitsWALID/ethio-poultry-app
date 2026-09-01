@@ -117,7 +117,7 @@ Status: operational; managed backup retention pending
 
 ## Second delivery wave
 
-1. Action ownership, acknowledgement, due dates, escalation, and resolution evidence
+1. Action ownership, acknowledgement, due dates, escalation, and resolution evidence — implemented; migration applied to staging and production, staged role validation pending
 2. Configurable in-app and external notifications
 3. Branded and scheduled management reports
 4. Mobile and unreliable-connectivity validation, followed by offline drafts where justified

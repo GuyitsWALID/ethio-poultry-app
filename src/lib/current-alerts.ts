@@ -1,16 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/types/supabase";
+import type { OperationalAlert } from "@/lib/action-desk-contract";
 
-export type CurrentAlert = {
-  id: string;
-  title: string;
-  severity: "high" | "medium" | "low";
-  source: "Alert Rule" | "Inventory" | "Mortality" | "Daily Records" | "Health" | "Production" | "Reconciliation" | "Governance";
-  context: string;
-  route: string;
-  createdAt: string;
-};
+export type CurrentAlert = OperationalAlert;
 
 type InventoryItem = Pick<
   Database["public"]["Tables"]["inventory_items"]["Row"],

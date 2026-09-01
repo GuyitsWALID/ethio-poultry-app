@@ -165,5 +165,7 @@ export async function getGovernanceAlerts(ctx:AccessContext){
     context:row.status==="pending"?`Submitted by ${row.requester_name_snapshot||"Farm Manager"}`:String(row.decision_note??row.reason),
     route:`/app/governance?request=${encodeURIComponent(row.id)}`,
     createdAt:String(row.latest_submitted_at??row.decided_at??row.updated_at??row.requested_at),
+    farmId:row.farm_id?String(row.farm_id):null,
+    warehouseId:row.warehouse_id?String(row.warehouse_id):null,
   }));
 }
