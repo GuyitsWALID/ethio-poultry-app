@@ -111,7 +111,7 @@ Status: implementation verified; activation pending
 - [x] Dedicated incident, rollback, database recovery, severity, ownership, and evidence runbook
 - [x] Apply `20260831000000_platform_monitoring_recovery.sql` to staging and production
 - [x] Configure separate matching Cloudflare/GitHub monitoring intake tokens and the protected recovery connection
-- [ ] Configure a fine-grained Supabase `backups_read` token in GitHub
+- [x] Configure a fine-grained Supabase `backups_read` token in GitHub
 - [ ] Deploy the release and retain the first successful application, backup, and isolated restore evidence
 
 ## Second delivery wave
