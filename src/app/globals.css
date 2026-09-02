@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .admin-input {
+    @apply h-11 w-full rounded-xl border bg-white px-3 text-sm outline-none transition;
+    border-color: #d7e7df;
+    color: #0b1714;
+  }
+
+  .admin-input::placeholder {
+    color: #79998b;
+  }
+
+  .admin-input:focus {
+    border-color: #15382e;
+    box-shadow: 0 0 0 2px #d7e7df;
+  }
+}
+
 :root {
   --sand-50: #f8f6f2;
   --sand-100: #efe9dd;

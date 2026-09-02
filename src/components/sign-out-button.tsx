@@ -10,9 +10,10 @@ type SignOutButtonProps = {
   iconOnly?: boolean;
   compact?: boolean;
   tone?: "light" | "dark";
+  redirectTo?: string;
 };
 
-export function SignOutButton({ iconOnly = false, compact = false, tone = "light" }: SignOutButtonProps) {
+export function SignOutButton({ iconOnly = false, compact = false, tone = "light", redirectTo = "/auth/sign-in" }: SignOutButtonProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
@@ -20,7 +21,7 @@ export function SignOutButton({ iconOnly = false, compact = false, tone = "light
     setPending(true);
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.replace("/auth/sign-in");
+    router.replace(redirectTo);
   };
 
   const toneClass = tone === "dark"

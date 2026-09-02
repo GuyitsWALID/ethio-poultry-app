@@ -1,302 +1,103 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
-import { useEffect, useState } from "react";
+import { Activity, ArrowRight, Building2, CheckCircle2, Headphones, MapPin, RefreshCw, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 import { SystemHealthPanel } from "@/components/admin/system-health-panel";
 
-type OverviewMetrics = {
-  totalOrganizations: number;
-  activeOrganizations: number;
-  totalUsers: number;
-  newOrganizations30d: number;
-};
+type Organization = { id: string; name: string; plan: string | null; branchCount: number | null; location: string | null; createdAt: string; userCount: number; activeUserCount: number; ceoName: string | null; status: "active" | "inactive" };
+type Overview = { totalOrganizations: number; activeOrganizations: number; totalUsers: number; newOrganizations30d: number; organizations: Organization[] };
+type OnboardResult = { organizationId: string; adminUserId: string };
+type SupportRequest = { id: string; target_org_id: string; status: string; reason: string; ticket_reference: string; requested_minutes: number; expires_at: string | null; organizations?: { name?: string } | null };
 
-type OnboardResult = {
-  organizationId: string;
-  adminUserId: string;
-};
-type SupportRequest={id:string;target_org_id:string;status:string;reason:string;ticket_reference:string;requested_minutes:number;expires_at:string|null};
+function dateLabel(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "Date unavailable" : new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "Africa/Addis_Ababa" }).format(date); }
+function statusClass(status: string) { return status === "approved" || status === "active" ? "bg-emerald-50 text-emerald-800" : status === "pending" ? "bg-amber-50 text-amber-800" : status === "rejected" || status === "expired" ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-700"; }
 
 export default function AdminDashboardPage() {
-  const [metrics, setMetrics] = useState<OverviewMetrics | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [supportRequests, setSupportRequests] = useState<SupportRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitState, setSubmitState] = useState<"idle" | "submitting" | "success">(
-    "idle"
-  );
+  const [supportMessage, setSupportMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [supportOrg, setSupportOrg] = useState("");
+  const [submitState, setSubmitState] = useState<"idle" | "submitting" | "success">("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [result, setResult] = useState<OnboardResult | null>(null);
-  const [supportRequests,setSupportRequests]=useState<SupportRequest[]>([]);
-  const [supportMessage,setSupportMessage]=useState<string|null>(null);
 
-  const loadMetrics = async () => {
-    setLoading(true);
+  const load = useCallback(async (quiet = false) => {
+    if (quiet) setRefreshing(true); else setLoading(true);
     setError(null);
-    const response = await fetch("/api/admin/overview", {
-      cache: "no-store",
-      credentials: "include",
-    });
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-      const detail = payload?.message ? ` (${payload.message})` : "";
-      setError(`Unable to load admin metrics${detail}.`);
-      setLoading(false);
-      return;
-    }
-    const data = (await response.json()) as OverviewMetrics;
-    setMetrics(data);
-    const supportResponse=await fetch("/api/admin/break-glass",{cache:"no-store"});if(supportResponse.ok)setSupportRequests((await supportResponse.json()).requests??[]);
-    setLoading(false);
-  };
-
-  const requestSupport=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setSupportMessage(null);const form=new FormData(event.currentTarget);const response=await fetch("/api/admin/break-glass",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target_org_id:form.get("target_org_id"),ticket_reference:form.get("ticket_reference"),reason:form.get("reason"),requested_minutes:Number(form.get("requested_minutes"))})});const payload=await response.json();setSupportMessage(response.ok?"Support access request sent to the tenant CEO.":payload.error??"Unable to request access.");if(response.ok){event.currentTarget.reset();await loadMetrics()}};
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadMetrics();
+    try {
+      const [overviewResponse, supportResponse] = await Promise.all([
+        fetch("/api/admin/overview", { cache: "no-store", credentials: "include" }),
+        fetch("/api/admin/break-glass", { cache: "no-store", credentials: "include" }),
+      ]);
+      const overviewBody = await overviewResponse.json().catch(() => null) as (Overview & { message?: string }) | null;
+      if (!overviewResponse.ok) throw new Error(overviewBody?.message ?? "The platform overview could not be loaded.");
+      setOverview(overviewBody as Overview);
+      if (supportResponse.ok) setSupportRequests(((await supportResponse.json()).requests ?? []) as SupportRequest[]);
+    } catch (value) { setError(value instanceof Error ? value.message : "The platform overview could not be loaded."); }
+    finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  const handleOnboard = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSubmitError(null);
-    setSubmitState("submitting");
+  useEffect(() => { void load(); }, [load]);
 
-    const formData = new FormData(event.currentTarget);
-    const payload = {
-      organization: {
-        name: formData.get("org_name")?.toString().trim(),
-        plan: formData.get("plan")?.toString().trim() || null,
-        branch_count: Number(formData.get("branch_count") ?? 0),
-        primary_location: formData.get("primary_location")?.toString().trim() || null,
-        contact_email: formData.get("org_email")?.toString().trim() || null,
-        contact_phone: formData.get("org_phone")?.toString().trim() || null,
-      },
-      admin: {
-        full_name: formData.get("admin_full_name")?.toString().trim(),
-        email: formData.get("admin_email")?.toString().trim(),
-        phone: formData.get("admin_phone")?.toString().trim() || null,
-        password: formData.get("admin_password")?.toString() ?? "",
-      },
-    };
-
-    const response = await fetch("/api/admin/onboard", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const data = (await response.json().catch(() => null)) as { message?: string } | null;
-      setSubmitError(data?.message ?? "Unable to onboard organization.");
-      setSubmitState("idle");
-      return;
-    }
-
-    const data = (await response.json()) as OnboardResult;
-    setResult(data);
-    setSubmitState("success");
-    event.currentTarget?.reset();
-    await loadMetrics();
+  const requestSupport = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setSupportMessage(null);
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/admin/break-glass", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target_org_id: form.get("target_org_id"), ticket_reference: form.get("ticket_reference"), reason: form.get("reason"), requested_minutes: Number(form.get("requested_minutes")) }) });
+    const payload = await response.json().catch(() => null) as { error?: string } | null;
+    if (!response.ok) { setSupportMessage({ tone: "error", text: payload?.error ?? "The access request could not be created." }); return; }
+    setSupportMessage({ tone: "success", text: "Request sent to the tenant CEO. Access remains unavailable until approval." }); event.currentTarget.reset(); setSupportOrg(""); await load(true);
   };
 
-  return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-forest-500">System admin</p>
-          <h1 className="mt-2 text-2xl font-semibold text-forest-900">Platform control center</h1>
-          <p className="mt-2 text-sm text-forest-600">
-            Verify platform health, manage audited support, and onboard organizations.
-          </p>
-        </div>
+  const handleOnboard = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setSubmitError(null); setSubmitState("submitting"); setResult(null);
+    const form = new FormData(event.currentTarget);
+    const payload = { organization: { name: form.get("org_name")?.toString().trim(), plan: form.get("plan")?.toString().trim() || null, branch_count: Number(form.get("branch_count") ?? 0), primary_location: form.get("primary_location")?.toString().trim() || null, contact_email: form.get("org_email")?.toString().trim() || null, contact_phone: form.get("org_phone")?.toString().trim() || null }, admin: { full_name: form.get("admin_full_name")?.toString().trim(), email: form.get("admin_email")?.toString().trim(), phone: form.get("admin_phone")?.toString().trim() || null, password: form.get("admin_password")?.toString() ?? "" } };
+    const response = await fetch("/api/admin/onboard", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(payload) });
+    const data = await response.json().catch(() => null) as (OnboardResult & { message?: string }) | null;
+    if (!response.ok) { setSubmitError(data?.message ?? "The organization could not be created."); setSubmitState("idle"); return; }
+    setResult(data as OnboardResult); setSubmitState("success"); event.currentTarget.reset(); await load(true);
+  };
 
-        <SystemHealthPanel />
+  const organizations = overview?.organizations ?? [];
+  return <div className="mx-auto w-full max-w-[1480px] space-y-7">
+    <section id="overview" className="scroll-mt-24 overflow-hidden rounded-[28px] border border-[#15382E] bg-[#0B1714] text-[#F5F8F6]">
+      <div className="grid lg:grid-cols-[minmax(0,1.2fr)_minmax(430px,.8fr)]"><div className="px-6 py-8 sm:px-9 lg:px-11 lg:py-11"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-[#E7A92F]"><ShieldCheck className="h-4 w-4" />Platform custody</div><h1 className="mt-5 max-w-3xl font-[var(--font-display)] text-4xl font-semibold leading-[1.05] sm:text-5xl">See the system. Enter a tenant only with permission.</h1><p className="mt-5 max-w-2xl text-sm leading-6 text-[#A5C0B4]">Monitor infrastructure, request audited support, and provision organizations without crossing into routine farm operations.</p><button type="button" onClick={() => void load(true)} disabled={refreshing} className="mt-7 inline-flex h-11 items-center gap-2 rounded-xl border border-white/15 bg-white/[.06] px-4 text-xs font-semibold hover:bg-white/10 disabled:opacity-60"><RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />Refresh control room</button></div>
+        <div className="border-t border-white/10 bg-white/[.025] p-6 lg:border-l lg:border-t-0 lg:p-8"><p className="text-[9px] font-semibold uppercase tracking-[.22em] text-[#79998B]">Custody rail</p><div className="relative mt-6 space-y-0 before:absolute before:bottom-5 before:left-[17px] before:top-5 before:w-px before:bg-[#345D4E]">{[
+          [Activity, "Observe", "Platform and recovery evidence", "#4ADE80"],
+          [Headphones, "Authorize", "CEO-approved tenant support", "#E7A92F"],
+          [UserPlus, "Provision", "Organization and initial CEO", "#D7E7DF"],
+        ].map(([Icon, title, detail, color]) => <div key={String(title)} className="relative flex gap-4 py-4"><span className="relative z-10 grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/15 bg-[#0B1714]" style={{ color: String(color) }}><Icon className="h-4 w-4" /></span><div><strong className="text-sm text-white">{String(title)}</strong><p className="mt-1 text-xs text-[#79998B]">{String(detail)}</p></div></div>)}</div></div></div>
+      <div className="grid border-t border-white/10 sm:grid-cols-2 xl:grid-cols-4">{[
+        ["Organizations", overview?.totalOrganizations, "Tenant records"], ["Active tenants", overview?.activeOrganizations, "With active users"], ["Platform users", overview?.totalUsers, "Across all tenants"], ["Added in 30 days", overview?.newOrganizations30d, "Recent onboarding"],
+      ].map(([label, value, detail]) => <div key={String(label)} className="border-b border-white/10 px-6 py-5 last:border-b-0 sm:border-r xl:border-b-0"><p className="text-[9px] font-semibold uppercase tracking-[.18em] text-[#79998B]">{String(label)}</p><div className="mt-2 flex items-end justify-between gap-4"><strong className="font-[var(--font-display)] text-3xl font-semibold text-white">{loading ? "—" : String(value ?? 0)}</strong><span className="pb-1 text-[10px] text-[#587A6B]">{String(detail)}</span></div></div>)}</div>
+    </section>
 
-        <section className="grid gap-4 md:grid-cols-4">
-          {[
-            { label: "Total organizations", value: metrics?.totalOrganizations ?? "--" },
-            { label: "Active organizations", value: metrics?.activeOrganizations ?? "--" },
-            { label: "Total users", value: metrics?.totalUsers ?? "--" },
-            { label: "New orgs (30d)", value: metrics?.newOrganizations30d ?? "--" },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm"
-            >
-              <p className="text-xs uppercase tracking-[0.2em] text-forest-500">
-                {item.label}
-              </p>
-              <p className="mt-3 text-2xl font-semibold text-forest-900">
-                {loading ? "..." : item.value}
-              </p>
-            </div>
-          ))}
-          {error ? (
-            <p className="md:col-span-4 text-sm text-ember-500">{error}</p>
-          ) : null}
-        </section>
+    {error ? <div role="alert" className="rounded-xl border border-[#D95C45]/25 bg-[#D95C45]/[.07] px-5 py-4 text-sm text-[#A43D2D]">{error} <button type="button" onClick={() => void load()} className="ml-2 font-semibold underline">Try again</button></div> : null}
 
-        <section className="rounded-2xl border border-ember-300 bg-ember-50 p-6 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[.2em] text-ember-700">CEO-approved support</p><h2 className="mt-2 text-lg font-semibold text-forest-900">Request break-glass tenant access</h2><p className="mt-2 text-sm text-forest-600">Access is tenant-specific, fully audited, and automatically expires in no more than four hours.</p>{supportMessage?<p role="status" className="mt-3 text-sm font-semibold text-forest-800">{supportMessage}</p>:null}<form onSubmit={requestSupport} className="mt-5 grid gap-3 md:grid-cols-2"><input name="target_org_id" required placeholder="Target organization ID" className="h-11 rounded-xl border border-sand-200 px-3 text-sm"/><input name="ticket_reference" required placeholder="Support ticket reference" className="h-11 rounded-xl border border-sand-200 px-3 text-sm"/><input name="requested_minutes" required type="number" min={1} max={240} defaultValue={60} className="h-11 rounded-xl border border-sand-200 px-3 text-sm"/><textarea name="reason" required minLength={12} placeholder="Specific support purpose" className="min-h-24 rounded-xl border border-sand-200 p-3 text-sm md:col-span-2"/><button className="h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-white">Request CEO approval</button></form><div className="mt-5 space-y-2">{supportRequests.slice(0,8).map(row=><div key={row.id} className="flex flex-wrap justify-between gap-2 rounded-xl bg-white p-3 text-sm"><div><p className="font-semibold">{row.ticket_reference} · {row.status}</p><p className="text-xs text-forest-600">{row.target_org_id} · {row.requested_minutes} minutes</p></div>{row.status==="approved"&&row.expires_at?<a href="/app" className="rounded-lg bg-ember-600 px-3 py-2 text-xs font-semibold text-white">Enter audited tenant session</a>:null}</div>)}</div></section>
+    <div id="system-health" className="scroll-mt-24"><SystemHealthPanel /></div>
 
-        <section className="rounded-2xl border border-sand-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-forest-900">Onboard a new organization</h2>
-          <p className="mt-2 text-sm text-forest-600">
-            Create the organization record and the CEO/Manager login in one step.
-          </p>
+    <section id="organizations" className="scroll-mt-24 overflow-hidden rounded-2xl border border-[#D7E7DF] bg-white">
+      <header className="flex flex-col gap-4 border-b border-[#D7E7DF] px-5 py-6 sm:flex-row sm:items-end sm:justify-between sm:px-7"><div><p className="text-[9px] font-semibold uppercase tracking-[.22em] text-[#587A6B]">Tenant directory</p><h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold">Organizations under custody</h2><p className="mt-2 text-sm text-[#587A6B]">Readable tenant context for support and platform oversight.</p></div><span className="text-xs font-semibold text-[#587A6B]">{organizations.length} organization{organizations.length === 1 ? "" : "s"}</span></header>
+      {loading ? <div className="grid gap-px bg-[#D7E7DF] md:grid-cols-2 xl:grid-cols-3">{[1,2,3].map((item) => <div key={item} className="h-48 animate-pulse bg-[#F5F8F6]" />)}</div> : organizations.length ? <div className="grid gap-px bg-[#D7E7DF] md:grid-cols-2 xl:grid-cols-3">{organizations.map((organization) => <article key={organization.id} className="bg-white p-6"><div className="flex items-start justify-between gap-4"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#D7E7DF]/50 text-[#15382E]"><Building2 className="h-5 w-5" /></span><span className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[.12em] ${statusClass(organization.status)}`}>{organization.status}</span></div><h3 className="mt-5 text-lg font-semibold text-[#0B1714]">{organization.name}</h3><p className="mt-1 text-xs text-[#587A6B]">{organization.plan || "No plan recorded"} · Added {dateLabel(organization.createdAt)}</p><dl className="mt-5 grid grid-cols-2 gap-3 text-xs"><div><dt className="text-[#79998B]">Initial CEO</dt><dd className="mt-1 font-semibold text-[#15382E]">{organization.ceoName || "Not assigned"}</dd></div><div><dt className="text-[#79998B]">Users</dt><dd className="mt-1 font-semibold text-[#15382E]">{organization.activeUserCount} active / {organization.userCount}</dd></div><div><dt className="text-[#79998B]">Branches</dt><dd className="mt-1 font-semibold text-[#15382E]">{organization.branchCount ?? "Not set"}</dd></div><div><dt className="text-[#79998B]">Location</dt><dd className="mt-1 truncate font-semibold text-[#15382E]">{organization.location || "Not set"}</dd></div></dl><button type="button" onClick={() => { setSupportOrg(organization.id); document.querySelector("#tenant-support")?.scrollIntoView({ behavior: "smooth" }); }} className="mt-5 inline-flex h-10 items-center gap-2 text-xs font-semibold text-[#15382E]">Request tenant support <ArrowRight className="h-4 w-4" /></button></article>)}</div> : <div className="p-10 text-center"><Building2 className="mx-auto h-7 w-7 text-[#79998B]" /><p className="mt-3 font-semibold">No organizations have been provisioned</p><a href="#onboarding" className="mt-2 inline-flex text-sm font-semibold text-[#15382E] underline">Create the first organization</a></div>}
+    </section>
 
-          <form className="mt-6 grid gap-4 md:grid-cols-2" onSubmit={handleOnboard}>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="org-name">
-                Organization name
-              </label>
-              <input
-                id="org-name"
-                name="org_name"
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-                required
-              />
-            </div>
+    <section id="tenant-support" className="scroll-mt-24 grid overflow-hidden rounded-2xl border border-[#D7E7DF] bg-white xl:grid-cols-[420px_minmax(0,1fr)]">
+      <div className="bg-[#15382E] p-6 text-white sm:p-8"><p className="text-[9px] font-semibold uppercase tracking-[.22em] text-[#E7A92F]">CEO-authorized support</p><h2 className="mt-3 font-[var(--font-display)] text-3xl font-semibold">Request temporary tenant access</h2><p className="mt-3 text-sm leading-6 text-[#A5C0B4]">Choose the organization, state the exact support purpose, and link the ticket. Approval never grants more than four hours.</p><div className="mt-7 space-y-3 text-xs text-[#C8D9D1]">{["Tenant-specific", "CEO-approved", "Automatically expires", "Fully audited"].map((item) => <p key={item} className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-[#E7A92F]" />{item}</p>)}</div></div>
+      <div className="p-5 sm:p-7"><form onSubmit={requestSupport} className="grid gap-4 sm:grid-cols-2"><Field label="Organization"><select name="target_org_id" required value={supportOrg} onChange={(event) => setSupportOrg(event.target.value)} className="admin-input"><option value="">Select organization</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></Field><Field label="Support ticket"><input name="ticket_reference" required placeholder="e.g. SUP-1042" className="admin-input" /></Field><Field label="Requested duration"><select name="requested_minutes" defaultValue="60" className="admin-input"><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="240">4 hours</option></select></Field><Field label="Specific support purpose" wide><textarea name="reason" required minLength={12} rows={3} placeholder="Describe the issue and the exact work that requires tenant access." className="admin-input min-h-24 py-3" /></Field>{supportMessage ? <p role="status" className={`sm:col-span-2 rounded-xl px-4 py-3 text-sm ${supportMessage.tone === "success" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>{supportMessage.text}</p> : null}<div className="sm:col-span-2"><button className="h-11 rounded-xl bg-[#15382E] px-5 text-xs font-semibold text-white">Send request to CEO</button></div></form>
+        <div className="mt-8 border-t border-[#D7E7DF] pt-6"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Recent access requests</h3><span className="text-[10px] uppercase tracking-[.14em] text-[#79998B]">Latest 8</span></div><div className="mt-3 divide-y divide-[#D7E7DF]">{supportRequests.slice(0, 8).map((request) => <div key={request.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm">{request.organizations?.name || organizations.find((item) => item.id === request.target_org_id)?.name || "Organization"}</strong><span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase ${statusClass(request.status)}`}>{request.status}</span></div><p className="mt-1 truncate text-xs text-[#587A6B]">{request.ticket_reference} · {request.requested_minutes} minutes · {request.reason}</p></div>{request.status === "approved" && request.expires_at ? <a href="/app" className="inline-flex h-9 items-center justify-center rounded-lg bg-[#E7A92F] px-3 text-xs font-semibold text-[#0B1714]">Enter audited session</a> : null}</div>)}{!supportRequests.length ? <p className="py-6 text-sm text-[#587A6B]">No support access has been requested yet.</p> : null}</div></div>
+      </div>
+    </section>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="plan">
-                Plan
-              </label>
-              <input
-                id="plan"
-                name="plan"
-                placeholder="Enterprise / Pilot"
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-              />
-            </div>
+    <section id="onboarding" className="scroll-mt-24 overflow-hidden rounded-2xl border border-[#D7E7DF] bg-white"><header className="border-b border-[#D7E7DF] px-5 py-6 sm:px-7"><p className="text-[9px] font-semibold uppercase tracking-[.22em] text-[#587A6B]">Controlled provisioning</p><h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold">Create an organization and its first CEO</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-[#587A6B]">This creates the tenant boundary and its initial accountable business owner in one audited operation.</p></header><form onSubmit={handleOnboard} className="grid lg:grid-cols-2"><fieldset className="grid content-start gap-4 border-b border-[#D7E7DF] p-5 sm:grid-cols-2 sm:p-7 lg:border-b-0 lg:border-r"><legend className="sr-only">Organization details</legend><div className="sm:col-span-2 mb-1 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#D7E7DF]/50 text-[#15382E]"><Building2 className="h-5 w-5" /></span><div><h3 className="text-sm font-semibold">Organization profile</h3><p className="text-xs text-[#79998B]">The tenant’s commercial identity</p></div></div><Field label="Organization name" wide><input name="org_name" required placeholder="Registered operating name" className="admin-input" /></Field><Field label="Plan"><select name="plan" defaultValue="pilot" className="admin-input"><option value="pilot">Pilot</option><option value="starter">Starter</option><option value="enterprise">Enterprise</option></select></Field><Field label="Expected branches"><input name="branch_count" type="number" min={0} defaultValue={1} className="admin-input" /></Field><Field label="Primary location" wide><span className="relative block"><MapPin className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-[#79998B]" /><input name="primary_location" placeholder="City or operating region" className="admin-input pl-10" /></span></Field><Field label="Organization email"><input name="org_email" type="email" placeholder="operations@example.com" className="admin-input" /></Field><Field label="Organization phone"><input name="org_phone" type="tel" placeholder="+251…" className="admin-input" /></Field></fieldset>
+          <fieldset className="grid content-start gap-4 p-5 sm:grid-cols-2 sm:p-7"><legend className="sr-only">Initial CEO account</legend><div className="sm:col-span-2 mb-1 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#D7E7DF]/50 text-[#15382E]"><Users className="h-5 w-5" /></span><div><h3 className="text-sm font-semibold">Initial CEO account</h3><p className="text-xs text-[#79998B]">The tenant’s first business authority</p></div></div><Field label="CEO full name" wide><input name="admin_full_name" required autoComplete="off" className="admin-input" /></Field><Field label="CEO email"><input name="admin_email" type="email" required autoComplete="off" className="admin-input" /></Field><Field label="CEO phone"><input name="admin_phone" type="tel" placeholder="+251…" className="admin-input" /></Field><Field label="Temporary password" wide><input name="admin_password" type="password" minLength={12} required autoComplete="new-password" className="admin-input" /><span className="mt-1.5 block text-[10px] leading-4 text-[#79998B]">At least 12 characters. Share it through a secure channel and require a change at handover.</span></Field>{submitError ? <p role="alert" className="sm:col-span-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{submitError}</p> : null}{submitState === "success" && result ? <div role="status" className="sm:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"><p className="text-sm font-semibold text-emerald-900">Organization and CEO created</p><p className="mt-1 text-xs text-emerald-700">The tenant is ready for CEO setup. Internal references were retained in the audit history.</p></div> : null}<div className="sm:col-span-2 mt-2 flex justify-end"><button type="submit" disabled={submitState === "submitting"} className="inline-flex h-12 items-center gap-2 rounded-xl bg-[#15382E] px-5 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60"><UserPlus className="h-4 w-4" />{submitState === "submitting" ? "Creating tenant boundary…" : "Create organization and CEO"}</button></div></fieldset></form></section>
+  </div>;
+}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="branch-count">
-                Branch count
-              </label>
-              <input
-                id="branch-count"
-                name="branch_count"
-                type="number"
-                min={0}
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="primary-location">
-                Primary location
-              </label>
-              <input
-                id="primary-location"
-                name="primary_location"
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="org-email">
-                Org email
-              </label>
-              <input
-                id="org-email"
-                name="org_email"
-                type="email"
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="org-phone">
-                Org phone
-              </label>
-              <input
-                id="org-phone"
-                name="org_phone"
-                type="tel"
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-              />
-            </div>
-
-            <div className="md:col-span-2 mt-4 border-t border-sand-200 pt-4 text-sm font-semibold text-forest-700">
-              CEO / Manager account
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="admin-full-name">
-                Full name
-              </label>
-              <input
-                id="admin-full-name"
-                name="admin_full_name"
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="admin-email">
-                Email
-              </label>
-              <input
-                id="admin-email"
-                name="admin_email"
-                type="email"
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="admin-phone">
-                Phone
-              </label>
-              <input
-                id="admin-phone"
-                name="admin_phone"
-                type="tel"
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-forest-900" htmlFor="admin-password">
-                Temporary password
-              </label>
-              <input
-                id="admin-password"
-                name="admin_password"
-                type="password"
-                minLength={12}
-                className="h-11 w-full rounded-xl border border-sand-200 px-3 text-sm"
-                required
-              />
-            </div>
-
-            {submitError ? (
-              <p className="md:col-span-2 rounded-xl border border-ember-500/40 bg-ember-500/10 px-3 py-2 text-sm text-ember-500">
-                {submitError}
-              </p>
-            ) : null}
-
-            {submitState === "success" && result ? (
-              <p className="md:col-span-2 rounded-xl border border-leaf-500/40 bg-leaf-500/10 px-3 py-2 text-sm text-leaf-600">
-                Organization created. Org ID: {result.organizationId}. Admin User ID:
-                {" "}
-                {result.adminUserId}.
-              </p>
-            ) : null}
-
-            <div className="md:col-span-2 flex justify-end">
-              <button
-                type="submit"
-                disabled={submitState === "submitting"}
-                className="rounded-full bg-forest-900 px-5 py-2 text-sm text-sand-50 disabled:opacity-60"
-              >
-                {submitState === "submitting" ? "Creating..." : "Create organization"}
-              </button>
-            </div>
-          </form>
-        </section>
-    </div>
-  );
+function Field({ label, wide = false, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
+  return <label className={`block text-xs font-semibold text-[#15382E] ${wide ? "sm:col-span-2" : ""}`}>{label}<span className="mt-2 block">{children}</span></label>;
 }
