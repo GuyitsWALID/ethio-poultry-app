@@ -36,6 +36,7 @@
     "cloudflare:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "cloudflare:deploy:staging": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --env staging --keep-vars",
     "cloudflare:deploy:production": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
+    "cloudflare:types": "wrangler types --include-runtime false",
     "supabase": "supabase"
   },
   "dependencies": {

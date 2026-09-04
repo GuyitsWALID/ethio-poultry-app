@@ -23,6 +23,9 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "send_email": [
+    { "name": "EMAIL" }
+  ],
   "vars": {
     "APP_ENVIRONMENT": "production",
     "APP_BASE_URL": "https://ethio-poultry-app.walidmurad65.workers.dev",
@@ -40,6 +43,9 @@
   "env": {
     "staging": {
       "name": "ethio-poultry-app-staging",
+      "send_email": [
+        { "name": "EMAIL" }
+      ],
       "observability": {
         "enabled": true,
         "head_sampling_rate": 1,

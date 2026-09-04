@@ -30,6 +30,7 @@ jobs:
         with:
           node-version: 22.16.0
       - run: node scripts/platform-monitoring.mjs probe
+      - run: node scripts/platform-monitoring.mjs notifications
 
   staging-probe:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *'
@@ -47,6 +48,7 @@ jobs:
         with:
           node-version: 22.16.0
       - run: node scripts/platform-monitoring.mjs probe
+      - run: node scripts/platform-monitoring.mjs notifications
 
   production-backup:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 4 * * *'

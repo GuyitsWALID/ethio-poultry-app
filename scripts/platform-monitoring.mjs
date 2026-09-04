@@ -110,7 +110,20 @@ async function checkBackups() {
   if (status === "failed") throw new Error(summary);
 }
 
+async function dispatchNotifications() {
+  const response = await fetch(`${baseUrl}/api/internal/notifications/dispatch`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ingestToken}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`Notification dispatch returned HTTP ${response.status}.`);
+  const result = await response.json();
+  if (Number(result.failed ?? 0) > 0) throw new Error(`${result.failed} notification deliveries failed.`);
+  console.log(result.status === "disabled" ? `Notification email disabled: ${result.reason}` : `Notification delivery complete: ${result.sent ?? 0} sent.`);
+}
+
 const command = process.argv[2];
 if (command === "probe") await probeApplication();
 else if (command === "backup") await checkBackups();
-else throw new Error("Usage: node scripts/platform-monitoring.mjs <probe|backup>");
+else if (command === "notifications") await dispatchNotifications();
+else throw new Error("Usage: node scripts/platform-monitoring.mjs <probe|backup|notifications>");

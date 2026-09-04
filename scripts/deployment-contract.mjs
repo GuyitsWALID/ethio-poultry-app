@@ -52,6 +52,7 @@ export function validateEnvironment(env = process.env) {
   const environment = env.APP_ENVIRONMENT?.trim() || "local";
   const cloudflareBuild = present(env.WORKERS_CI_COMMIT_SHA);
   const reconciliationAi = env.RECONCILIATION_AI_ENABLED?.trim().toLowerCase();
+  const notificationEmail = env.NOTIFICATION_EMAIL_ENABLED?.trim().toLowerCase();
   const required = [
     "NEXT_PUBLIC_SUPABASE_URL",
     "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
@@ -67,6 +68,12 @@ export function validateEnvironment(env = process.env) {
   }
   if (reconciliationAi && !["true", "false"].includes(reconciliationAi)) {
     errors.push("RECONCILIATION_AI_ENABLED must be true or false when set.");
+  }
+  if (notificationEmail && !["true", "false"].includes(notificationEmail)) {
+    errors.push("NOTIFICATION_EMAIL_ENABLED must be true or false when set.");
+  }
+  if (present(env.NEXT_PUBLIC_NOTIFICATION_EMAIL_FROM)) {
+    errors.push("NEXT_PUBLIC_NOTIFICATION_EMAIL_FROM is forbidden; notification sender configuration must remain server-only.");
   }
   if (present(env.NEXT_PUBLIC_GROQ_API_KEY)) {
     errors.push("NEXT_PUBLIC_GROQ_API_KEY is forbidden; GROQ_API_KEY must remain server-only.");
@@ -109,6 +116,8 @@ export function validateEnvironment(env = process.env) {
     }
     if (!present(env.SUPABASE_PROJECT_REF)) errors.push("SUPABASE_PROJECT_REF is required to bind the release to the intended database project.");
     if (reconciliationAi === "true" && !present(env.GROQ_API_KEY)) errors.push("GROQ_API_KEY is required when Record Checks AI is enabled.");
+    if (notificationEmail === "true" && !present(env.NOTIFICATION_EMAIL_FROM)) errors.push("NOTIFICATION_EMAIL_FROM is required when notification email delivery is enabled.");
+    if (notificationEmail === "true" && present(env.NOTIFICATION_EMAIL_FROM) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.NOTIFICATION_EMAIL_FROM)) errors.push("NOTIFICATION_EMAIL_FROM must be a valid sender address.");
     if (present(env.SUPABASE_PROJECT_REF) && present(env.NEXT_PUBLIC_SUPABASE_URL)) {
       const host = new URL(env.NEXT_PUBLIC_SUPABASE_URL).hostname;
       if (host.endsWith(".supabase.co") && host.split(".")[0] !== env.SUPABASE_PROJECT_REF) {

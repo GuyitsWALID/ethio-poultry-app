@@ -118,7 +118,7 @@ Status: operational; managed backup retention pending
 ## Second delivery wave
 
 1. Action ownership, acknowledgement, due dates, escalation, and resolution evidence — implemented; migration applied to staging and production, staged role validation pending
-2. Configurable in-app and external notifications
+2. Configurable in-app and external notifications — in-app delivery, preferences, audit evidence, and the email outbox are implemented, with the migration applied to staging and production; Cloudflare sender-domain activation remains disabled until a verified sender is configured.
 3. Branded and scheduled management reports
 4. Mobile and unreliable-connectivity validation, followed by offline drafts where justified
 

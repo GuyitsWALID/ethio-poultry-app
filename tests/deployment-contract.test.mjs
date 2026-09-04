@@ -58,6 +58,19 @@ test("Cloudflare builds cannot silently fall back to the local environment",()=>
   assert(result.errors.some(error=>error.includes("explicitly set for a Cloudflare build")));
 });
 
+test("notification email remains server-only and requires a valid sender when enabled",()=>{
+  const disabled=validateEnvironment({...valid,NOTIFICATION_EMAIL_ENABLED:"false"});
+  assert.equal(disabled.errors.some(error=>error.includes("NOTIFICATION_EMAIL")),false);
+  const missing=validateEnvironment({...valid,NOTIFICATION_EMAIL_ENABLED:"true"});
+  assert.match(missing.errors.join("\n"),/NOTIFICATION_EMAIL_FROM is required/);
+  const invalid=validateEnvironment({...valid,NOTIFICATION_EMAIL_ENABLED:"true",NOTIFICATION_EMAIL_FROM:"not-an-email"});
+  assert.match(invalid.errors.join("\n"),/valid sender address/);
+  const configured=validateEnvironment({...valid,NOTIFICATION_EMAIL_ENABLED:"true",NOTIFICATION_EMAIL_FROM:"operations@example.com"});
+  assert.equal(configured.errors.some(error=>error.includes("NOTIFICATION_EMAIL")),false);
+  const exposed=validateEnvironment({...valid,NEXT_PUBLIC_NOTIFICATION_EMAIL_FROM:"never-public"});
+  assert.match(exposed.errors.join("\n"),/must remain server-only/);
+});
+
 test("monitoring intake tokens are strong and remain server-only when configured",()=>{
   const short=validateEnvironment({...valid,MONITORING_INGEST_TOKEN:"too-short"});
   assert.match(short.errors.join("\n"),/at least 24 characters/);

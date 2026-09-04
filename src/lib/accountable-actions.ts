@@ -10,6 +10,7 @@ import { recordAuditEvent } from "@/lib/audit-ledger";
 import { getCurrentAlerts } from "@/lib/current-alerts";
 import { getGovernanceAlerts } from "@/lib/governance-workflow";
 import { getReconciliationAlerts } from "@/lib/reconciliation-service";
+import { publishActionEventNotifications } from "@/lib/notification-service";
 
 type Row = Record<string, unknown>;
 const db = governanceAdmin as any;
@@ -48,13 +49,15 @@ async function actor(ctx: AccessContext) {
 
 async function event(ctx: AccessContext, actionId: string, eventType: string, before: ActionStatus | null, after: ActionStatus, note?: string | null, evidence?: string | null, automated = false) {
   const who = automated ? { id: null, name: "System", role: "system" } : await actor(ctx);
-  const { error } = await db.from("operational_action_events").insert({
+  const { data: created, error } = await db.from("operational_action_events").insert({
     org_id: ctx.orgId, action_id: actionId, event_type: eventType, actor_id: who.id,
     actor_name_snapshot: who.name, actor_role_snapshot: who.role, note: note ?? null,
     evidence: evidence ?? null, before_status: before, after_status: after,
     support_session_id: ctx.supportSessionId,
-  });
+  }).select("id,org_id,action_id,event_type,actor_id,created_at").single();
   if (error) throw new Error(`Action history could not be recorded: ${error.message}`);
+  const { data: action } = await db.from("operational_actions").select("*,owner:profiles!operational_actions_owner_id_fkey(full_name)").eq("id", actionId).maybeSingle();
+  if (action && created) await publishActionEventNotifications({ action, event: created });
 }
 
 async function scope(ctx: AccessContext) {
