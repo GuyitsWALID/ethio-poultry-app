@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { canAccessFarm, governanceAdmin, type AccessContext } from "@/lib/access-context";
 import { recordAuditEvent } from "@/lib/audit-ledger";
+import { loadOperationsAnalytics } from "@/lib/operations-analytics-service";
 import type { OperationsAnalyticsResponse } from "@/lib/operational-analytics";
 
 const db = governanceAdmin as any;
@@ -61,18 +62,14 @@ function reportPeriod(cadence: "weekly" | "monthly", lookbackDays: number, now =
   return { periodFrom: shiftDate(periodTo, -lookbackDays + 1), periodTo };
 }
 
-function analyticsParams(scope: Scope, periodFrom: string, periodTo: string, ctx: AccessContext) {
-  const params = new URLSearchParams({ date_from: periodFrom, date_to: periodTo, internal_org_id: ctx.orgId, internal_user_id: ctx.userId });
+function analyticsParams(scope: Scope, periodFrom: string, periodTo: string) {
+  const params = new URLSearchParams({ date_from: periodFrom, date_to: periodTo });
   for (const [key, value] of Object.entries(scope)) if (value) params.set(key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), value);
   return params;
 }
 
-async function loadAnalytics(ctx: AccessContext, origin: string, scope: Scope, periodFrom: string, periodTo: string) {
-  const token = process.env.MONITORING_INGEST_TOKEN?.trim();
-  if (!token) throw new Error("Report generation is not configured for this deployment.");
-  const response = await fetch(`${origin}/api/operations-analytics?${analyticsParams(scope, periodFrom, periodTo, ctx)}`, {
-    headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(45_000),
-  });
+async function loadAnalytics(ctx: AccessContext, scope: Scope, periodFrom: string, periodTo: string) {
+  const response = await loadOperationsAnalytics(ctx, analyticsParams(scope, periodFrom, periodTo));
   const body = await response.json().catch(() => null);
   if (!response.ok) throw new Error(body?.error ?? "The authoritative report data could not be loaded.");
   return body as OperationsAnalyticsResponse;
@@ -122,9 +119,9 @@ export async function getManagementReportCenter(ctx: AccessContext) {
     const visibleSchedules: Row[] = []; const visibleRuns: Row[] = [];
     for (const row of schedulesData) if (row.scope?.farmId && await canAccessFarm(ctx, String(row.scope.farmId))) visibleSchedules.push(row);
     for (const row of runsData) if (row.scope?.farmId && await canAccessFarm(ctx, String(row.scope.farmId))) visibleRuns.push(row);
-    return { capabilities: { canSchedule: false, canGenerate: true }, schedules: visibleSchedules, runs: visibleRuns, recipients: profileResult.data ?? [] };
+    return { currentUserId: ctx.userId, capabilities: { canSchedule: false, canGenerate: true }, schedules: visibleSchedules, runs: visibleRuns, recipients: profileResult.data ?? [] };
   }
-  return { capabilities: { canSchedule: true, canGenerate: true }, schedules: schedulesData, runs: runsData, recipients: profileResult.data ?? [] };
+  return { currentUserId: ctx.userId, capabilities: { canSchedule: true, canGenerate: true }, schedules: schedulesData, runs: runsData, recipients: profileResult.data ?? [] };
 }
 
 export async function createManagementReportSchedule(ctx: AccessContext, input: unknown) {
@@ -151,7 +148,7 @@ export async function setManagementReportScheduleActive(ctx: AccessContext, sche
   return data;
 }
 
-export async function generateManagementReport(ctx: AccessContext, origin: string, input: { name?: string; scope?: unknown; periodFrom?: string; periodTo?: string; recipientIds?: string[]; scheduleId?: string }, options: { scheduled?: boolean } = {}) {
+export async function generateManagementReport(ctx: AccessContext, _origin: string, input: { name?: string; scope?: unknown; periodFrom?: string; periodTo?: string; recipientIds?: string[]; scheduleId?: string }, options: { scheduled?: boolean } = {}) {
   if (ctx.role !== "ceo" && ctx.role !== "farm_manager") throw new Error("Management report access is required.");
   const scope = scopeSchema.parse(input.scope ?? {});
   if (ctx.role === "farm_manager" && !scope.farmId) throw new Error("Choose one assigned farm before saving a management report.");
@@ -163,7 +160,7 @@ export async function generateManagementReport(ctx: AccessContext, origin: strin
   const orgName = await organizationName(ctx.orgId);
   const name = (input.name?.trim() || "Management performance report").slice(0, 100);
   try {
-    const snapshot = await loadAnalytics(ctx, origin, scope, periodFrom, periodTo);
+    const snapshot = await loadAnalytics(ctx, scope, periodFrom, periodTo);
     const snapshotSha256 = createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
     const scheduleId = options.scheduled ? input.scheduleId ?? null : null;
     const { data, error } = await db.from("management_report_runs").insert({ org_id: ctx.orgId, schedule_id: scheduleId, requested_by: ctx.userId, requested_role: ctx.role, report_name: name, period_from: periodFrom, period_to: periodTo, scope, recipient_ids: recipients.ids, organization_name: orgName, report_snapshot: snapshot, snapshot_sha256: snapshotSha256, report_version: REPORT_VERSION, status: "completed", generated_at: new Date().toISOString() }).select("id,report_name,period_from,period_to,status,generated_at").single();
