@@ -25,6 +25,7 @@ import { Area, AreaChart, CartesianGrid, Line, XAxis, YAxis } from "recharts";
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { ManagementReportCenter } from "@/components/reports/management-report-center";
 import { addDays } from "@/lib/farm-manager-dashboard";
 import type { ComparisonMetric, FlockAnalyticsRow, OperationsAnalyticsResponse, PeriodSummary } from "@/lib/operational-analytics";
 
@@ -463,6 +464,8 @@ export function BranchReportWorkspace() {
           </div>
           <div className="grid gap-5 p-5 sm:grid-cols-2"><ReadinessGauge label="Daily Records" value={data.dataTrust.recordCoveragePct} detail="Submitted flock-days versus expected flock-days." /><ReadinessGauge label="Feed synchronization" value={data.dataTrust.feedDataCoveragePct} detail="Daily records carrying Feed Control totals." /><ReadinessGauge label="Mortality causes" value={data.dataTrust.mortalityCauseCoveragePct} detail="Recorded deaths with a classified cause." /><ReadinessGauge label="Breed targets" value={data.dataTrust.targetCoveragePct} detail="Active flocks with an age-matched standard." /></div>
         </section>
+
+        <ManagementReportCenter scope={{ branchId: scope.branchId || undefined, farmId: scope.farmId || undefined, houseId: scope.houseId || undefined, flockId: scope.flockId || undefined, batchId: scope.batchId || undefined }} dateFrom={dateFrom} dateTo={dateTo} scopeLabel={data.meta.scopeLabel} />
 
         <div className="flex flex-col gap-3 rounded-2xl border border-sand-200 bg-white p-2 shadow-sm lg:flex-row lg:items-center lg:justify-between">
           <div className="grid gap-1 sm:grid-cols-2 lg:flex" role="tablist" aria-label="Branch report sections">{reportViews.map((item) => <button key={item.id} type="button" role="tab" aria-selected={view === item.id} onClick={() => setView(item.id)} className={`min-h-12 rounded-xl px-4 text-left transition focus:outline-none focus:ring-2 focus:ring-forest-400 ${view === item.id ? "bg-forest-900 text-white" : "text-forest-700 hover:bg-sand-50"}`}><span className="block text-xs font-semibold">{item.label}</span><span className={`mt-0.5 block text-[10px] ${view === item.id ? "text-sand-200" : "text-forest-500"}`}>{item.note}</span></button>)}</div>

@@ -19,7 +19,9 @@ import {
   type OperationsAnalyticsResponse,
   type PeriodSummary,
 } from "@/lib/operational-analytics";
-import { getAccessContext,isAccessResponse } from "@/lib/access-context";
+import { getAccessContext,governanceAdmin,isAccessResponse,type AccessContext } from "@/lib/access-context";
+import { tokenMatches } from "@/lib/platform-observability";
+import { capabilitiesFor } from "@/lib/permissions";
 
 type DbError = { message: string } | null;
 type Row = Record<string, unknown>;
@@ -127,9 +129,25 @@ function flockType(value: unknown): FlockType {
   return ["layer", "parent_stock", "broiler", "rearing"].includes(String(value)) ? String(value) as FlockType : "rearing";
 }
 
+async function analyticsAccess(request: NextRequest): Promise<AccessContext | Response> {
+  const expected = process.env.MONITORING_INGEST_TOKEN?.trim();
+  const authorization = request.headers.get("authorization") ?? "";
+  const provided = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+  const orgId = request.nextUrl.searchParams.get("internal_org_id")?.trim();
+  const userId = request.nextUrl.searchParams.get("internal_user_id")?.trim();
+  if (expected && provided && orgId && userId && await tokenMatches(provided, expected)) {
+    const { data: profile, error } = await governanceAdmin.from("profiles").select("id,org_id,role,is_active").eq("id", userId).eq("org_id", orgId).maybeSingle();
+    if (error) return json({ error: error.message }, 500);
+    const role = profile?.role === "ceo" || profile?.role === "farm_manager" ? profile.role : null;
+    if (!profile?.is_active || !role) return json({ error: "The report owner no longer has active management access." }, 403);
+    return { userId, homeOrgId: orgId, orgId, role, capabilities: capabilitiesFor(role), supportSessionId: null, supportExpiresAt: null };
+  }
+  return getAccessContext({ tenant: true });
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return access;
+    const access=await analyticsAccess(request);if(isAccessResponse(access))return access;
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

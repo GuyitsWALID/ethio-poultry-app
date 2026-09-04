@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 58,
-  "latest": "20260902000000_configurable_action_notifications.sql",
-  "aggregateSha256": "cc3c7a0242398f1b89d3652937fe6317d95731e88ae9ce9e66d27e064e6dd490",
+  "count": 59,
+  "latest": "20260904000000_scheduled_management_reports.sql",
+  "aggregateSha256": "f04940f4100af61437e96f2056cd4d87863dbe35df6060077c5e683646ffa1cc",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -138,6 +138,7 @@
     "20260825000000_contextual_governance_authorizations.sql": "24f0ba01e7b6ecd2ccfe6fdf1a03e64993c6c90a670f6dc2a4b2d599c19f7222",
     "20260831000000_platform_monitoring_recovery.sql": "129accefdd957793252ecda03c6a9c08d1bcaa17dbb0c4d60c6871f4faae5ae4",
     "20260901000000_accountable_operational_actions.sql": "7957304c68878e45b60b000a9bdb4b6b6dae4a4c585438e1e8b8800ec547fa13",
-    "20260902000000_configurable_action_notifications.sql": "55e6bdb82c178df86fda76fe1d3270643f14ffe67b5dfdc461742016a27fa22e"
+    "20260902000000_configurable_action_notifications.sql": "55e6bdb82c178df86fda76fe1d3270643f14ffe67b5dfdc461742016a27fa22e",
+    "20260904000000_scheduled_management_reports.sql": "24fbbcc3ff7a0668931ff4accb3b8d7f3cef9b38e6a5d1a9f6e98e664b6d6915"
   }
 }

@@ -119,7 +119,7 @@ Status: operational; managed backup retention pending
 
 1. Action ownership, acknowledgement, due dates, escalation, and resolution evidence — implemented; migration applied to staging and production, staged role validation pending
 2. Configurable in-app and external notifications — in-app delivery, preferences, audit evidence, and the email outbox are implemented, with the migration applied to staging and production; Cloudflare sender-domain activation remains disabled until a verified sender is configured.
-3. Branded and scheduled management reports
+3. Branded and scheduled management reports — implemented with immutable evidence snapshots, CEO-governed weekly/monthly schedules, scoped sharing, branded HTML/CSV downloads, and protected recurring generation; migration applied to staging and production, staged role validation pending
 4. Mobile and unreliable-connectivity validation, followed by offline drafts where justified
 
 ## Deferred modules

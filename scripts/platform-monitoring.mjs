@@ -122,8 +122,21 @@ async function dispatchNotifications() {
   console.log(result.status === "disabled" ? `Notification email disabled: ${result.reason}` : `Notification delivery complete: ${result.sent ?? 0} sent.`);
 }
 
+async function dispatchReports() {
+  const response = await fetch(`${baseUrl}/api/internal/reports/dispatch`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ingestToken}` },
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!response.ok) throw new Error(`Scheduled report dispatch returned HTTP ${response.status}.`);
+  const result = await response.json();
+  if (Number(result.failed ?? 0) > 0) throw new Error(`${result.failed} scheduled reports failed.`);
+  console.log(`Scheduled report dispatch complete: ${result.completed ?? 0} generated from ${result.due ?? 0} due schedule(s).`);
+}
+
 const command = process.argv[2];
 if (command === "probe") await probeApplication();
 else if (command === "backup") await checkBackups();
 else if (command === "notifications") await dispatchNotifications();
-else throw new Error("Usage: node scripts/platform-monitoring.mjs <probe|backup|notifications>");
+else if (command === "reports") await dispatchReports();
+else throw new Error("Usage: node scripts/platform-monitoring.mjs <probe|backup|notifications|reports>");
