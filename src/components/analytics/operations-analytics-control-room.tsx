@@ -1,6 +1,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
+
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -382,14 +384,14 @@ function LoadingState() {
 
 export function OperationsAnalyticsControlRoom() {
   const { scope, period, filteredFlocks, filteredBatches } = useFarmScope();
-  const [dateFrom, setDateFrom] = useState(period.dateFrom);
-  const [dateTo, setDateTo] = useState(period.dateTo);
+  const [dateFrom, setDateFrom] = usePageFilter<string>("dateFrom", period.dateFrom);
+  const [dateTo, setDateTo] = usePageFilter<string>("dateTo", period.dateTo);
   const [data, setData] = useState<OperationsAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => { setDateFrom(period.dateFrom); setDateTo(period.dateTo); }, [period.dateFrom, period.dateTo]);
+
   const scopeKey = `${scope.branchId}|${scope.farmId}|${scope.houseId}|${scope.flockId}|${scope.batchId}|${filteredFlocks.length}|${filteredBatches.length}`;
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -415,6 +417,7 @@ export function OperationsAnalyticsControlRoom() {
 
   return (
     <div className="max-w-full min-w-0 space-y-5 overflow-x-clip">
+      <div className="flex justify-end"><ResetPageFilters /></div>
       <header className="overflow-hidden rounded-2xl border border-forest-700 bg-forest-900 text-sand-50 shadow-sm">
         <div className="relative p-5 sm:p-7"><div className="pointer-events-none absolute right-8 top-0 h-36 w-36 rounded-full border border-white/10"/><div className="pointer-events-none absolute right-20 top-10 h-24 w-24 rounded-full border border-leaf-400/20"/><div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><div className="max-w-3xl"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.24em] text-leaf-400"><Sparkles className="h-3.5 w-3.5"/>Operations intelligence</div><h1 className="mt-3 font-display text-3xl font-semibold leading-tight sm:text-4xl">Read the farm as a connected production system.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-200">See whether feed, flock output, mortality, quality, and record coverage moved together—then identify exactly which farm or flock explains the change.</p></div><div className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs sm:grid-cols-4 xl:grid-cols-2"><div><span className="block text-sand-200/70">Scope</span><strong className="mt-1 block text-sm">{data.meta.scopeLabel}</strong></div><div><span className="block text-sand-200/70">Window</span><strong className="mt-1 block text-sm">{formatDate(data.meta.dateFrom)} – {formatDate(data.meta.dateTo)}</strong></div><div><span className="block text-sand-200/70">Live birds</span><strong className="mt-1 block text-sm">{data.summary.liveBirds.toLocaleString()}</strong></div><div><span className="block text-sand-200/70">Evidence</span><strong className="mt-1 block text-sm">{number(data.summary.current.recordCoveragePct,"%",0)}</strong></div></div></div><div className="relative mt-6"><ScopeFilters dateFrom={dateFrom} dateTo={dateTo} setDateFrom={setDateFrom} setDateTo={setDateTo} onRefresh={()=>setRefreshKey((value)=>value+1)} loading={loading}/></div></div>
       </header>

@@ -1,8 +1,9 @@
  "use client";
 
 import { reportingPeriodFor, useFarmScope, type PeriodPreset } from "@/components/farm-scope-context";
+import { ResetPageFilters } from "@/components/page-filter-controls";
 
-export function FarmScopeFilters() {
+export function FarmScopeFilters({ title = "Filter this page", fields = ["branch", "farm", "house", "flock", "batch"], showPeriod = false }: { title?: string; fields?: Array<"branch" | "farm" | "house" | "flock" | "batch">; showPeriod?: boolean }) {
   const {
     role,
     loading,
@@ -17,8 +18,7 @@ export function FarmScopeFilters() {
     filteredBatches,
   } = useFarmScope();
 
-  const showFilters = role === "ceo";
-  if (!showFilters || loading) {
+  if (loading) {
     return null;
   }
 
@@ -27,10 +27,10 @@ export function FarmScopeFilters() {
   return (
     <div className="mb-4 rounded-2xl border border-sand-200 bg-white p-4">
       <p className="text-xs uppercase tracking-[0.2em] text-forest-500">
-        {role === "ceo" ? "Executive Scope Filters" : "Branch Scope Filters"}
+        {title}
       </p>
       <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
-        <label className="grid gap-1 text-xs text-forest-600">
+        {showPeriod ? <label className="grid gap-1 text-xs text-forest-600">
           Reporting Period
           <select
             className={selectClass}
@@ -48,8 +48,8 @@ export function FarmScopeFilters() {
             <option value="qtd">Quarter to date</option>
             <option value="custom">Custom range</option>
           </select>
-        </label>
-        {period.preset === "custom" ? (
+        </label> : null}
+        {showPeriod && period.preset === "custom" ? (
           <>
             <label className="grid gap-1 text-xs text-forest-600">
               From
@@ -61,7 +61,7 @@ export function FarmScopeFilters() {
             </label>
           </>
         ) : null}
-        <label className="grid gap-1 text-xs text-forest-600">
+        {fields.includes("branch") && role === "ceo" ? <label className="grid gap-1 text-xs text-forest-600">
           Branch
           <select
             className={selectClass}
@@ -83,9 +83,9 @@ export function FarmScopeFilters() {
               </option>
             ))}
           </select>
-        </label>
+        </label> : null}
 
-        <label className="grid gap-1 text-xs text-forest-600">
+        {fields.includes("farm") ? <label className="grid gap-1 text-xs text-forest-600">
           Farm
           <select
             className={selectClass}
@@ -107,9 +107,9 @@ export function FarmScopeFilters() {
               </option>
             ))}
           </select>
-        </label>
+        </label> : null}
 
-        <label className="grid gap-1 text-xs text-forest-600">
+        {fields.includes("batch") ? <label className="grid gap-1 text-xs text-forest-600">
           Batch
           <select
             className={selectClass}
@@ -123,9 +123,9 @@ export function FarmScopeFilters() {
               </option>
             ))}
           </select>
-        </label>
+        </label> : null}
 
-        <label className="grid gap-1 text-xs text-forest-600">
+        {fields.includes("house") ? <label className="grid gap-1 text-xs text-forest-600">
           House
           <select
             className={selectClass}
@@ -141,9 +141,9 @@ export function FarmScopeFilters() {
               </option>
             ))}
           </select>
-        </label>
+        </label> : null}
 
-        <label className="grid gap-1 text-xs text-forest-600">
+        {fields.includes("flock") ? <label className="grid gap-1 text-xs text-forest-600">
           Flock
           <select
             className={selectClass}
@@ -162,7 +162,8 @@ export function FarmScopeFilters() {
                 </option>
               ))}
           </select>
-        </label>
+        </label> : null}
+        <div className="self-end"><ResetPageFilters /></div>
       </div>
     </div>
   );

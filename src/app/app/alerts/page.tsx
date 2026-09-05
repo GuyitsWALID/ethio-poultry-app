@@ -1,6 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+import { usePageFilter, ResetPageFilters, PageSelectFilter } from "@/components/page-filter-controls";
+import { useFarmScope } from "@/components/farm-scope-context";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, BellRing, CheckCircle2, Clock3, History, RefreshCw, Search, ShieldAlert, UserCheck, X } from "lucide-react";
@@ -19,12 +22,17 @@ function roleLabel(value: string) { return value.split("_").map((part) => part[0
 type DialogState = { action: ActionCard; command: "acknowledge" | "start" | "submit_resolution" } | null;
 
 export default function AlertsPage() {
+  const { farms } = useFarmScope();
+  const [farm, setFarm] = usePageFilter<string>("farm", "");
+  const [severity, setSeverity] = usePageFilter<string>("severity", "");
+  const [owner, setOwner] = usePageFilter<string>("owner", "");
+  const [status, setStatus] = usePageFilter<string>("status", "");
   const [desk, setDesk] = useState<ActionDesk | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [view, setView] = useState<"all" | "mine" | "unassigned" | "escalated" | "verification">("all");
+  const [query, setQuery] = usePageFilter<string>("query", "");
+  const [view, setView] = usePageFilter<"all" | "mine" | "unassigned" | "escalated" | "verification">("tab", "all");
   const [owners, setOwners] = useState<Record<string, string>>({});
   const [dialog, setDialog] = useState<DialogState>(null);
   const [note, setNote] = useState("");
@@ -56,6 +64,10 @@ export default function AlertsPage() {
 
   const actions = desk?.actions ?? [];
   const visible = actions.filter((item) => {
+    if (farm && item.farmId !== farm) return false;
+    if (severity && item.severity !== severity) return false;
+    if (owner && item.ownerId !== owner) return false;
+    if (status && item.status !== status) return false;
     if (view === "mine" && item.ownerId !== desk?.viewerId) return false;
     if (view === "unassigned" && item.ownerId) return false;
     if (view === "escalated" && item.status !== "escalated") return false;
@@ -68,6 +80,13 @@ export default function AlertsPage() {
   const dialogTitle = dialog?.command === "submit_resolution" ? "Submit work for verification" : dialog?.command === "start" ? "Start investigation" : "Acknowledge responsibility";
 
   return <main className="space-y-5 pb-8">
+      <div className="flex justify-end"><ResetPageFilters /></div>
+      <div className="grid gap-3 rounded-2xl border border-sand-200 bg-white p-4 sm:grid-cols-2 xl:grid-cols-4">
+        <PageSelectFilter label="Farms" value={farm} onChange={setFarm} options={farms.map(item=>({value:item.id,label:item.name}))}/>
+        <PageSelectFilter label="Owners" value={owner} onChange={setOwner} options={(desk?.owners??[]).map(item=>({value:item.id,label:item.name}))}/>
+        <PageSelectFilter label="Priorities" value={severity} onChange={setSeverity} options={[{value:"high",label:"High"},{value:"medium",label:"Medium"},{value:"low",label:"Low"}]}/>
+        <PageSelectFilter label="Statuses" value={status} onChange={setStatus} options={Object.entries(statusLabel).map(([value,label])=>({value,label}))}/>
+      </div>
     <section className="relative overflow-hidden rounded-[28px] bg-forest-900 px-6 py-7 text-sand-50 sm:px-8 lg:px-10 lg:py-9">
       <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full border-[44px] border-ember-500/10" />
       <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between"><div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.24em] text-amber-500"><BellRing className="h-4 w-4" />Accountable action desk</div><h1 className="mt-3 max-w-3xl font-display text-3xl font-semibold sm:text-4xl">Every warning has an owner and a verified finish.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100/80">Assign responsibility, acknowledge the work, record what was corrected, then let the originating system verify the result.</p></div><button type="button" onClick={() => void load()} disabled={loading} className="inline-flex h-11 items-center gap-2 self-start rounded-xl bg-sand-50 px-4 text-sm font-semibold text-forest-900 xl:self-auto"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh and verify</button></div>

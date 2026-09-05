@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -169,10 +171,10 @@ export default function DailyRecordsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
-  const [dateFilterMode, setDateFilterMode] = useState<"single" | "range">("single");
-  const [filterDate, setFilterDate] = useState("");
-  const [filterDateFrom, setFilterDateFrom] = useState("");
-  const [filterDateTo, setFilterDateTo] = useState("");
+  const [dateFilterMode, setDateFilterMode] = usePageFilter<"single" | "range">("dateFilterMode", "single");
+  const [filterDate, setFilterDate] = usePageFilter<string>("filterDate", "");
+  const [filterDateFrom, setFilterDateFrom] = usePageFilter<string>("filterDateFrom", "");
+  const [filterDateTo, setFilterDateTo] = usePageFilter<string>("filterDateTo", "");
   const [currentRole, setCurrentRole] = useState<string | null>(null);
   const [formTotalEggs, setFormTotalEggs] = useState("");
   const [formDeaths, setFormDeaths] = useState("");
@@ -913,21 +915,9 @@ export default function DailyRecordsPage() {
           {dateFilterMode === "range" ? (
             <label className={filterLabelClass}>To<input className={inputClass} type="date" value={filterDateTo} onChange={(event) => setFilterDateTo(event.target.value)} /></label>
           ) : null}
-          <label className={filterLabelClass}>Reset
-            <button
-              type="button"
-              className="h-11 rounded-xl border border-sand-200 px-3 text-sm font-medium normal-case tracking-normal text-forest-700 transition hover:border-forest-400 hover:bg-sand-50"
-              onClick={() => {
-                setScope((prev) => ({ ...prev, farmId: "", houseId: "", flockId: "", batchId: "" }));
-                setDateFilterMode("single");
-                setFilterDate("");
-                setFilterDateFrom("");
-                setFilterDateTo("");
-              }}
-            >
-              Clear filters
-            </button>
-          </label>
+          <div className={filterLabelClass}>Reset
+            <ResetPageFilters />
+          </div>
         </div>
       </section>
 

@@ -6,6 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 
 import { useFarmScope } from "@/components/farm-scope-context";
+import { FarmScopeFilters } from "@/components/farm-scope-filters";
 import { createClient } from "@/utils/supabase/client";
 
 type BatchRow = {
@@ -229,6 +230,7 @@ function BatchManagement({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-5 pb-8">
+      {!embedded ? <FarmScopeFilters title="Batch location filters" fields={["branch", "farm", "house", "flock"]} /> : null}
       {!embedded ? <><section className="relative overflow-hidden rounded-[28px] bg-forest-900 px-6 py-7 text-sand-50 sm:px-8 lg:px-10"><div className="absolute -right-20 -top-24 h-64 w-64 rounded-full border-[44px] border-amber-500/10"/><div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[.24em] text-amber-500"><Layers3 className="h-4 w-4"/>Bird-cycle control</div><h1 className="mt-3 max-w-3xl font-display text-3xl font-semibold sm:text-4xl">Start the next batch without losing the lineage of the last.</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100/80">A new branch cycle archives current flock slots and recreates them under one traceable intake and cost record. Review every count before committing.</p></div><button type="button" onClick={()=>void loadRows()} disabled={loading} className="inline-flex h-11 items-center gap-2 self-start rounded-xl border border-white/20 px-4 text-sm font-semibold hover:bg-white/10"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>Refresh</button></div></section><section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><div className="grid divide-y divide-sand-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">{([["Batch cycles",rows.length,Boxes],["Active cycles",rows.filter((row)=>row.status.toLowerCase()==="active").length,CheckCircle2],["Linked flocks",rows.reduce((sum,row)=>sum+row.flock_total,0),Bird],["Birds in latest cycles",rows.reduce((sum,row)=>sum+row.total_chicks,0),PackageOpen]] as Array<[string,number,LucideIcon]>).map(([label,value,Icon])=><div key={label} className="p-5"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[.17em] text-forest-500">{label}</p><Icon className="h-4 w-4 text-forest-500"/></div><p className="mt-2 font-display text-3xl font-semibold text-forest-900">{value.toLocaleString()}</p></div>)}</div></section></> : null}
 
       <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm sm:p-6">

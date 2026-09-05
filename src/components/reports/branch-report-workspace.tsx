@@ -1,6 +1,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
+
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -400,15 +402,15 @@ function LoadingReport() {
 
 export function BranchReportWorkspace() {
   const { scope, period, filteredFlocks, filteredBatches } = useFarmScope();
-  const [dateFrom, setDateFrom] = useState(period.dateFrom);
-  const [dateTo, setDateTo] = useState(period.dateTo);
-  const [view, setView] = useState<ReportView>("summary");
+  const [dateFrom, setDateFrom] = usePageFilter<string>("dateFrom", period.dateFrom);
+  const [dateTo, setDateTo] = usePageFilter<string>("dateTo", period.dateTo);
+  const [view, setView] = usePageFilter<ReportView>("tab", "summary");
   const [data, setData] = useState<OperationsAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => { setDateFrom(period.dateFrom); setDateTo(period.dateTo); }, [period.dateFrom, period.dateTo]);
+
   const scopeKey = `${scope.branchId}|${scope.farmId}|${scope.houseId}|${scope.flockId}|${scope.batchId}|${filteredFlocks.length}|${filteredBatches.length}`;
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -444,6 +446,7 @@ export function BranchReportWorkspace() {
 
   return (
     <main className="min-w-0 space-y-5">
+      <div className="flex justify-end"><ResetPageFilters /></div>
       <header className="relative overflow-hidden rounded-3xl border border-forest-700 bg-forest-900 p-5 text-white shadow-sm sm:p-7">
         <div className="pointer-events-none absolute -right-24 -top-28 h-72 w-72 rounded-full border-[46px] border-amber-400/10" aria-hidden="true" />
         <div className="relative">

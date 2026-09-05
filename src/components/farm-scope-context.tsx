@@ -1,7 +1,8 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback, Suspense, Fragment } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { pageFilterStorageKey, readPageFilters, writePageFilters, type PageFilterValues } from "@/lib/page-filter-state";
 
 type ScopeState = {
   branchId: string;
@@ -37,6 +38,9 @@ type ScopeContextValue = {
   setScope: React.Dispatch<React.SetStateAction<ScopeState>>;
   period: ReportingPeriod;
   setPeriod: React.Dispatch<React.SetStateAction<ReportingPeriod>>;
+  filterValues: PageFilterValues;
+  setFilterValue: (key: string, value: string) => void;
+  resetFilters: () => void;
   branches: Branch[];
   farms: Farm[];
   houses: House[];
@@ -49,8 +53,6 @@ type ScopeContextValue = {
 };
 
 const initialScope: ScopeState = { branchId: "", farmId: "", batchId: "", houseId: "", flockId: "" };
-const SCOPE_STORAGE_KEY = "app_scope_state_v1";
-const PERIOD_STORAGE_KEY = "app_reporting_period_v1";
 
 function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -92,6 +94,18 @@ function normalizeScope(scope: ScopeState, options: { branches: Branch[]; farms:
 const ScopeContext = createContext<ScopeContextValue | null>(null);
 
 export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  return <Suspense fallback={<p role="status" className="p-6 text-forest-700">Loading workspace…</p>}><PageScopeProvider key={pathname} pathname={pathname}>{children}</PageScopeProvider></Suspense>;
+}
+
+function PageScopeProvider({ children, pathname }: { children: React.ReactNode; pathname: string }) {
+  const searchParams = useSearchParams();
+  const search = searchParams.toString();
+  const destinationKey = ["finding", "flock", "batch", "record", "record_id", "source_id", "approval", "authorization", "request"].map(key => searchParams.get(key) ?? "").join("|");
+  const lastSearch = useRef(search);
+  const storageKey = useRef("");
+  const [filterValues, setFilterValues] = useState<PageFilterValues>({});
+  const setFilterValue = useCallback((key: string, value: string) => setFilterValues(current => current[key] === value ? current : ({ ...current, [key]: value })), []);
   const [role, setRole] = useState<string | null>(null);
   const [isFarmManager, setIsFarmManager] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -103,35 +117,33 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
   const [flocks, setFlocks] = useState<Flock[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(SCOPE_STORAGE_KEY);
-    if (saved) {
-      try {
-        setScope(JSON.parse(saved) as ScopeState);
-      } catch {
-        setScope(initialScope);
-      }
-    }
+  const restoreFilters = useCallback((values: PageFilterValues, options: { branches: Branch[]; farms: Farm[]; houses: House[]; flocks: Flock[]; batches: Batch[] }) => {
+    const nextScope = { ...initialScope };
+    for (const key of Object.keys(nextScope) as Array<keyof ScopeState>) nextScope[key] = values[key] ?? "";
+    if (!Object.keys(values).length && options.farms.length === 1 && !new URLSearchParams(window.location.search).has("finding")) nextScope.farmId = options.farms[0].id;
+    setScope(normalizeScope(nextScope, options));
+    const preset = values.preset;
+    if (preset === "custom" && /^\d{4}-\d{2}-\d{2}$/.test(values.dateFrom ?? "") && /^\d{4}-\d{2}-\d{2}$/.test(values.dateTo ?? "") && values.dateFrom <= values.dateTo) {
+      setPeriod({ preset, dateFrom: values.dateFrom, dateTo: values.dateTo });
+    } else setPeriod(reportingPeriodFor(preset === "today" || preset === "7d" || preset === "30d" || preset === "qtd" ? preset : "mtd"));
+    setFilterValues(values);
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem(PERIOD_STORAGE_KEY);
-    if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved) as ReportingPeriod;
-      if (parsed.dateFrom && parsed.dateTo && parsed.dateFrom <= parsed.dateTo) setPeriod(parsed);
-    } catch {
-      setPeriod(reportingPeriodFor("mtd"));
+    if (loading || !storageKey.current) return;
+    if (search !== lastSearch.current) {
+      lastSearch.current = search;
+      restoreFilters(readPageFilters(search, null), { branches, farms, houses, flocks, batches });
+      return;
     }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(SCOPE_STORAGE_KEY, JSON.stringify(scope));
-  }, [scope]);
-
-  useEffect(() => {
-    localStorage.setItem(PERIOD_STORAGE_KEY, JSON.stringify(period));
-  }, [period]);
+    const values = { ...filterValues, ...scope, ...period };
+    try { localStorage.setItem(storageKey.current, JSON.stringify(values)); } catch { /* Filters still work when browser storage is unavailable. */ }
+    const next = writePageFilters(window.location.search, values);
+    if (next !== search) {
+      lastSearch.current = next;
+      window.history.replaceState(null, "", `${pathname}?${next}${window.location.hash}`);
+    }
+  }, [loading, search, filterValues, scope, period, pathname, branches, farms, houses, flocks, batches, restoreFilters]);
 
   useEffect(() => {
     const loadScopeData = async () => {
@@ -173,20 +185,21 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
       setHouses(nextHouses);
       setFlocks(nextFlocks);
       setBatches(nextBatches);
-      setScope((prev) =>
-        normalizeScope(prev, {
+      storageKey.current = pageFilterStorageKey(orgId, userId, pathname);
+      let saved: string | null = null;
+      try { saved = localStorage.getItem(storageKey.current); } catch { /* Use URL/defaults. */ }
+      restoreFilters(readPageFilters(window.location.search, saved), {
           branches: nextBranches,
           farms: effectiveFarms,
           houses: nextHouses,
           flocks: nextFlocks,
           batches: nextBatches,
-        })
-      );
+        });
 
       setLoading(false);
     };
-    void loadScopeData();
-  }, []);
+    void loadScopeData().catch(() => setLoading(false));
+  }, [pathname, restoreFilters]);
 
   const filteredFarms = useMemo(
     () => (scope.branchId ? farms.filter((f) => f.branch_id === scope.branchId) : farms),
@@ -223,6 +236,9 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
         setScope,
         period,
         setPeriod,
+        filterValues,
+        setFilterValue,
+        resetFilters: () => { setScope(initialScope); setPeriod(reportingPeriodFor("mtd")); setFilterValues({}); },
         branches,
         farms,
         houses,
@@ -234,7 +250,7 @@ export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
         filteredBatches,
       }}
     >
-      {children}
+      {loading ? <p role="status" className="p-6 text-forest-700">Loading workspace…</p> : <Fragment key={destinationKey}>{children}</Fragment>}
     </ScopeContext.Provider>
   );
 }

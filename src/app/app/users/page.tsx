@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageFilter, ResetPageFilters, PageSelectFilter } from "@/components/page-filter-controls";
+
 import { useEffect, useMemo, useState } from "react";
 
 import type { Database } from "@/types/supabase";
@@ -44,6 +46,10 @@ const roleOptions: Array<{ value: AppRole; label: string }> = [
 ];
 
 export default function UsersPage() {
+  const [userSearch,setUserSearch]=usePageFilter<string>("search","");
+  const [roleFilter,setRoleFilter]=usePageFilter<string>("role","");
+  const [farmFilter,setFarmFilter]=usePageFilter<string>("farm","");
+  const [warehouseFilter,setWarehouseFilter]=usePageFilter<string>("warehouse","");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
@@ -157,6 +163,13 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
+      <div className="grid items-end gap-3 rounded-2xl border border-sand-200 bg-white p-4 sm:grid-cols-2 xl:grid-cols-5">
+        <label className="grid gap-1 text-xs font-semibold text-forest-700">Find a user<input value={userSearch} onChange={event=>setUserSearch(event.target.value)} placeholder="Search by name" className="min-h-11 rounded-xl border border-sand-300 px-3 text-sm"/></label>
+        <PageSelectFilter label="Roles" value={roleFilter} onChange={setRoleFilter} options={roleOptions}/>
+        <PageSelectFilter label="Assigned farms" value={farmFilter} onChange={setFarmFilter} options={farms.map(row=>({value:row.id,label:row.name}))}/>
+        <PageSelectFilter label="Assigned warehouses" value={warehouseFilter} onChange={setWarehouseFilter} options={warehouses.map(row=>({value:row.id,label:row.name}))}/>
+        <ResetPageFilters />
+      </div>
       <div>
         <p className="text-xs uppercase tracking-[0.3em] text-forest-500">Users and roles</p>
         <h2 className="text-2xl font-semibold text-forest-900">Operational Access Governance</h2>
@@ -227,7 +240,7 @@ export default function UsersPage() {
                 <tr><td className="px-2 py-4 text-forest-600" colSpan={7}>Loading users...</td></tr>
               ) : profiles.length === 0 ? (
                 <tr><td className="px-2 py-4 text-forest-600" colSpan={7}>No users found.</td></tr>
-              ) : profiles.map((profile) => {
+              ) : profiles.filter(profile=>(!userSearch||(profile.full_name??"").toLowerCase().includes(userSearch.toLowerCase()))&&(!roleFilter||profile.role===roleFilter)&&(!farmFilter||farmAccess.some(access=>access.profile_id===profile.id&&access.farm_id===farmFilter&&access.assignment_status==="active"))&&(!warehouseFilter||warehouseAccess.some(access=>access.profile_id===profile.id&&access.warehouse_id===warehouseFilter&&access.assignment_status==="active"))).map((profile) => {
                 const userFarms = farmAccess.filter((access) => access.profile_id === profile.id&&activeAssignment(access)).map((access) => farmNameMap.get(access.farm_id) ?? access.farm_id);
                 const userWarehouses=warehouseAccess.filter(access=>access.profile_id===profile.id&&activeAssignment(access)).map(access=>warehouses.find(row=>row.id===access.warehouse_id)?.name??access.warehouse_id);
                 return (

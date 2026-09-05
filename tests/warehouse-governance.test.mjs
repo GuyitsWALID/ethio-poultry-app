@@ -34,7 +34,7 @@ test("inventory presents warehouse-specific balances and setup", () => {
   assert.match(page, /Working warehouse/);
   assert.match(page, /Enter everything currently on the shelf/);
   assert.match(page, /create and assign a warehouse/i);
-  assert.match(page,/inventory:last-warehouse/);
+  assert.match(page,/usePageFilter<string>\("warehouseId", ""\)/);
 });
 
 test("CEO can discover the access page and load assignable farm managers through the governed API", () => {

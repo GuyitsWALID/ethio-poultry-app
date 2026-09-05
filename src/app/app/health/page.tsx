@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -101,11 +103,11 @@ const ScheduleTypeIcon = ({ type, className = "h-4 w-4" }: { type: ScheduleItem[
 
 export default function HealthPage() {
   const { scope, filteredFarms, filteredHouses, filteredFlocks, batches } = useFarmScope();
-  const [healthFarmId, setHealthFarmId] = useState("");
-  const [healthHouseId, setHealthHouseId] = useState("");
-  const [healthFlockId, setHealthFlockId] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | ScheduleItem["status"]>("all");
-  const [typeFilter, setTypeFilter] = useState<"all" | ScheduleItem["type"]>("all");
+  const [healthFarmId, setHealthFarmId] = usePageFilter<string>("healthFarmId", "");
+  const [healthHouseId, setHealthHouseId] = usePageFilter<string>("healthHouseId", "");
+  const [healthFlockId, setHealthFlockId] = usePageFilter<string>("healthFlockId", "");
+  const [statusFilter, setStatusFilter] = usePageFilter<"all" | ScheduleItem["status"]>("statusFilter", "all");
+  const [typeFilter, setTypeFilter] = usePageFilter<"all" | ScheduleItem["type"]>("typeFilter", "all");
   const [vaccFarmId, setVaccFarmId] = useState("");
   const [vaccHouseId, setVaccHouseId] = useState("");
   const [vaccFlockId, setVaccFlockId] = useState("");
@@ -906,6 +908,7 @@ export default function HealthPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1500px] min-w-0 space-y-5">
+      <div className="flex justify-end"><ResetPageFilters /></div>
       <header className="relative overflow-hidden rounded-3xl border border-forest-700 bg-forest-900 p-5 text-white shadow-sm sm:p-7">
         <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full border-[42px] border-leaf-500/10" aria-hidden="true" />
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">

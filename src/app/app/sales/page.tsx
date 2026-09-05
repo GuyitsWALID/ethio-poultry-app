@@ -1,6 +1,9 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+import { usePageFilter } from "@/components/page-filter-controls";
+import { FarmScopeFilters } from "@/components/farm-scope-filters";
+
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ReferenceLine, XAxis, YAxis } from "recharts";
 import {
@@ -233,16 +236,15 @@ export default function SalesPage() {
     houses,
     flocks,
     batches,
-    period,
   } = useFarmScope();
   const [records, setRecords] = useState<SalesRecord[]>([]);
   const [analytics, setAnalytics] = useState<Analytics>(emptyAnalytics);
-  const [dateFrom, setDateFrom] = useState(defaultFrom.toISOString().slice(0, 10));
-  const [dateTo, setDateTo] = useState(today);
-  const [productCategory, setProductCategory] = useState("");
-  const [trendWindow, setTrendWindow] = useState<"daily" | "weekly" | "monthly" | "quarterly">("daily");
-  const [recordSearch, setRecordSearch] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState<"all" | "paid" | "open">("all");
+  const [dateFrom, setDateFrom] = usePageFilter<string>("dateFrom", defaultFrom.toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = usePageFilter<string>("dateTo", today);
+  const [productCategory, setProductCategory] = usePageFilter<string>("productCategory", "");
+  const [trendWindow, setTrendWindow] = usePageFilter<"daily" | "weekly" | "monthly" | "quarterly">("trendWindow", "daily");
+  const [recordSearch, setRecordSearch] = usePageFilter<string>("recordSearch", "");
+  const [paymentStatus, setPaymentStatus] = usePageFilter<"all" | "paid" | "open">("paymentStatus", "all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -258,12 +260,6 @@ export default function SalesPage() {
   );
 
   const canMutate = role === "farm_manager";
-  useEffect(() => {
-    if (role === "ceo") {
-      setDateFrom(period.dateFrom);
-      setDateTo(period.dateTo);
-    }
-  }, [period.dateFrom, period.dateTo, role]);
   const branchName = useMemo(() => new Map(branches.map((item) => [item.id, item.name])), [branches]);
   const farmName = useMemo(() => new Map(farms.map((item) => [item.id, item.name])), [farms]);
   const flockName = useMemo(() => new Map(flocks.map((item) => [item.id, item.flock_code])), [flocks]);
@@ -432,6 +428,7 @@ export default function SalesPage() {
 
   return (
     <div className="space-y-5 pb-8">
+      <FarmScopeFilters title="Sales source filters" />
       <section className="relative overflow-hidden rounded-[28px] bg-forest-900 px-6 py-7 text-sand-50 shadow-sm sm:px-8 lg:px-10 lg:py-9">
         <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full border-[44px] border-amber-500/10" aria-hidden="true" />
         <div className="absolute -bottom-24 right-36 h-52 w-52 rounded-full bg-leaf-500/10" aria-hidden="true" />

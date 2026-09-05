@@ -1,5 +1,7 @@
 "use client";
 
+import { usePageFilter, ResetPageFilters, PageSelectFilter } from "@/components/page-filter-controls";
+
 import {
   AlertTriangle,
   ArrowRight,
@@ -75,9 +77,12 @@ export default function ReconciliationPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [domain, setDomain] = useState("all");
-  const [view, setView] = useState<View>("open");
-  const [query, setQuery] = useState("");
+  const [domain, setDomain] = usePageFilter<string>("domain", "all");
+  const [farm, setFarm] = usePageFilter<string>("farm", "");
+  const [warehouse, setWarehouse] = usePageFilter<string>("warehouse", "");
+  const [severity, setSeverity] = usePageFilter<string>("severity", "");
+  const [view, setView] = usePageFilter<View>("tab", "open");
+  const [query, setQuery] = usePageFilter<string>("query", "");
   const [busy, setBusy] = useState("");
   const [actionRequest, setActionRequest] = useState<ActionRequest | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
@@ -113,13 +118,17 @@ export default function ReconciliationPage() {
   }), [data]);
 
   const findings = useMemo(() => data?.findings.filter((item) => {
+    if (item.id === selected) return true;
+    if (farm && item.farm_name !== farm) return false;
+    if (warehouse && item.warehouse_name !== warehouse) return false;
+    if (severity && item.severity !== severity) return false;
     const viewMatch = view === "all"
       || (view === "open" && activeStatuses.has(item.status))
       || (view === "verified" && closedStatuses.has(item.status))
       || (view === "exceptions" && item.status === "accepted_exception");
     const text = `${item.title} ${item.rule_code} ${item.farm_name} ${item.flock_code} ${item.warehouse_name}`.toLowerCase();
     return viewMatch && (domain === "all" || item.domain === domain) && (!query || text.includes(query.toLowerCase()));
-  }) ?? [], [data, domain, query, view]);
+  }) ?? [], [data, domain, query, view, selected, farm, warehouse, severity]);
 
   useEffect(() => {
     if (selected) document.getElementById(`finding-${selected}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -162,6 +171,12 @@ export default function ReconciliationPage() {
   if (!data) return null;
 
   return <main className="space-y-5 pb-12">
+      <div className="flex justify-end"><ResetPageFilters /></div>
+      <div className="grid gap-3 rounded-2xl border border-sand-200 bg-white p-4 sm:grid-cols-3">
+        <PageSelectFilter label="Farms" value={farm} onChange={setFarm} options={[...new Set(data?.findings.map(item => item.farm_name).filter((name): name is string => Boolean(name)) ?? [])].map(value => ({value,label:value}))}/>
+        <PageSelectFilter label="Warehouses" value={warehouse} onChange={setWarehouse} options={[...new Set(data?.findings.map(item => item.warehouse_name).filter((name): name is string => Boolean(name)) ?? [])].map(value => ({value,label:value}))}/>
+        <PageSelectFilter label="Severities" value={severity} onChange={setSeverity} options={[{value:"critical",label:"Critical"},{value:"high",label:"High"},{value:"medium",label:"Medium"},{value:"low",label:"Low"}]}/>
+      </div>
     <section className="relative overflow-hidden rounded-[1.75rem] bg-forest-900 px-5 py-7 text-white shadow-sm sm:px-8 sm:py-9">
       <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full border-[38px] border-amber-400/10"/>
       <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end">

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { AlertTriangle, Check, ChevronDown, Clock3, PackageOpen, RefreshCw, Scale, Wheat, X } from "lucide-react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
+import { FarmScopeFilters } from "@/components/farm-scope-filters";
 
 type Metric = { value: number | null; unit: string; status: string; reason?: string; label?: string; actualKg?: number; plannedKg?: number; variancePct?: number | null; uniformityPct?: number | null; sampleCount?: number; kind?: string };
 type Session = { id: string | null; session_name: string; session_time: string | null; planned_feed_kg: number; actual_feed_kg: number | null; feeders_count: number; status: string; feed_item_id: string | null; warehouse_id: string | null; feed_type: string | null; notes: string | null };
@@ -90,6 +91,7 @@ export default function FeedControlPage() {
   if (scopeLoading || (!scope.batchId && activeBatches.length > 0)) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10"><LoadingState /></main>;
 
   if (!scope.batchId) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10">
+    <FarmScopeFilters title="Feed Control filters" fields={["branch", "farm"]} showPeriod />
     <section className="rounded-3xl border border-[#ded2bc] bg-[#183324] p-7 text-white shadow-sm sm:p-10">
       <p className="text-xs font-semibold uppercase tracking-[.25em] text-[#d8c89a]">Feed control</p><h1 className="mt-3 text-3xl font-semibold">No active batch is available</h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-[#d6dfd8]">Feed Control opens active batches only. Activate or create a batch for the selected farm and house to begin the daily feed ledger.</p>
@@ -98,6 +100,7 @@ export default function FeedControlPage() {
   </main>;
 
   return <main className="mx-auto w-full max-w-[1560px] space-y-6 p-4 sm:p-6 lg:p-10">
+    <FarmScopeFilters title="Feed Control filters" fields={["branch", "farm"]} showPeriod />
     <header className="flex flex-col gap-4 rounded-3xl border border-[#ded2bc] bg-[#183324] p-6 text-white shadow-sm lg:flex-row lg:items-end lg:justify-between">
       <div><p className="text-[11px] font-semibold uppercase tracking-[.25em] text-[#dac99c]">Daily ration ledger</p><h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Feed Control</h1><p className="mt-2 text-sm text-[#d6dfd8]">{data ? `${data.batch.batch_code} · age ${data.batch.ageDays} days · ${data.batch.totalBirds.toLocaleString()} live birds` : "Loading batch context…"}</p></div>
       <div className="flex flex-wrap items-end gap-2 text-xs">
