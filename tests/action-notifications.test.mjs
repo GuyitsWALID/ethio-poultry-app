@@ -25,16 +25,31 @@ test("action events publish durable role-aware notifications", () => {
   assert.match(service, /recipient_id,action_event_id/);
   assert.match(service, /notifyOwner/);
   assert.match(service, /notifyCeo/);
+  assert.match(service, /if \(notifyOwner && ownerId\) recipients\.add\(ownerId\)/);
+  assert.doesNotMatch(service, /notifyCeo = \[[^\]]*"assigned"/s);
   assert.match(service, /"resolution_submitted", "verification_failed", "system_verified"/);
   assert.match(service, /recipients\.delete\(actorId\)/);
   assert.match(service, /severityRank/);
+  assert.match(actionService, /actor_name_snapshot,actor_role_snapshot/);
+  assert.match(service, /New task assigned by/);
+  assert.match(service, /notification\.eventType === "assigned" \|\| allows/);
+  assert.match(service, /notifications_action_event_id_fkey\(actor_name_snapshot,actor_role_snapshot\)/);
 });
 
 test("notification experience supports unread state and user-controlled thresholds", () => {
   assert.match(bell, /unreadCount/);
+  assert.match(bell, /\/api\/alerts\/header/);
+  assert.match(bell, /Needs attention/);
+  assert.match(bell, /Updates/);
+  assert.match(bell, /Unfinished work stays visible until system verification/);
+  assert.match(bell, /Owner: Not assigned/);
   assert.match(bell, /mark_read/);
   assert.match(bell, /mark_all_read/);
+  assert.match(bell, /Open task in Action Desk/);
+  assert.match(bell, /Notification settings/);
+  assert.match(bell, /if \(!open && unreadCount > 0\) setView\("updates"\)/);
   assert.match(settings, /update_preferences/);
+  assert.match(settings, /Tasks assigned directly by the CEO always appear/);
   assert.match(settings, /Changing notifications never changes ownership, deadlines, escalation, or verification/);
 });
 

@@ -30,12 +30,14 @@ function allows(threshold: InAppThreshold | NotificationSeverity, severity: Noti
   return severityRank[severity] >= severityRank[threshold];
 }
 
-function copy(eventType: string, action: Row) {
+function copy(eventType: string, action: Row, event: Row) {
   const owner = text((action.owner as Row | null)?.full_name) || "the assigned Farm Manager";
-  const title = text(action.title) || "Operational action updated";
+  const actorName = text(event.actor_name_snapshot) || "System";
+  const actionTitle = text(action.title) || "Operational action updated";
+  const context = text(action.context) || actionTitle;
   const messages: Record<string, string> = {
     discovered: "A deterministic check created a new action that needs CEO assignment.",
-    assigned: `This action was assigned to ${owner}. Open it to acknowledge responsibility and inspect the source.`,
+    assigned: `${context} Open it in Action Desk for details and the next step.`,
     claimed: `${owner} claimed this action and is now responsible for the next step.`,
     acknowledged: `${owner} acknowledged responsibility for this action.`,
     work_started: `${owner} started investigating this action.`,
@@ -46,7 +48,10 @@ function copy(eventType: string, action: Row) {
     reopened: "The originating check reported this issue again after an earlier resolution.",
     due_date_changed: "The CEO changed the due date for this assigned action.",
   };
-  return { title, message: messages[eventType] ?? "This operational action has new activity." };
+  return {
+    title: eventType === "assigned" ? `New task assigned by ${actorName}` : actionTitle,
+    message: messages[eventType] ?? "This operational action has new activity.",
+  };
 }
 
 async function recipientsFor(eventType: string, action: Row, actorId: string | null) {
@@ -68,7 +73,7 @@ export async function publishActionEventNotifications(input: { action: Row; even
     const eventType = text(input.event.event_type);
     const recipients = await recipientsFor(eventType, input.action, text(input.event.actor_id) || null);
     if (!recipients.length) return { created: 0 };
-    const content = copy(eventType, input.action);
+    const content = copy(eventType, input.action, input.event);
     const rows = recipients.map((recipientId) => ({
       org_id: input.action.org_id,
       recipient_id: recipientId,
@@ -100,9 +105,18 @@ async function loadPreference(ctx: AccessContext): Promise<NotificationPreferenc
 }
 
 function item(row: Row): NotificationItem {
+  const action = row.action as Row | null;
+  const actionEvent = row.action_event as Row | null;
+  const eventType = text(row.event_type);
+  const actorName = text(actionEvent?.actor_name_snapshot) || (eventType === "assigned" ? "System" : "");
+  const actionContext = text(action?.context) || null;
   return {
-    id: text(row.id), actionId: text(row.action_id), eventType: text(row.event_type),
-    severity: text(row.severity) as NotificationSeverity, title: text(row.title), message: text(row.message),
+    id: text(row.id), actionId: text(row.action_id), eventType,
+    severity: text(row.severity) as NotificationSeverity,
+    title: eventType === "assigned" ? `New task assigned by ${actorName}` : text(row.title),
+    message: eventType === "assigned" && actionContext ? `${actionContext} Open it in Action Desk for details and the next step.` : text(row.message),
+    actorName: actorName || null, actorRole: text(actionEvent?.actor_role_snapshot) || null,
+    actionContext, dueAt: text(action?.due_at) || null,
     route: text(row.route), readAt: text(row.read_at) || null, createdAt: text(row.created_at),
   };
 }
@@ -110,10 +124,10 @@ function item(row: Row): NotificationItem {
 export async function loadNotificationCenter(ctx: AccessContext): Promise<NotificationCenter> {
   const [preferences, notificationResult] = await Promise.all([
     loadPreference(ctx),
-    db.from("notifications").select("id,action_id,event_type,severity,title,message,route,read_at,created_at").eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).order("created_at", { ascending: false }).limit(50),
+    db.from("notifications").select("id,action_id,event_type,severity,title,message,route,read_at,created_at,action:operational_actions!notifications_action_id_fkey(context,due_at),action_event:operational_action_events!notifications_action_event_id_fkey(actor_name_snapshot,actor_role_snapshot)").eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).order("created_at", { ascending: false }).limit(50),
   ]);
   if (notificationResult.error) throw new Error(notificationResult.error.message);
-  const notifications = (notificationResult.data ?? []).map(item).filter((notification: NotificationItem) => allows(preferences.inAppMinimumSeverity, notification.severity));
+  const notifications = (notificationResult.data ?? []).map(item).filter((notification: NotificationItem) => notification.eventType === "assigned" || allows(preferences.inAppMinimumSeverity, notification.severity));
   const readiness = emailDeliveryReadiness();
   return {
     notifications,

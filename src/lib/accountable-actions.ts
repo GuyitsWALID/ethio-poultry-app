@@ -54,7 +54,7 @@ async function event(ctx: AccessContext, actionId: string, eventType: string, be
     actor_name_snapshot: who.name, actor_role_snapshot: who.role, note: note ?? null,
     evidence: evidence ?? null, before_status: before, after_status: after,
     support_session_id: ctx.supportSessionId,
-  }).select("id,org_id,action_id,event_type,actor_id,created_at").single();
+  }).select("id,org_id,action_id,event_type,actor_id,actor_name_snapshot,actor_role_snapshot,created_at").single();
   if (error) throw new Error(`Action history could not be recorded: ${error.message}`);
   const { data: action } = await db.from("operational_actions").select("*,owner:profiles!operational_actions_owner_id_fkey(full_name)").eq("id", actionId).maybeSingle();
   if (action && created) await publishActionEventNotifications({ action, event: created });

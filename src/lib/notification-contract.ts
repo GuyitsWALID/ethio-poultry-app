@@ -17,6 +17,10 @@ export type NotificationItem = {
   severity: NotificationSeverity;
   title: string;
   message: string;
+  actorName: string | null;
+  actorRole: string | null;
+  actionContext: string | null;
+  dueAt: string | null;
   route: string;
   readAt: string | null;
   createdAt: string;

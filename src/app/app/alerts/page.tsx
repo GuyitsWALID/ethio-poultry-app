@@ -50,6 +50,10 @@ export default function AlertsPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (window.location.hash !== "#notification-settings") return;
+    window.requestAnimationFrame(() => document.getElementById("notification-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }, []);
 
   const update = useCallback(async (actionId: string, body: Record<string, unknown>) => {
     setBusy(actionId); setError("");
