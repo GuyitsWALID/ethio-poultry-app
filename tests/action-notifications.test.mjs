@@ -32,7 +32,7 @@ test("action events publish durable role-aware notifications", () => {
   assert.match(service, /severityRank/);
   assert.match(actionService, /actor_name_snapshot,actor_role_snapshot/);
   assert.match(service, /New task assigned by/);
-  assert.match(service, /notification\.eventType === "assigned" \|\| allows/);
+  assert.match(service, /\["assigned", "resolution_submitted"\]\.includes\(notification\.eventType\) \|\| allows/);
   assert.match(service, /notifications_action_event_id_fkey\(actor_name_snapshot,actor_role_snapshot\)/);
 });
 

@@ -57,7 +57,10 @@ export function HeaderAlertBell() {
     finally { setAttentionLoading(false); }
   }, []);
 
-  const load = useCallback(() => { void loadNotifications(); void loadAttention(); }, [loadAttention, loadNotifications]);
+  const load = useCallback(async () => {
+    await loadAttention();
+    await loadNotifications();
+  }, [loadAttention, loadNotifications]);
 
   const command = useCallback(async (body: Record<string, unknown>) => {
     const response = await fetch("/api/notifications", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), keepalive: true });
@@ -90,6 +93,7 @@ export function HeaderAlertBell() {
   };
 
   const toggleBell = () => {
+    if (!open) load();
     if (!open && unreadCount > 0) setView("updates");
     setOpen((value) => !value);
   };

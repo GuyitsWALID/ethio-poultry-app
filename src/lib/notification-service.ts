@@ -41,7 +41,7 @@ function copy(eventType: string, action: Row, event: Row) {
     claimed: `${owner} claimed this action and is now responsible for the next step.`,
     acknowledged: `${owner} acknowledged responsibility for this action.`,
     work_started: `${owner} started investigating this action.`,
-    resolution_submitted: `${owner} submitted correction evidence. The source now needs deterministic verification.`,
+    resolution_submitted: `${actorName} marked this task complete. Review the corrected source, then verify and close it in Action Desk.`,
     verification_failed: "The source check still reports this issue. Review the correction and try verification again.",
     system_verified: "The originating check no longer reports this issue. The action has been verified and closed.",
     escalated: "This action passed its due date without verified resolution and now requires management attention.",
@@ -49,7 +49,7 @@ function copy(eventType: string, action: Row, event: Row) {
     due_date_changed: "The CEO changed the due date for this assigned action.",
   };
   return {
-    title: eventType === "assigned" ? `New task assigned by ${actorName}` : actionTitle,
+    title: eventType === "assigned" ? `New task assigned by ${actorName}` : eventType === "resolution_submitted" ? `Task completed by ${actorName}` : actionTitle,
     message: messages[eventType] ?? "This operational action has new activity.",
   };
 }
@@ -110,11 +110,15 @@ function item(row: Row): NotificationItem {
   const eventType = text(row.event_type);
   const actorName = text(actionEvent?.actor_name_snapshot) || (eventType === "assigned" ? "System" : "");
   const actionContext = text(action?.context) || null;
+  const sourceCleared = Boolean(action?.source_resolved_at) && text(action?.status) !== "resolved";
+  const sourceClearedMessage = text(action?.status) === "awaiting_verification"
+    ? "The correction was submitted and the source check is clear. CEO review is pending."
+    : "The source check is now clear. Confirm completion and send the task to the CEO for review.";
   return {
     id: text(row.id), actionId: text(row.action_id), eventType,
     severity: text(row.severity) as NotificationSeverity,
-    title: eventType === "assigned" ? `New task assigned by ${actorName}` : text(row.title),
-    message: eventType === "assigned" && actionContext ? `${actionContext} Open it in Action Desk for details and the next step.` : text(row.message),
+    title: sourceCleared ? `Source corrected: ${text(action?.title) || text(row.title)}` : eventType === "assigned" ? `New task assigned by ${actorName}` : text(row.title),
+    message: sourceCleared ? sourceClearedMessage : eventType === "assigned" && actionContext ? `${actionContext} Open it in Action Desk for details and the next step.` : text(row.message),
     actorName: actorName || null, actorRole: text(actionEvent?.actor_role_snapshot) || null,
     actionContext, dueAt: text(action?.due_at) || null,
     route: text(row.route), readAt: text(row.read_at) || null, createdAt: text(row.created_at),
@@ -124,10 +128,10 @@ function item(row: Row): NotificationItem {
 export async function loadNotificationCenter(ctx: AccessContext): Promise<NotificationCenter> {
   const [preferences, notificationResult] = await Promise.all([
     loadPreference(ctx),
-    db.from("notifications").select("id,action_id,event_type,severity,title,message,route,read_at,created_at,action:operational_actions!notifications_action_id_fkey(context,due_at),action_event:operational_action_events!notifications_action_event_id_fkey(actor_name_snapshot,actor_role_snapshot)").eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).order("created_at", { ascending: false }).limit(50),
+    db.from("notifications").select("id,action_id,event_type,severity,title,message,route,read_at,created_at,action:operational_actions!notifications_action_id_fkey(title,context,status,source_resolved_at,due_at),action_event:operational_action_events!notifications_action_event_id_fkey(actor_name_snapshot,actor_role_snapshot)").eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).order("created_at", { ascending: false }).limit(50),
   ]);
   if (notificationResult.error) throw new Error(notificationResult.error.message);
-  const notifications = (notificationResult.data ?? []).map(item).filter((notification: NotificationItem) => notification.eventType === "assigned" || allows(preferences.inAppMinimumSeverity, notification.severity));
+  const notifications = (notificationResult.data ?? []).map(item).filter((notification: NotificationItem) => ["assigned", "resolution_submitted"].includes(notification.eventType) || allows(preferences.inAppMinimumSeverity, notification.severity));
   const readiness = emailDeliveryReadiness();
   return {
     notifications,

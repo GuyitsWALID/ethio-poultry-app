@@ -79,6 +79,44 @@ declare
   v_number numeric;
 begin
 
+  -- A first receipt for an existing catalogue item must keep the selected
+  -- item after the idempotency lookup returns no prior movement.
+  v_result := public.receive_inventory_stock(
+    v_manager,
+    v_warehouse,
+    v_health_item,
+    null,
+    5,
+    40,
+    v_day,
+    'monthly',
+    'Integration Supplier',
+    'INTEGRATION-RESTOCK-1',
+    'Existing item restock',
+    'integration-existing-item-restock'
+  );
+  if (v_result->>'item_id')::uuid <> v_health_item then
+    raise exception 'Existing-item receipt returned the wrong catalogue item.';
+  end if;
+  perform public.receive_inventory_stock(
+    v_manager,
+    v_warehouse,
+    v_health_item,
+    null,
+    5,
+    40,
+    v_day,
+    'monthly',
+    'Integration Supplier',
+    'INTEGRATION-RESTOCK-1',
+    'Existing item restock',
+    'integration-existing-item-restock'
+  );
+  select count(*) into v_count from public.stock_ledger
+  where org_id = v_org and item_id = v_health_item and warehouse_id = v_warehouse
+    and source_kind = 'inventory_receipt' and source_key = 'integration-existing-item-restock';
+  if v_count <> 1 then raise exception 'Repeated receipt produced % movements, expected one.', v_count; end if;
+
   -- Daily Records owns non-feed observations and health usage.
   v_result := public.save_daily_record_with_usage(
     v_manager,

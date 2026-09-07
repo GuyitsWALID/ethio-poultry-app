@@ -11,6 +11,7 @@ const dailyRecords = await readFile(new URL("../src/app/app/daily-records/page.t
 const healthEventsRoute = await readFile(new URL("../src/app/api/health/events/route.ts", import.meta.url), "utf8");
 const warehouseFirstMigration = await readFile(new URL("../supabase/migrations/20260824000000_warehouse_first_inventory.sql", import.meta.url), "utf8");
 const receiptMigration = await readFile(new URL("../supabase/migrations/20260824001000_atomic_inventory_receipts.sql", import.meta.url), "utf8");
+const receiptIdentityFix = await readFile(new URL("../supabase/migrations/20260906000000_preserve_receipt_item_identity.sql", import.meta.url), "utf8");
 const vaccinationDateMigration = await readFile(new URL("../supabase/migrations/20260824002000_weekly_operating_grace_and_vaccination_date.sql", import.meta.url), "utf8");
 const healthPage = await readFile(new URL("../src/app/app/health/page.tsx", import.meta.url), "utf8");
 const operations = await readFile(new URL("../src/lib/inventory-operations.ts", import.meta.url), "utf8");
@@ -78,6 +79,13 @@ test("new catalogue items and their first receipt are one warehouse-authorized t
   assert.match(receiptMigration,/record_assigned_inventory_movement/);
   assert.match(page,/\/api\/inventory\/receipts/);
   assert.doesNotMatch(page,/created\.item\.id/);
+});
+
+test("restocking an existing item preserves its identity after an empty idempotency lookup",()=>{
+  assert.match(receiptIdentityFix,/v_existing_item_id uuid/);
+  assert.match(receiptIdentityFix,/select sl\.id, sl\.item_id into v_movement_id, v_existing_item_id/);
+  assert.match(receiptIdentityFix,/v_item_id := p_item_id/);
+  assert.doesNotMatch(receiptIdentityFix,/select sl\.id, sl\.item_id into v_movement_id, v_item_id/);
 });
 
 test("inventory option consumers no longer rely on browser RLS reads", () => {

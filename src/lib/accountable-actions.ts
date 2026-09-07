@@ -21,7 +21,7 @@ const commandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("claim") }),
   z.object({ command: z.literal("acknowledge"), note: z.string().trim().min(4).max(1000) }),
   z.object({ command: z.literal("start"), note: z.string().trim().min(4).max(1000) }),
-  z.object({ command: z.literal("submit_resolution"), note: z.string().trim().min(8).max(2000), evidence: z.string().trim().min(4).max(4000) }),
+  z.object({ command: z.literal("submit_resolution"), note: z.string().trim().min(8).max(2000), evidence: z.string().trim().max(4000).optional() }),
   z.object({ command: z.literal("verify") }),
   z.object({ command: z.literal("set_due"), dueAt: z.string().datetime(), note: z.string().trim().min(4).max(1000) }),
 ]);
@@ -77,6 +77,24 @@ function visible(row: Row, ctx: AccessContext, ids: Awaited<ReturnType<typeof sc
   return Boolean((farmId && ids.farms.has(farmId)) || (warehouseId && ids.warehouses?.has(warehouseId)));
 }
 
+async function inventoryAlertActive(ctx: AccessContext, row: Row): Promise<boolean | null> {
+  const sourceKey = text(row.source_key);
+  if (text(row.source_name) !== "Inventory" || !sourceKey.startsWith("inv-")) return null;
+  const itemId = sourceKey.slice(4);
+  const [itemResult, ledgerResult] = await Promise.all([
+    db.from("inventory_items").select("reorder_level").eq("id", itemId).eq("org_id", ctx.orgId).maybeSingle(),
+    db.from("stock_ledger").select("quantity,transaction_type").eq("item_id", itemId).eq("org_id", ctx.orgId),
+  ]);
+  if (itemResult.error) throw new Error(itemResult.error.message);
+  if (ledgerResult.error) throw new Error(ledgerResult.error.message);
+  if (!itemResult.data || itemResult.data.reorder_level == null) return false;
+  const balance = (ledgerResult.data ?? []).reduce((sum: number, movement: Row) => {
+    const quantity = Number(movement.quantity) || 0;
+    return sum + (["issue", "transfer_out"].includes(text(movement.transaction_type)) ? -quantity : quantity);
+  }, 0);
+  return balance <= Number(itemResult.data.reorder_level);
+}
+
 async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
   const { data: stored, error } = await db.from("operational_actions").select("*").eq("org_id", ctx.orgId);
   if (error) throw new Error(error.message);
@@ -104,7 +122,7 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
     const changes: Row = {
       source_name: alert.source, source_route: alert.route, title: alert.title, context: alert.context,
       severity: alert.severity, farm_id: alert.farmId ?? prior.farm_id ?? null,
-      warehouse_id: alert.warehouseId ?? prior.warehouse_id ?? null, source_last_seen_at: now, updated_at: now,
+      warehouse_id: alert.warehouseId ?? prior.warehouse_id ?? null, source_last_seen_at: now, source_resolved_at: null, updated_at: now,
     };
     if (wasResolved) Object.assign(changes, { status: prior.owner_id ? "assigned" : "open", due_at: actionDeadlineAt(alert.severity), source_resolved_at: null, resolution_summary: null, resolution_evidence: null, escalated_at: null, escalation_reason: null });
     const { error: updateError } = await db.from("operational_actions").update(changes).eq("id", prior.id);
@@ -115,10 +133,15 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
   const activeKeys = new Set(alerts.map((alert) => alert.id));
   const accessible = await scope(ctx);
   for (const row of byKey.values()) {
-    if (text(row.status) !== "awaiting_verification" || activeKeys.has(text(row.source_key)) || !visible(row, ctx, accessible)) continue;
-    const { error: resolveError } = await db.from("operational_actions").update({ status: "resolved", source_resolved_at: now, updated_at: now }).eq("id", row.id).eq("status", "awaiting_verification");
-    if (resolveError) throw new Error(resolveError.message);
-    await event(ctx, text(row.id), "system_verified", "awaiting_verification", "resolved", "The originating check no longer reports this issue.", null, true);
+    if (text(row.status) === "resolved" || activeKeys.has(text(row.source_key)) || !visible(row, ctx, accessible)) continue;
+    if (await inventoryAlertActive(ctx, row) !== false) continue;
+    if (row.source_resolved_at) continue;
+    const baseContext = text(row.context).split(" Source status:", 1)[0];
+    const sourceStatus = text(row.status) === "awaiting_verification"
+      ? "Source status: The source check is clear. The CEO can now review and verify this completed task."
+      : "Source status: The source check is clear. Confirm completion and send this task to the CEO for review.";
+    const { error: clearError } = await db.from("operational_actions").update({ context: `${baseContext} ${sourceStatus}`, source_resolved_at: now, updated_at: now }).eq("id", row.id).is("source_resolved_at", null);
+    if (clearError) throw new Error(clearError.message);
   }
 
   const { data: overdue, error: overdueError } = await db.from("operational_actions").select("id,status").eq("org_id", ctx.orgId).in("status", ["open", "assigned", "acknowledged", "in_progress"]).lt("due_at", now);
@@ -236,11 +259,18 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
     if (command.command === "start") { changes = { ...changes, status: actionStatusAfter("start", before) }; eventType = "work_started"; }
     if (command.command === "submit_resolution") {
       changes = { ...changes, status: actionStatusAfter("submit_resolution", before), resolution_summary: command.note, resolution_evidence: command.evidence, resolution_submitted_by: ctx.userId, resolution_submitted_at: now };
-      eventType = "resolution_submitted"; evidence = command.evidence;
+      if (row.source_resolved_at) {
+        const baseContext = text(row.context).split(" Source status:", 1)[0];
+        changes.context = `${baseContext} Source status: The source check is clear. The CEO can now review and verify this completed task.`;
+      }
+      eventType = "resolution_submitted"; evidence = command.evidence ?? null;
     }
     if (command.command === "verify") {
-      const alerts = await collectOperationalAlerts(ctx);
-      if (alerts.some((alert) => alert.id === text(row.source_key))) {
+      if (ctx.role !== "ceo") throw new Error("Only the CEO can verify and close completed actions.");
+      if (before !== "awaiting_verification") throw new Error("The Farm Manager must complete and submit this task before CEO verification.");
+      const inventoryActive = await inventoryAlertActive(ctx, row);
+      const sourceActive = inventoryActive ?? (await collectOperationalAlerts(ctx)).some((alert) => alert.id === text(row.source_key));
+      if (sourceActive) {
         changes = { ...changes, status: actionStatusAfter("verify", before, true) }; eventType = "verification_failed"; note = "The originating check still reports this issue.";
       } else {
         changes = { ...changes, status: actionStatusAfter("verify", before, false), source_resolved_at: now }; eventType = "system_verified"; note = "The originating check no longer reports this issue.";
