@@ -84,6 +84,18 @@ test("daily series exposes an empty day as a gap", () => {
   assert.equal(series[1].recordCoveragePct, 0);
 });
 
+test("daily series exposes age-specific healthy bands in chart-compatible units", () => {
+  const standards = new Map([["breed-a", [{ week_number: 28, target_hdep_pct: 90, target_mortality_pct: 0.14, target_feed_g: 110, target_weight_g: null }]]]);
+  const series = buildDailySeries([daily()], [layer], "2026-07-21", "2026-07-21", standards, 5);
+
+  assert.equal(series[0].hdepTarget, 90);
+  assert.equal(series[0].hdepLower, 87);
+  assert.equal(series[0].feedLower, 104.5);
+  assert.equal(series[0].feedUpper, 115.5);
+  assert.equal(series[0].mortalityLimit, 0.2);
+  assert.equal(series[0].recordCoverageTarget, 100);
+});
+
 test("flock analysis uses age target and prioritizes serious target gaps", () => {
   const result = buildFlockAnalytics({
     flock: layer,
@@ -101,6 +113,7 @@ test("flock analysis uses age target and prioritizes serious target gaps", () =>
   assert.equal(result.target, 90);
   assert.equal(result.targetGap, -10);
   assert.equal(result.status, "critical");
+  assert.equal(result.mortalityIntensityTarget, 1.429);
 });
 
 test("mortality Pareto preserves deaths without a cause", () => {

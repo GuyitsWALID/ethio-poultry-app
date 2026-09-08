@@ -55,6 +55,13 @@ const chartConfig = {
   mortalityPer1000BirdDays: { label: "Deaths / 1,000 bird-days", color: "var(--chart-4)" },
   marketableRate: { label: "Marketable %", color: "var(--chart-3)" },
   recordCoveragePct: { label: "Record coverage %", color: "var(--chart-5)" },
+  hdepTarget: { label: "Age target %", color: "var(--amber-500)" },
+  hdepLower: { label: "Healthy minimum %", color: "var(--leaf-500)" },
+  feedTarget: { label: "Age target g / bird", color: "var(--amber-500)" },
+  feedLower: { label: "Healthy range minimum", color: "var(--leaf-500)" },
+  feedUpper: { label: "Healthy range maximum", color: "var(--leaf-500)" },
+  mortalityLimit: { label: "Maximum standard", color: "var(--amber-500)" },
+  recordCoverageTarget: { label: "Required coverage %", color: "var(--amber-500)" },
   value: { label: "Deaths", color: "var(--chart-4)" },
   cumulativePct: { label: "Cumulative %", color: "var(--chart-2)" },
   sharePct: { label: "Share %", color: "var(--chart-3)" },
@@ -190,15 +197,27 @@ function ChartScroll({ children, minWidth = 720 }: { children: React.ReactNode; 
   return <div className="max-w-full overflow-x-auto overscroll-x-contain pb-2"><div style={{ minWidth }}>{children}</div></div>;
 }
 
+function signed(value: number | null, suffix: string, places = 2) {
+  if (value === null) return "Unavailable";
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${value.toLocaleString(undefined, { maximumFractionDigits: places })}${suffix}`;
+}
+
+function BenchmarkVerdict({ actual, lower, upper, target }: { actual: number | null; lower: number | null; upper: number | null; target: number | null }) {
+  if (actual === null || target === null) return <span className="rounded-full bg-sand-100 px-2 py-1 text-[10px] font-semibold text-forest-500">Unavailable</span>;
+  const healthy = (lower === null || actual >= lower) && (upper === null || actual <= upper);
+  return <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${healthy ? "bg-leaf-500/10 text-forest-700" : "bg-ember-500/10 text-ember-600"}`}>{healthy ? "Within standard" : "Outside standard"}</span>;
+}
+
 function ProductionFingerprint({ data }: { data: OperationsAnalyticsResponse }) {
   const width = Math.max(720, data.trends.length * 15);
   const hasData = data.trends.some((row) => row.records > 0);
   const tick = (value: string) => data.trends.length > 45 ? value.slice(8) : shortDate(value);
   const tracks = [
-    { key: "hdep" as const, title: "Production pressure", value: number(data.summary.current.hdep, "%"), note: "Eggs ÷ recorded layer bird-days", color: "var(--chart-1)", target: data.targets.hdep, targetLabel: "Weighted age target" },
-    { key: "feedPerBirdGrams" as const, title: "Feed response", value: number(data.summary.current.feedPerBirdGrams, " g"), note: "Synchronized feed ÷ recorded bird-days", color: "var(--chart-2)", target: data.targets.feedPerBirdGrams, targetLabel: "Weighted age target" },
-    { key: "mortalityPer1000BirdDays" as const, title: "Mortality intensity", value: number(data.summary.current.mortalityPer1000BirdDays), note: "Deaths per 1,000 recorded bird-days", color: "var(--chart-4)", target: null, targetLabel: "" },
-    { key: "recordCoveragePct" as const, title: "Evidence coverage", value: number(data.summary.current.recordCoveragePct, "%"), note: "Recorded ÷ expected active flock-days", color: "var(--chart-5)", target: 100, targetLabel: "Complete" },
+    { key: "hdep" as const, title: "Production pressure", actual: data.summary.current.hdep, value: number(data.summary.current.hdep, "%"), note: "Eggs ÷ recorded layer bird-days", color: "var(--chart-1)", target: data.targets.hdep, lower: data.targets.hdepLower, upper: null, unit: "%", expected: data.targets.hdepLower === null ? "Unavailable" : `At least ${number(data.targets.hdepLower, "%")} · target ${number(data.targets.hdep, "%")}`, coverage: data.targets.hdepCoveragePct, targetKey: "hdepTarget", lowerKey: "hdepLower", upperKey: null },
+    { key: "feedPerBirdGrams" as const, title: "Feed response", actual: data.summary.current.feedPerBirdGrams, value: number(data.summary.current.feedPerBirdGrams, " g"), note: "Synchronized feed ÷ recorded bird-days", color: "var(--chart-2)", target: data.targets.feedPerBirdGrams, lower: data.targets.feedLower, upper: data.targets.feedUpper, unit: " g", expected: data.targets.feedLower === null ? "Unavailable" : `${number(data.targets.feedLower, " g")}–${number(data.targets.feedUpper, " g")}`, coverage: data.targets.feedCoveragePct, targetKey: "feedTarget", lowerKey: "feedLower", upperKey: "feedUpper" },
+    { key: "mortalityPer1000BirdDays" as const, title: "Mortality intensity", actual: data.summary.current.mortalityPer1000BirdDays, value: number(data.summary.current.mortalityPer1000BirdDays), note: "Deaths per 1,000 recorded bird-days", color: "var(--chart-4)", target: data.targets.mortalityPer1000BirdDays, lower: 0, upper: data.targets.mortalityPer1000BirdDays, unit: "", expected: data.targets.mortalityPer1000BirdDays === null ? "Unavailable" : `No more than ${number(data.targets.mortalityPer1000BirdDays, "", 3)}`, coverage: data.targets.mortalityCoveragePct, targetKey: "mortalityLimit", lowerKey: null, upperKey: null },
+    { key: "recordCoveragePct" as const, title: "Evidence coverage", actual: data.summary.current.recordCoveragePct, value: number(data.summary.current.recordCoveragePct, "%"), note: "Recorded ÷ expected active flock-days", color: "var(--chart-5)", target: 100, lower: 100, upper: null, unit: "%", expected: "100% complete", coverage: 100, targetKey: "recordCoverageTarget", lowerKey: null, upperKey: null },
   ];
   return (
     <section className="max-w-full min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm" aria-labelledby="fingerprint-title">
@@ -208,10 +227,10 @@ function ProductionFingerprint({ data }: { data: OperationsAnalyticsResponse }) 
       </div>
       {!hasData ? <div className="p-5"><EmptyChart message="No Daily Records are available in this window. Expand the date range or select another flock." /></div> : (
         <div className="divide-y divide-sand-200">
-          {tracks.map((track, index) => <article key={track.key} className="grid min-w-0 lg:grid-cols-[210px_minmax(0,1fr)]">
-            <div className="border-b border-sand-100 p-5 lg:border-b-0 lg:border-r"><div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: track.color }} /><p className="text-xs font-semibold text-forest-900">{track.title}</p></div><p className="mt-3 font-display text-2xl font-semibold tabular-nums text-forest-900">{track.value}</p><p className="mt-1 text-[11px] leading-4 text-forest-500">{track.note}</p></div>
+          {tracks.map((track, index) => <article key={track.key} className="grid min-w-0 lg:grid-cols-[290px_minmax(0,1fr)]">
+            <div className="border-b border-sand-100 p-5 lg:border-b-0 lg:border-r"><div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: track.color }} /><p className="text-xs font-semibold text-forest-900">{track.title}</p></div><p className="mt-3 font-display text-2xl font-semibold tabular-nums text-forest-900">{track.value}</p><p className="mt-1 text-[11px] leading-4 text-forest-500">{track.note}</p><div className="mt-4 grid grid-cols-2 gap-2 border-t border-sand-200 pt-3"><div><p className="text-[9px] font-semibold uppercase tracking-[.12em] text-forest-400">Expected</p><p className="mt-1 text-[11px] font-semibold leading-4 text-forest-800">{track.expected}</p></div><div><p className="text-[9px] font-semibold uppercase tracking-[.12em] text-forest-400">Gap to target</p><p className="mt-1 text-[11px] font-semibold text-forest-800">{track.actual === null || track.target === null ? "Unavailable" : signed(track.actual - track.target, track.unit, track.key === "mortalityPer1000BirdDays" ? 3 : 2)}</p></div></div><div className="mt-3 flex items-center justify-between gap-2"><BenchmarkVerdict actual={track.actual} lower={track.lower} upper={track.upper} target={track.target}/><span className="text-[9px] font-medium text-forest-500">{track.coverage.toFixed(0)}% benchmark coverage</span></div><p className="mt-3 line-clamp-2 text-[9px] leading-4 text-forest-400" title={track.key === "recordCoveragePct" ? "System evidence requirement" : data.targets.sourceLabel}>{track.key === "recordCoveragePct" ? "System evidence requirement" : data.targets.sourceLabel}</p></div>
             <div className="min-w-0 overflow-hidden px-2 py-3">
-              <ChartScroll minWidth={width}><ChartContainer config={chartConfig} className="h-[138px] w-full"><AreaChart data={data.trends} syncId="operations-fingerprint" margin={{ left: index === 2 ? 5 : -10, right: 16, top: 12, bottom: 0 }}><defs><linearGradient id={`fill-${track.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={track.color} stopOpacity={0.3}/><stop offset="95%" stopColor={track.color} stopOpacity={0.02}/></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--sand-200)" strokeDasharray="3 3"/><XAxis dataKey="date" tickFormatter={tick} tickLine={false} axisLine={false} minTickGap={data.trends.length > 45 ? 22 : 36} fontSize={10}/><YAxis tickLine={false} axisLine={false} width={48} fontSize={10}/><ChartTooltip content={<ChartTooltipContent indicator="line"/>}/>{track.target !== null ? <ReferenceLine y={track.target} stroke="var(--amber-500)" strokeDasharray="5 4" label={{ value: track.targetLabel, position: "insideTopRight", fill: "var(--forest-500)", fontSize: 10 }}/>:null}<Area type="monotone" dataKey={track.key} stroke={track.color} fill={`url(#fill-${track.key})`} strokeWidth={2.5} connectNulls={false} activeDot={{ r: 4 }}/></AreaChart></ChartContainer></ChartScroll>
+              <ChartScroll minWidth={width}><ChartContainer config={chartConfig} className="h-[190px] w-full"><AreaChart data={data.trends} syncId="operations-fingerprint" margin={{ left: index === 2 ? 5 : -10, right: 16, top: 18, bottom: 0 }}><defs><linearGradient id={`fill-${track.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={track.color} stopOpacity={0.3}/><stop offset="95%" stopColor={track.color} stopOpacity={0.02}/></linearGradient></defs><CartesianGrid vertical={false} stroke="var(--sand-200)" strokeDasharray="3 3"/><XAxis dataKey="date" tickFormatter={tick} tickLine={false} axisLine={false} minTickGap={data.trends.length > 45 ? 22 : 36} fontSize={10}/><YAxis tickLine={false} axisLine={false} width={48} fontSize={10}/><ChartTooltip content={<ChartTooltipContent indicator="line"/>}/><Area type="monotone" dataKey={track.key} stroke={track.color} fill={`url(#fill-${track.key})`} strokeWidth={2.5} connectNulls={false} activeDot={{ r: 4 }}/>{track.lowerKey ? <Line type="monotone" dataKey={track.lowerKey} stroke="var(--leaf-500)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls={false}/>:null}{track.upperKey ? <Line type="monotone" dataKey={track.upperKey} stroke="var(--leaf-500)" strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls={false}/>:null}<Line type="monotone" dataKey={track.targetKey} stroke="var(--amber-500)" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls={false}/></AreaChart></ChartContainer></ChartScroll>
             </div>
           </article>)}
         </div>

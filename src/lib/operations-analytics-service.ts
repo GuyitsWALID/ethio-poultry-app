@@ -106,7 +106,7 @@ function emptyResponse(input: {
         feedKg: compareMetric(null, null),
       },
     },
-    targets: { hdep: null, feedPerBirdGrams: null, mortalityPct: null, coveragePct: 0 },
+    targets: { hdep: null, hdepLower: null, feedPerBirdGrams: null, feedLower: null, feedUpper: null, mortalityPct: null, mortalityPer1000BirdDays: null, coveragePct: 0, hdepCoveragePct: 0, feedCoveragePct: 0, mortalityCoveragePct: 0, sourceLabel: "Breed/week standards unavailable" },
     trends: [],
     flocks: [],
     farms: [],
@@ -201,7 +201,7 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
     const [allDailyRows, weightRows, standardRows, settingsResult, inventoryRows, stockRows] = await Promise.all([
       allRows<AnalyticsDailyRow>((from, to) => db.from("daily_farm_records").select("id,record_date,flock_id,opening_birds,closing_birds,deaths,deaths_cause,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_type,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", orgId).is("voided_at",null).in("flock_id", flockIds).gte("record_date", prior.previousFrom).lte("record_date", dateTo).order("record_date").range(from, to)),
       allRows<Row>((from, to) => db.from("weight_records").select("flock_id,record_date,average_weight_g,uniformity_pct").eq("org_id", orgId).in("flock_id", flockIds).lte("record_date", dateTo).order("record_date", { ascending: false }).range(from, to)),
-      breedIds.length ? allRows<Row>((from, to) => db.from("breed_standards").select("breed_id,week_number,target_hdep_pct,target_mortality_pct,target_feed_g,target_weight_g").eq("org_id", orgId).in("breed_id", breedIds).range(from, to)) : Promise.resolve([]),
+      breedIds.length ? allRows<Row>((from, to) => db.from("breed_standards").select("breed_id,week_number,target_hdep_pct,target_mortality_pct,target_feed_g,target_weight_g,breeds(name,breeder)").eq("org_id", orgId).in("breed_id", breedIds).range(from, to)) : Promise.resolve([]),
       db.from("feed_control_settings").select("warning_variance_pct,critical_variance_pct").eq("org_id", orgId).maybeSingle(),
       allRows<Row>((from, to) => db.from("inventory_items").select("id,name,category,reorder_level,unit").eq("org_id", orgId).range(from, to)),
       allRows<Row>((from, to) => db.from("stock_ledger").select("item_id,quantity,transaction_type,unit_cost,transaction_date,branch_id,farm_id,flock_id").eq("org_id", orgId).range(from, to)),
@@ -253,11 +253,28 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
     })).sort((a, b) => b.attentionScore - a.attentionScore || a.code.localeCompare(b.code));
 
     const targetFlocks = flockAnalytics.filter((flock) => flock.target !== null);
+    const layerFlocks = flockAnalytics.filter((flock) => flock.type === "layer" || flock.type === "parent_stock");
+    const metricCoverage = (rows: typeof flockAnalytics, available: (flock: typeof flockAnalytics[number]) => boolean) => percent(rows.filter(available).length, rows.length) ?? 0;
+    const breedSources = [...new Set(standardRows.map((row) => {
+      const breed = row.breeds as Row | null;
+      return [breed?.breeder, breed?.name].filter(Boolean).map(String).join(" · ");
+    }).filter(Boolean))];
+    const sourceLabel = breedSources.length ? `Configured breed/week standards · ${breedSources.join(", ")}` : "Configured breed/week standards";
+    const hdepTarget = weightedAverage(layerFlocks.map((flock) => ({ value: flock.target, weight: flock.liveBirds })));
+    const feedTarget = weightedAverage(flockAnalytics.map((flock) => ({ value: flock.feedTargetGrams, weight: flock.liveBirds })));
     const targets = {
-      hdep: weightedAverage(flockAnalytics.filter((flock) => flock.type === "layer" || flock.type === "parent_stock").map((flock) => ({ value: flock.target, weight: flock.liveBirds }))),
-      feedPerBirdGrams: weightedAverage(flockAnalytics.map((flock) => ({ value: flock.feedTargetGrams, weight: flock.liveBirds }))),
+      hdep: hdepTarget,
+      hdepLower: hdepTarget === null ? null : round(Math.max(0, hdepTarget - 3)),
+      feedPerBirdGrams: feedTarget,
+      feedLower: feedTarget === null ? null : round(feedTarget * (1 - warningVariancePct / 100)),
+      feedUpper: feedTarget === null ? null : round(feedTarget * (1 + warningVariancePct / 100)),
       mortalityPct: weightedAverage(flockAnalytics.map((flock) => ({ value: flock.mortalityTargetPct, weight: flock.liveBirds }))),
+      mortalityPer1000BirdDays: weightedAverage(flockAnalytics.map((flock) => ({ value: flock.mortalityIntensityTarget, weight: flock.liveBirds }))),
       coveragePct: percent(targetFlocks.length, flockAnalytics.length) ?? 0,
+      hdepCoveragePct: metricCoverage(layerFlocks, (flock) => flock.target !== null),
+      feedCoveragePct: metricCoverage(flockAnalytics, (flock) => flock.feedTargetGrams !== null),
+      mortalityCoveragePct: metricCoverage(flockAnalytics, (flock) => flock.mortalityIntensityTarget !== null),
+      sourceLabel,
     };
 
     const farmsAnalytics = [...selectedFarmIds].map((farmId) => {
@@ -350,7 +367,7 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
         },
       },
       targets,
-      trends: buildDailySeries(currentRows, scopedFlocks, dateFrom, dateTo),
+      trends: buildDailySeries(currentRows, scopedFlocks, dateFrom, dateTo, standardsByBreed, warningVariancePct),
       flocks: flockAnalytics,
       farms: farmsAnalytics,
       breakdowns: { eggQuality: eggQualityBreakdown(currentRows), mortalityCauses: mortalityCausePareto(currentRows), feedTypes: feedTypeBreakdown(currentRows) },
