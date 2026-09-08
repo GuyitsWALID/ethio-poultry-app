@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   CalendarCheck2,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   Ellipsis,
   Eraser,
@@ -153,6 +155,9 @@ export default function HealthPage() {
     item: null,
   });
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const runwayRef = useRef<HTMLDivElement | null>(null);
+  const [runwayCanScrollLeft, setRunwayCanScrollLeft] = useState(false);
+  const [runwayCanScrollRight, setRunwayCanScrollRight] = useState(true);
   const [editModal, setEditModal] = useState<EditScheduleState>({
     open: false,
     item: null,
@@ -863,6 +868,28 @@ export default function HealthPage() {
     });
   }, [healthSummary.scoped]);
 
+  useEffect(() => {
+    const track = runwayRef.current;
+    if (!track) return;
+    const updateControls = () => {
+      setRunwayCanScrollLeft(track.scrollLeft > 4);
+      setRunwayCanScrollRight(track.scrollLeft + track.clientWidth < track.scrollWidth - 4);
+    };
+    updateControls();
+    track.addEventListener("scroll", updateControls, { passive: true });
+    window.addEventListener("resize", updateControls);
+    return () => {
+      track.removeEventListener("scroll", updateControls);
+      window.removeEventListener("resize", updateControls);
+    };
+  }, [runway]);
+
+  const moveRunway = (direction: -1 | 1) => {
+    const track = runwayRef.current;
+    if (!track) return;
+    track.scrollBy({ left: direction * Math.max(230, track.clientWidth - 230), behavior: "smooth" });
+  };
+
   const priorityItems = useMemo(() => {
     const today = addisToday();
     const nextSeven = addDays(today, 7);
@@ -936,7 +963,11 @@ export default function HealthPage() {
 
       <section className="max-w-full min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Forward schedule</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">14-day health runway</h2><p className="mt-1 text-xs text-forest-600">Each lane is one Addis Ababa calendar day. Scroll inside this card to inspect the full runway.</p></div><div className="flex flex-wrap gap-3 text-[10px] text-forest-600"><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-leaf-500" />Vaccination</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />Biosecurity</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />Weight</span></div></div>
-        <div className="mt-5 max-w-full overflow-x-auto pb-2"><div className="grid min-w-[1260px] grid-cols-14 gap-2">{runway.map((day, index) => <article key={day.date} className={`min-h-36 rounded-xl border p-3 ${index === 0 ? "border-forest-700 bg-forest-900 text-white" : day.items.length ? "border-sand-300 bg-sand-50" : "border-sand-200 bg-white"}`}><p className={`text-[9px] font-semibold uppercase tracking-[.12em] ${index === 0 ? "text-amber-300" : "text-forest-500"}`}>{index === 0 ? "Today" : new Intl.DateTimeFormat("en", { weekday: "short", timeZone: "UTC" }).format(new Date(`${day.date}T00:00:00Z`))}</p><p className={`mt-1 font-display text-lg font-semibold ${index === 0 ? "text-white" : "text-forest-900"}`}>{formatDate(day.date)}</p><div className="mt-4 space-y-2">{day.items.slice(0, 3).map((item) => <div key={`${item.type}-${item.id}`} title={item.scheduleReason ?? scheduleTypeLabel(item.type)} className={`flex items-center gap-1.5 text-[10px] ${index === 0 ? "text-sand-100" : "text-forest-700"}`}><span className={`h-2 w-2 shrink-0 rounded-full ${item.type === "vaccination" ? "bg-leaf-500" : item.type === "cleanup" ? "bg-amber-500" : "bg-sky-500"}`} /><span className="truncate">{item.flockId ? flockCodeById.get(item.flockId) ?? scheduleTypeLabel(item.type) : scheduleTypeLabel(item.type)}</span></div>)}{day.items.length === 0 ? <p className={`text-[10px] ${index === 0 ? "text-sand-300" : "text-forest-400"}`}>No work</p> : null}{day.items.length > 3 ? <p className="text-[10px] font-semibold text-forest-500">+{day.items.length - 3} more</p> : null}</div></article>)}</div></div>
+        <div className="relative mt-5">
+          <div id="health-runway-track" ref={runwayRef} className="runway-scroll max-w-full overflow-x-auto overscroll-x-contain px-11 pb-1" role="region" aria-label="Fourteen-day health schedule" tabIndex={0}><div className="flex w-max snap-x snap-mandatory gap-3 pr-5">{runway.map((day, index) => <article key={day.date} className={`min-h-52 w-[220px] shrink-0 snap-start rounded-xl border p-4 sm:w-[230px] ${index === 0 ? "border-forest-700 bg-forest-900 text-white" : day.items.length ? "border-sand-300 bg-sand-50" : "border-sand-200 bg-white"}`}><p className={`text-[9px] font-semibold uppercase tracking-[.12em] ${index === 0 ? "text-amber-300" : "text-forest-500"}`}>{index === 0 ? "Today" : new Intl.DateTimeFormat("en", { weekday: "long", timeZone: "UTC" }).format(new Date(`${day.date}T00:00:00Z`))}</p><p className={`mt-2 font-display text-xl font-semibold ${index === 0 ? "text-white" : "text-forest-900"}`}>{formatDate(day.date)}</p><div className="mt-5 space-y-2.5">{day.items.slice(0, 3).map((item) => <div key={`${item.type}-${item.id}`} title={item.scheduleReason ?? scheduleTypeLabel(item.type)} className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] ${index === 0 ? "bg-white/10 text-sand-50" : "bg-white text-forest-700"}`}><span className={`h-2 w-2 shrink-0 rounded-full ${item.type === "vaccination" ? "bg-leaf-500" : item.type === "cleanup" ? "bg-amber-500" : "bg-sky-500"}`} /><span className="truncate">{item.flockId ? flockCodeById.get(item.flockId) ?? scheduleTypeLabel(item.type) : scheduleTypeLabel(item.type)}</span></div>)}{day.items.length === 0 ? <p className={`text-[11px] ${index === 0 ? "text-sand-300" : "text-forest-400"}`}>No work scheduled</p> : null}{day.items.length > 3 ? <p className={`text-[10px] font-semibold ${index === 0 ? "text-amber-300" : "text-forest-500"}`}>+{day.items.length - 3} more</p> : null}</div></article>)}</div></div>
+          <div className={`pointer-events-none absolute inset-y-0 left-0 flex w-14 items-center bg-gradient-to-r from-white via-white/90 to-transparent transition-opacity ${runwayCanScrollLeft ? "opacity-100" : "opacity-0"}`} aria-hidden={!runwayCanScrollLeft}><button type="button" onClick={() => moveRunway(-1)} disabled={!runwayCanScrollLeft} aria-label="Show earlier health schedule days" aria-controls="health-runway-track" className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-sand-300 bg-white text-forest-900 shadow-md transition hover:border-forest-600 hover:bg-forest-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-forest-500 disabled:pointer-events-none"><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button></div>
+          <div className={`pointer-events-none absolute inset-y-0 right-0 flex w-14 items-center justify-end bg-gradient-to-l from-white via-white/90 to-transparent transition-opacity ${runwayCanScrollRight ? "opacity-100" : "opacity-0"}`} aria-hidden={!runwayCanScrollRight}><button type="button" onClick={() => moveRunway(1)} disabled={!runwayCanScrollRight} aria-label="Show later health schedule days" aria-controls="health-runway-track" className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-sand-300 bg-white text-forest-900 shadow-md transition hover:border-forest-600 hover:bg-forest-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-forest-500 disabled:pointer-events-none"><ChevronRight className="h-5 w-5" aria-hidden="true" /></button></div>
+        </div>
       </section>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-[.9fr_1.1fr]">

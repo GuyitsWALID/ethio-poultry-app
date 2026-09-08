@@ -53,3 +53,11 @@ body {
   background-position: 0 0, 12px 12px;
   background-size: 24px 24px;
 }
+
+.runway-scroll {
+  scrollbar-width: none;
+}
+
+.runway-scroll::-webkit-scrollbar {
+  display: none;
+}
