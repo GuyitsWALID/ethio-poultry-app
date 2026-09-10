@@ -25,8 +25,8 @@ jobs:
       APP_BASE_URL: https://ethio-poultry-app.walidmurad65.workers.dev
       MONITORING_INGEST_TOKEN: ${{ secrets.PRODUCTION_MONITORING_INGEST_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.16.0
       - run: node scripts/platform-monitoring.mjs probe
@@ -44,8 +44,8 @@ jobs:
       APP_BASE_URL: https://ethio-poultry-app-staging.walidmurad65.workers.dev
       MONITORING_INGEST_TOKEN: ${{ secrets.STAGING_MONITORING_INGEST_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.16.0
       - run: node scripts/platform-monitoring.mjs probe
@@ -64,9 +64,10 @@ jobs:
       SUPABASE_PROJECT_REF: gnmeoxwqexennoidwwpf
       MONITORING_INGEST_TOKEN: ${{ secrets.PRODUCTION_MONITORING_INGEST_TOKEN }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_BACKUP_READ_TOKEN }}
+      MANAGED_BACKUPS_REQUIRED: "false"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.16.0
       - run: node scripts/platform-monitoring.mjs backup
@@ -83,9 +84,10 @@ jobs:
       SUPABASE_PROJECT_REF: uzmhpecehmlwojdmitgj
       MONITORING_INGEST_TOKEN: ${{ secrets.STAGING_MONITORING_INGEST_TOKEN }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_BACKUP_READ_TOKEN }}
+      MANAGED_BACKUPS_REQUIRED: "false"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.16.0
       - run: node scripts/platform-monitoring.mjs backup

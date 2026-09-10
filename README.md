@@ -398,6 +398,7 @@ Start from [`.env.example`](.env.example). The main variables are:
 | `SUPABASE_PROJECT_REF` | Expected remote project identity | Required in staging and production to prevent cross-project deployment |
 | `ADMIN_ACCESS_CODE` | Gate for platform administrator onboarding/access | Server-only; use a strong unique value |
 | `MONITORING_INGEST_TOKEN` | Authenticates scheduled monitoring, notification, and report dispatch | Server-only; use a different strong value per environment |
+| `MANAGED_BACKUPS_REQUIRED` | Makes a missing completed provider backup fail the monitoring job | Set to `false` only while the environment has no managed-backup capability; change to `true` when retention is enabled |
 | `RECONCILIATION_AI_ENABLED` | Enables explicit AI analysis on Record Checks | Optional feature flag; defaults to `false` |
 | `GROQ_MODEL` | Groq model name | Optional; defaults to `openai/gpt-oss-120b` |
 | `GROQ_API_KEY` | Groq provider credential | Required in staging/production only when AI is enabled; server-only |

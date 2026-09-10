@@ -57,6 +57,11 @@ async function probeApplication() {
 async function checkBackups() {
   const projectRef = required("SUPABASE_PROJECT_REF");
   const accessToken = required("SUPABASE_ACCESS_TOKEN");
+  const backupRequirement = (process.env.MANAGED_BACKUPS_REQUIRED?.trim().toLowerCase() || "true");
+  if (!["true", "false"].includes(backupRequirement)) {
+    throw new Error("MANAGED_BACKUPS_REQUIRED must be true or false when set.");
+  }
+  const managedBackupsRequired = backupRequirement === "true";
   const started = performance.now();
   let response;
   try {
@@ -89,9 +94,11 @@ async function checkBackups() {
     : [];
   const latest = completed[0];
   const ageHours = latest ? (Date.now() - new Date(latest.inserted_at).getTime()) / 3_600_000 : Number.POSITIVE_INFINITY;
-  const status = !latest ? "failed" : ageHours > 36 ? "degraded" : "healthy";
+  const status = !latest ? managedBackupsRequired ? "failed" : "degraded" : ageHours > 36 ? "degraded" : "healthy";
   const summary = !latest
-    ? "Supabase reported no completed database backup."
+    ? managedBackupsRequired
+      ? "Supabase reported no completed database backup."
+      : "Managed database backups are not enabled for this environment; no completed backup is available."
     : ageHours > 36
       ? `The latest completed database backup is ${Math.round(ageHours)} hours old.`
       : `Supabase reports a completed backup from ${new Date(latest.inserted_at).toISOString()}.`;

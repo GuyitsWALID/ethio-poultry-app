@@ -24,8 +24,8 @@ jobs:
       RECOVERY_SOURCE_DATABASE_URL: ${{ secrets.PRODUCTION_RECOVERY_DATABASE_URL }}
       RECOVERY_DESTINATION_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22.16.0
           cache: npm

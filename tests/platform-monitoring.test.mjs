@@ -6,6 +6,7 @@ const migration = await readFile(new URL("../supabase/migrations/20260831000000_
 const instrumentation = await readFile(new URL("../src/instrumentation.ts", import.meta.url), "utf8");
 const service = await readFile(new URL("../src/lib/platform-observability.ts", import.meta.url), "utf8");
 const recovery = await readFile(new URL("../scripts/run-recovery-drill.mjs", import.meta.url), "utf8");
+const monitoring = await readFile(new URL("../scripts/platform-monitoring.mjs", import.meta.url), "utf8");
 const recoveryVerification = await readFile(new URL("../scripts/verify-recovery.sql", import.meta.url), "utf8");
 const monitoringWorkflow = await readFile(new URL("../.github/workflows/platform-monitoring.yml", import.meta.url), "utf8");
 const recoveryWorkflow = await readFile(new URL("../.github/workflows/recovery-drill.yml", import.meta.url), "utf8");
@@ -49,4 +50,21 @@ test("monitoring and restore drills have recurring schedules", () => {
   assert.match(monitoringWorkflow, /cron: "23 4 \* \* \*"/i);
   assert.match(recoveryWorkflow, /cron: "17 3 1 \* \*"/i);
   assert.match(recoveryWorkflow, /if: always\(\)/i);
+});
+
+test("managed backup enforcement is explicit while unsupported plans remain observable", () => {
+  assert.match(monitoring, /MANAGED_BACKUPS_REQUIRED/);
+  assert.match(monitoring, /managedBackupsRequired \? "failed" : "degraded"/);
+  assert.match(monitoringWorkflow, /MANAGED_BACKUPS_REQUIRED: "false"/);
+  assert.match(monitoring, /Managed database backups are not enabled for this environment/);
+});
+
+test("first-party GitHub actions use the supported Node 24 runtime", async () => {
+  const workflowNames = ["ci.yml", "platform-monitoring.yml", "recovery-drill.yml", "staging-gate.yml"];
+  const workflows = await Promise.all(workflowNames.map((name) => readFile(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8")));
+  for (const workflow of workflows) {
+    assert.doesNotMatch(workflow, /actions\/(?:checkout|setup-node)@v4/);
+    assert.match(workflow, /actions\/checkout@v7/);
+    assert.match(workflow, /actions\/setup-node@v7/);
+  }
 });

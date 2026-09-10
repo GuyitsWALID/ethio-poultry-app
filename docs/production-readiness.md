@@ -113,7 +113,10 @@ Status: operational; managed backup retention pending
 - [x] Configure separate matching Cloudflare/GitHub monitoring intake tokens and the protected recovery connection
 - [x] Configure a fine-grained Supabase `backups_read` token in GitHub
 - [x] Deploy the release and retain the first successful application-probe and isolated-restore evidence
+- [x] Keep provider-backup evidence advisory with `MANAGED_BACKUPS_REQUIRED=false` while the current projects have no managed-backup capability
 - [ ] Establish retained production backups: upgrade Supabase to a plan with managed backups, or approve a separately secured off-site logical-backup destination
+
+Set `MANAGED_BACKUPS_REQUIRED=true` as soon as retained managed backups are enabled. From that point onward, a missing completed provider backup is a hard monitoring failure; stale backup evidence remains degraded and visible for review.
 
 ## Second delivery wave
 
