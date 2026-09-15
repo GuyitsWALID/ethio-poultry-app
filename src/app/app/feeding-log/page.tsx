@@ -8,6 +8,7 @@ import { AlertTriangle, Check, ChevronDown, Clock3, PackageOpen, RefreshCw, Scal
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import { FarmScopeFilters } from "@/components/farm-scope-filters";
+import { RecordCheckCorrectionBanner } from "@/components/record-check-correction-banner";
 
 type Metric = { value: number | null; unit: string; status: string; reason?: string; label?: string; actualKg?: number; plannedKg?: number; variancePct?: number | null; uniformityPct?: number | null; sampleCount?: number; kind?: string };
 type Session = { id: string | null; session_name: string; session_time: string | null; planned_feed_kg: number; actual_feed_kg: number | null; feeders_count: number; status: string; feed_item_id: string | null; warehouse_id: string | null; feed_type: string | null; notes: string | null };
@@ -100,6 +101,7 @@ export default function FeedControlPage() {
   </main>;
 
   return <main className="mx-auto w-full max-w-[1560px] space-y-6 p-4 sm:p-6 lg:p-10">
+    <RecordCheckCorrectionBanner />
     <FarmScopeFilters title="Feed Control filters" fields={["branch", "farm"]} showPeriod />
     <header className="flex flex-col gap-4 rounded-3xl border border-[#ded2bc] bg-[#183324] p-6 text-white shadow-sm lg:flex-row lg:items-end lg:justify-between">
       <div><p className="text-[11px] font-semibold uppercase tracking-[.25em] text-[#dac99c]">Daily ration ledger</p><h1 className="mt-2 text-2xl font-semibold sm:text-3xl">Feed Control</h1><p className="mt-2 text-sm text-[#d6dfd8]">{data ? `${data.batch.batch_code} · age ${data.batch.ageDays} days · ${data.batch.totalBirds.toLocaleString()} live birds` : "Loading batch context…"}</p></div>

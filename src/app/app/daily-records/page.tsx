@@ -2,7 +2,7 @@
 
 import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -25,6 +25,8 @@ import {
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import { governanceGuidanceUrl, type GovernanceGuidance } from "@/lib/governance-guidance";
+import { RecordCheckCorrectionBanner } from "@/components/record-check-correction-banner";
+import type { ReconciliationResolution } from "@/lib/reconciliation-resolution-contract";
 import type { Database } from "@/types/supabase";
 import { createClient } from "@/utils/supabase/client";
 
@@ -163,7 +165,7 @@ type WarehouseRow = {
 type RoutineUsageRow = { key:string; itemId:string; warehouseId:string; quantity:string; notes:string };
 
 export default function DailyRecordsPage() {
-  const { role, scope, setScope, branches, filteredFarms, filteredFlocks, filteredBatches, filteredHouses } =
+  const { role, scope, setScope, branches, flocks, filteredFarms, filteredFlocks, filteredBatches, filteredHouses } =
     useFarmScope();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rows, setRows] = useState<DailyRow[]>([]);
@@ -187,7 +189,28 @@ export default function DailyRecordsPage() {
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
   const [routineUsages,setRoutineUsages]=useState<RoutineUsageRow[]>([]);
   const [closedFeedDayKeys, setClosedFeedDayKeys] = useState<Set<string>>(() => new Set());
+  const openedFindingRef = useRef("");
   const canCreateRecord = currentRole === "farm_manager";
+
+  useEffect(() => {
+    if (!canCreateRecord || !flocks.length || loadingRows) return;
+    const findingId = new URLSearchParams(window.location.search).get("finding") ?? "";
+    if (!findingId || openedFindingRef.current === findingId) return;
+    const controller = new AbortController();
+    void fetch(`/api/reconciliation/findings/${findingId}/resolution`, { cache: "no-store", signal: controller.signal })
+      .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error); return body as ReconciliationResolution; })
+      .then(resolution => {
+        const targetFlock = flocks.find(flock => flock.flock_code === resolution.target.flockCode);
+        if (!targetFlock || !resolution.target.date) return;
+        openedFindingRef.current = findingId;
+        setScope(previous => ({ ...previous, farmId: targetFlock.farm_id, houseId: targetFlock.house_id, flockId: targetFlock.id, batchId: "" }));
+        const existing = rows.find(row => row.flock_id === targetFlock.id && row.record_date === resolution.target.date);
+        if (existing) { setEditRecordDate(existing.record_date); setEditingRow(existing); }
+        else if (["BIRD_DAY_COUNTS_MISSING", "EGG_OPENING_BALANCE_UNAVAILABLE"].includes(resolution.ruleCode)) { setNewRecordDate(resolution.target.date); setIsModalOpen(true); }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [canCreateRecord, flocks, loadingRows, rows, setScope]);
 
   const parseNumber = (value: FormDataEntryValue | null) => {
     if (value === null || value === "") return null;
@@ -782,6 +805,7 @@ export default function DailyRecordsPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1500px] min-w-0 space-y-5 overflow-x-hidden px-3 sm:px-4">
+      <RecordCheckCorrectionBanner />
       <header className="relative overflow-hidden rounded-3xl border border-forest-700 bg-forest-900 p-5 text-white shadow-sm sm:p-7">
         <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full border-[40px] border-amber-400/10" aria-hidden="true" />
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">

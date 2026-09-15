@@ -2,6 +2,7 @@
 
 import { usePageFilter } from "@/components/page-filter-controls";
 import { FarmScopeFilters } from "@/components/farm-scope-filters";
+import { RecordCheckCorrectionBanner } from "@/components/record-check-correction-banner";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -79,6 +80,7 @@ useEffect(()=>{if(scopeLoading)return;const load=async()=>{setLoading(true);setE
   useEffect(()=>{if(!loading&&lineageTarget.kind&&selectedFlock){window.setTimeout(()=>document.getElementById("lineage-correction")?.scrollIntoView({behavior:"smooth",block:"center"}),80)}},[loading,lineageTarget.kind,selectedFlock]);
 
   return <main className="max-w-full min-w-0 space-y-5 overflow-x-hidden">
+    <RecordCheckCorrectionBanner />
       <FarmScopeFilters title="Flock location filters" />
     <section className="relative overflow-hidden rounded-2xl bg-forest-900 p-5 text-white shadow-sm sm:p-6"><div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border-[36px] border-amber-500/15"/><div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between"><div><p className="text-[11px] font-semibold uppercase tracking-[.24em] text-amber-300">Bird lifecycle control</p><h1 className="mt-2 font-display text-3xl font-semibold">Flocks &amp; batches</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-sand-100">A batch explains where the birds came from and what the placement cost. A flock shows where those birds are now and how they are managed each day.</p></div>{role==="farm_manager"?<div className="flex flex-wrap gap-2"><Link href="/app/flocks/new" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-forest-900"><Bird className="h-4 w-4"/>Propose flock</Link><button type="button" onClick={()=>setView("batches")} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold hover:bg-white/15"><PackageOpen className="h-4 w-4"/>Propose batch cycle</button></div>:<Link href="/app/governance" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-semibold">Review lifecycle requests<ChevronRight className="h-4 w-4"/></Link>}</div>
       <nav className="relative mt-5 flex max-w-full gap-1 overflow-x-auto border-t border-white/15 pt-4" aria-label="Flock and batch workspace views">{([['overview','Lifecycle overview',Layers3],['flocks','Flock registry',Bird],['batches','Batch cycles',Box]] as const).map(([value,label,Icon])=><button key={value} type="button" onClick={()=>setView(value)} aria-current={view===value?"page":undefined} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold ${view===value?"bg-white text-forest-900":"text-sand-100 hover:bg-white/10"}`}><Icon className="h-4 w-4"/>{label}</button>)}</nav>

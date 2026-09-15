@@ -5,7 +5,7 @@ import type { AccessContext } from "@/lib/access-context";
 import { canAccessFarm, canAccessWarehouse, governanceAdmin } from "@/lib/access-context";
 import { recordAuditEvent } from "@/lib/audit-ledger";
 
-const requestTypes = ["batch_create","batch_archive","flock_place","flock_transfer","flock_close","flock_archive","feed_template","breed_target","health_schedule","warning_threshold","locked_correction","void_record"] as const;
+const requestTypes = ["batch_create","batch_archive","flock_place","flock_transfer","flock_close","flock_archive","feed_template","breed_target","health_schedule","warning_threshold","locked_correction","void_record","egg_opening_balance","sales_unit_conversion"] as const;
 const sourceTables = new Set(["flocks","batches","feed_control_settings","daily_farm_records","daily_sales_records","health_events","vaccination_events","feeding_session_records","biosecurity_checks","batch_weight_check_tasks"]);
 const db = governanceAdmin as any;
 
@@ -24,6 +24,7 @@ function safeRoute(value:unknown){const route=text(value);return route.startsWit
 function defaultRoute(type:string,table:string|null,id:string|null){
   if(type.startsWith("batch_"))return "/app/batches";
   if(type.startsWith("flock_"))return id?`/app/flocks/${id}`:"/app/flocks";
+  if(type==="egg_opening_balance"||type==="sales_unit_conversion")return "/app/sales";
   if(table==="daily_farm_records")return "/app/daily-records";
   if(table==="daily_sales_records")return "/app/sales";
   if(table==="health_events"||table==="vaccination_events"||type==="health_schedule")return "/app/health";

@@ -4,6 +4,7 @@ import { usePageFilter, ResetPageFilters, PageSelectFilter } from "@/components/
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, Calculator, CheckCircle2, ChevronDown, PackagePlus, Plus, RefreshCw, Scale, Trash2, Warehouse } from "lucide-react";
+import { RecordCheckCorrectionBanner } from "@/components/record-check-correction-banner";
 
 type WarehouseRow={id:string;name:string;branch_name:string;farm_name:string|null;type:string;status:string};
 type CatalogItem={id:string;name:string;category:string;unit:string;reorder_level:number|null;unit_cost:number|null};
@@ -70,6 +71,7 @@ export default function InventoryPage(){
   const submitAdvanced=(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();if(!selected)return;const form=new FormData(event.currentTarget);void act(async()=>{await jsonRequest("/api/inventory/stock-movements",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({item_id:form.get("item_id"),warehouse_id:selected.id,transaction_type:form.get("transaction_type"),destination_warehouse_id:form.get("destination_warehouse_id")||null,quantity:Number(form.get("quantity")),unit_cost:0,transaction_date:form.get("transaction_date"),notes:form.get("notes"),idempotency_key:stockActionRequestKey})});setStockActionRequestKey(`stock-action-${Date.now()}-${Math.random().toString(36).slice(2)}`)},"Stock action recorded with an audit trail.")};
 
   return <main className="mx-auto max-w-[1540px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+    <RecordCheckCorrectionBanner />
     <div className="flex justify-end"><ResetPageFilters /></div>
     <section className="overflow-hidden rounded-[28px] bg-forest-900 text-white shadow-sm"><div className="grid gap-6 p-6 lg:grid-cols-[1fr_auto] lg:items-end lg:p-8"><div><p className="text-[10px] font-semibold uppercase tracking-[.24em] text-amber-300">Warehouse stock control</p><h1 className="mt-2 max-w-3xl font-display text-3xl font-semibold sm:text-4xl">Know what is on the shelf, what arrived, and what operations used.</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-sand-100/75">Feed, Daily Records, treatments, and vaccinations post their own usage. This page starts the month, receives purchases, confirms shelf counts, and records costs.</p></div><button type="button" onClick={()=>void load(warehouseId)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 text-sm font-semibold hover:bg-white/15"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin":""}`}/>Refresh</button></div></section>
     {error?<div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>:null}{success?<div role="status" className="flex items-center gap-2 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-800"><CheckCircle2 className="h-4 w-4"/>{success}</div>:null}

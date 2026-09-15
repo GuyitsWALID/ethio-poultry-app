@@ -4,7 +4,12 @@ import ts from "typescript";
 import { readFile } from "node:fs/promises";
 
 const source = await readFile(new URL("../src/lib/reconciliation-workflow.ts", import.meta.url), "utf8");
-const compiled = ts.transpileModule(source, {
+const testableSource = source.replace(
+  /import \{ resolutionHref, resolutionRules \} from "@\/lib\/reconciliation-resolution-contract";/,
+  `const resolutionRules = {};
+   const resolutionHref = (path, findingId) => path + "?finding=" + encodeURIComponent(findingId);`,
+);
+const compiled = ts.transpileModule(testableSource, {
   compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const { reconciliationWorkflow } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
@@ -22,7 +27,7 @@ const base = {
 test("cost allocation is translated into a plain guided correction", () => {
   const workflow = reconciliationWorkflow(base, "farm_manager");
   assert.equal(workflow.plainTitle, "A recorded cost has not been fully assigned");
-  assert.equal(workflow.destination.href, "/app/inventory?tab=monthly");
+  assert.equal(workflow.destination.href, "/app/reports");
   assert.equal(workflow.stage, "needs_action");
   assert.match(workflow.verification, /allocation total/i);
 });
@@ -37,7 +42,7 @@ test("critical controls clearly require management attention", () => {
   const workflow = reconciliationWorkflow({ ...base, rule_code: "LOCKED_RECORD_CHANGED_WITHOUT_APPROVAL", domain: "governance", severity: "critical" }, "farm_manager");
   assert.equal(workflow.priorityKind, "governance");
   assert.equal(workflow.owner, "CEO review required");
-  assert.equal(workflow.destination.href, "/app/governance");
+  assert.equal(workflow.destination.href, "/app/daily-records");
 });
 
 test("lineage findings deep-link to the exact flock and finding", () => {

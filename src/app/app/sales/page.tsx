@@ -4,7 +4,7 @@
 import { usePageFilter } from "@/components/page-filter-controls";
 import { FarmScopeFilters } from "@/components/farm-scope-filters";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ReferenceLine, XAxis, YAxis } from "recharts";
 import {
   AlertTriangle,
@@ -28,6 +28,8 @@ import {
 
 import { useFarmScope } from "@/components/farm-scope-context";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { RecordCheckCorrectionBanner } from "@/components/record-check-correction-banner";
+import type { ReconciliationResolution } from "@/lib/reconciliation-resolution-contract";
 
 type SalesRecord = {
   id: string;
@@ -249,6 +251,7 @@ export default function SalesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const openedFindingRef = useRef("");
   const [form, setForm] = useState<FormState>(() =>
     emptyForm({
       branch_id: scope.branchId,
@@ -342,6 +345,26 @@ export default function SalesPage() {
     setModalOpen(true);
   };
 
+  useEffect(() => {
+    if (!canMutate || loading) return;
+    const findingId = new URLSearchParams(window.location.search).get("finding") ?? "";
+    if (!findingId || openedFindingRef.current === findingId) return;
+    const controller = new AbortController();
+    void fetch(`/api/reconciliation/findings/${findingId}/resolution`, { cache: "no-store", signal: controller.signal })
+      .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error); return body as ReconciliationResolution; })
+      .then(resolution => {
+        if (!["EGG_SALE_UNLINKED", "EGG_SALE_UNIT_UNCONVERTED", "POSSIBLE_DUPLICATE_SALE", "EGG_SALES_EXCEED_PRODUCTION"].includes(resolution.ruleCode)) return;
+        const normalize = (value: string | null) => (value ?? "").toLowerCase().replaceAll("_", " ").trim();
+        const matches = records.filter(record => (!resolution.target.date || record.sale_date === resolution.target.date)
+          && (!resolution.target.product || normalize(record.product_label) === normalize(resolution.target.product))
+          && (!resolution.target.quantity || Number(record.quantity) === Number(resolution.target.quantity))
+          && (!resolution.target.customer || normalize(record.customer_name) === normalize(resolution.target.customer)));
+        if (matches.length === 1) { openedFindingRef.current = findingId; openEdit(matches[0]); }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [canMutate, loading, records]);
+
   const submit = async () => {
     setSaving(true);
     setError("");
@@ -428,6 +451,7 @@ export default function SalesPage() {
 
   return (
     <div className="space-y-5 pb-8">
+      <RecordCheckCorrectionBanner />
       <FarmScopeFilters title="Sales source filters" />
       <section className="relative overflow-hidden rounded-[28px] bg-forest-900 px-6 py-7 text-sand-50 shadow-sm sm:px-8 lg:px-10 lg:py-9">
         <div className="absolute -right-16 -top-24 h-64 w-64 rounded-full border-[44px] border-amber-500/10" aria-hidden="true" />

@@ -1,3 +1,5 @@
+import { resolutionHref, resolutionRules } from "@/lib/reconciliation-resolution-contract";
+
 export type ReconciliationWorkflowInput = {
   id?: string;
   farm_id?: string | null;
@@ -80,7 +82,7 @@ const rules: Record<string, RuleGuide> = {
   LOCKED_RECORD_CHANGED_WITHOUT_APPROVAL: {
     title: "A locked Daily Record changed without approval",
     causes: ["A correction bypassed the governed request process.", "An approved correction exists but was not linked to this record."],
-    href: "/app/governance", destination: "Review correction history", destinationContext: "Inspect the audit trail and require a governed correction explanation.",
+    href: "/app/daily-records", destination: "Review correction history", destinationContext: "Inspect the exact locked Daily Record and its governed correction history.",
     verification: "A CEO-approved correction must reference the changed source record.",
   },
   BIRD_DAY_CONTINUITY_BREAK: {
@@ -128,7 +130,7 @@ const rules: Record<string, RuleGuide> = {
   EGG_OPENING_BALANCE_UNAVAILABLE: {
     title: "The flock’s opening egg balance is unknown",
     causes: ["Production records began after the flock was placed.", "Opening egg stock was never documented."],
-    href: "/app/sales", destination: "Review egg custody", destinationContext: "Document the supported opening balance before relying on cumulative comparisons.",
+    href: "/app/daily-records", destination: "Review egg custody", destinationContext: "Create the missing placement-date record or request a governed legacy opening balance.",
     verification: "Production and sales custody must begin from a supported opening balance.",
   },
   EGG_SALES_EXCEED_PRODUCTION: {
@@ -153,19 +155,19 @@ const rules: Record<string, RuleGuide> = {
     title: "A recorded cost has not been fully assigned",
     explanation: "The expense exists, but all or part of it is not assigned to the farm, flock, or batch that should carry the cost.",
     causes: ["The cost scope was left blank.", "Allocation percentages or amounts do not total the expense.", "The expense is genuinely organization-wide and needs a CEO exception."],
-    href: "/app/inventory?tab=monthly", destination: "Review the cost record", destinationContext: "Assign the full expense to the correct operating scope, or request a CEO exception.",
+    href: "/app/reports", destination: "Review the cost record", destinationContext: "Assign the full expense to the correct operating scope, or request a CEO exception.",
     verification: "The allocation total must equal the recorded expense exactly, unless the CEO accepts a documented exception.",
   },
   LOCKED_FINANCIAL_PERIOD_HAS_GAPS: {
     title: "A locked financial period still contains unsupported costs",
     causes: ["The period was locked before all costs were assigned.", "A warning was accepted without complete supporting evidence."],
-    href: "/app/inventory?tab=monthly", destination: "Review the locked period", destinationContext: "Inspect the warnings and submit a governed correction where required.",
+    href: "/app/reports", destination: "Review the locked period", destinationContext: "Inspect the warnings and submit a governed correction where required.",
     verification: "The corrected period must contain no unexplained allocation gaps.",
   },
   PAST_FINANCIAL_PERIOD_UNLOCKED: {
     title: "A past financial period is still open to changes",
     causes: ["Month-end review was not completed.", "Unresolved costs or warnings prevented the period from being locked."],
-    href: "/app/inventory?tab=monthly", destination: "Complete month-end review", destinationContext: "Finish cost review and have the CEO lock the period.",
+    href: "/app/reports", destination: "Complete month-end review", destinationContext: "Finish cost review and have the CEO lock the period.",
     verification: "The period must pass its checks and be locked by the CEO.",
   },
   ACTIVE_FLOCK_LINEAGE_BROKEN: {
@@ -207,7 +209,10 @@ export function reconciliationWorkflow(
   const owner = role === "ceo"
     ? governance || finding.domain === "financial" ? "CEO review · Farm Manager correction" : "Farm Manager correction"
     : governance ? "CEO review required" : "Your operating scope";
-  const destinationHref = finding.rule_code === "ACTIVE_FLOCK_LINEAGE_BROKEN" && finding.flock_id
+  const exactRule = resolutionRules[finding.rule_code];
+  const destinationHref = finding.id && exactRule
+    ? resolutionHref(exactRule.path, finding.id)
+    : finding.rule_code === "ACTIVE_FLOCK_LINEAGE_BROKEN" && finding.flock_id
     ? `/app/flocks?view=overview&flock=${encodeURIComponent(finding.flock_id)}&check=lineage${finding.id ? `&finding=${encodeURIComponent(finding.id)}` : ""}`
     : finding.rule_code === "BATCH_FLOCK_PLACEMENT_MISMATCH" && finding.batch_id
       ? `/app/flocks?view=overview&batch=${encodeURIComponent(finding.batch_id)}&check=placement${finding.id ? `&finding=${encodeURIComponent(finding.id)}` : ""}`

@@ -74,6 +74,10 @@ export async function publishActionEventNotifications(input: { action: Row; even
     const recipients = await recipientsFor(eventType, input.action, text(input.event.actor_id) || null);
     if (!recipients.length) return { created: 0 };
     const content = copy(eventType, input.action, input.event);
+    const exactRecordCheckRoute = text(input.action.source_name) === "Record Checks"
+      && ["assigned", "resolution_submitted", "verification_failed", "system_verified"].includes(eventType)
+      ? text(input.action.source_route)
+      : "";
     const rows = recipients.map((recipientId) => ({
       org_id: input.action.org_id,
       recipient_id: recipientId,
@@ -83,7 +87,7 @@ export async function publishActionEventNotifications(input: { action: Row; even
       severity: input.action.severity,
       title: content.title,
       message: content.message,
-      route: `/app/alerts#action-${text(input.action.id)}`,
+      route: exactRecordCheckRoute || `/app/alerts#action-${text(input.action.id)}`,
     }));
     const { error } = await db.from("notifications").upsert(rows, { onConflict: "recipient_id,action_event_id", ignoreDuplicates: true });
     if (error) throw error;

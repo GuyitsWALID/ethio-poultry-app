@@ -9,7 +9,7 @@ import { actionDeadlineAt, actionStatusAfter } from "@/lib/action-desk-policy";
 import { recordAuditEvent } from "@/lib/audit-ledger";
 import { getCurrentAlerts } from "@/lib/current-alerts";
 import { getGovernanceAlerts } from "@/lib/governance-workflow";
-import { getReconciliationAlerts } from "@/lib/reconciliation-service";
+import { getReconciliationAlerts, isReconciliationFindingActive } from "@/lib/reconciliation-service";
 import { publishActionEventNotifications } from "@/lib/notification-service";
 
 type Row = Record<string, unknown>;
@@ -17,7 +17,7 @@ const db = governanceAdmin as any;
 const activeStatuses = ["open", "assigned", "acknowledged", "in_progress", "awaiting_verification", "escalated"];
 
 const commandSchema = z.discriminatedUnion("command", [
-  z.object({ command: z.literal("assign"), ownerId: z.string().uuid(), dueAt: z.string().datetime().optional() }),
+  z.object({ command: z.literal("assign"), ownerId: z.string().uuid(), dueAt: z.string().datetime().optional(), instruction: z.string().trim().min(8).max(1000).optional() }),
   z.object({ command: z.literal("claim") }),
   z.object({ command: z.literal("acknowledge"), note: z.string().trim().min(4).max(1000) }),
   z.object({ command: z.literal("start"), note: z.string().trim().min(4).max(1000) }),
@@ -134,7 +134,10 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
   const accessible = await scope(ctx);
   for (const row of byKey.values()) {
     if (text(row.status) === "resolved" || activeKeys.has(text(row.source_key)) || !visible(row, ctx, accessible)) continue;
-    if (await inventoryAlertActive(ctx, row) !== false) continue;
+    const reconciliationId = text(row.source_key).startsWith("reconciliation-") ? text(row.source_key).slice("reconciliation-".length) : null;
+    if (reconciliationId) {
+      if (await isReconciliationFindingActive(ctx, reconciliationId, false)) continue;
+    } else if (await inventoryAlertActive(ctx, row) !== false) continue;
     if (row.source_resolved_at) continue;
     const baseContext = text(row.context).split(" Source status:", 1)[0];
     const sourceStatus = text(row.status) === "awaiting_verification"
@@ -205,6 +208,38 @@ export async function loadActionDesk(ctx: AccessContext): Promise<ActionDesk> {
   };
 }
 
+export async function ensureReconciliationAction(ctx: AccessContext, findingId: string) {
+  if (ctx.role !== "ceo") throw new Error("Only the CEO can assign Record Checks.");
+  const { data: finding, error } = await db.from("reconciliation_findings").select("id,status,title,severity,explanation,recommended_action,farm_id,warehouse_id,last_seen_at").eq("id", findingId).eq("org_id", ctx.orgId).maybeSingle();
+  if (error || !finding) throw new Error(error?.message ?? "Record Check not found.");
+  if (!["open", "acknowledged", "investigating"].includes(text(finding.status))) throw new Error("Only an active Record Check can be assigned.");
+  const sourceKey = `reconciliation-${findingId}`;
+  const { data: existing } = await db.from("operational_actions").select("*").eq("org_id", ctx.orgId).eq("source_key", sourceKey).maybeSingle();
+  if (existing) return existing;
+  const severity = ["critical", "high"].includes(text(finding.severity)) ? "high" : text(finding.severity) === "medium" ? "medium" : "low";
+  const now = new Date().toISOString();
+  const { data, error: insertError } = await db.from("operational_actions").insert({
+    org_id: ctx.orgId, source_key: sourceKey, source_name: "Record Checks", source_route: `/app/reconciliation?finding=${findingId}`,
+    title: text(finding.title), context: text(finding.recommended_action) || text(finding.explanation), severity,
+    farm_id: finding.farm_id ?? null, warehouse_id: finding.warehouse_id ?? null, due_at: actionDeadlineAt(severity),
+    source_first_seen_at: text(finding.last_seen_at) || now, source_last_seen_at: now,
+  }).select("*").single();
+  if (insertError) {
+    if (insertError.code === "23505") {
+      const { data: raced } = await db.from("operational_actions").select("*").eq("org_id", ctx.orgId).eq("source_key", sourceKey).single();
+      return raced;
+    }
+    throw new Error(insertError.message);
+  }
+  await event(ctx, text(data.id), "discovered", null, "open", "Created when the CEO chose to assign this Record Check.", null, true);
+  return data;
+}
+
+export async function assignReconciliationFinding(ctx: AccessContext, findingId: string, ownerId: string, dueAt?: string, instruction?: string) {
+  const action = await ensureReconciliationAction(ctx, findingId);
+  return transitionAction(ctx, text(action.id), { command: "assign", ownerId, ...(dueAt ? { dueAt } : {}), ...(instruction ? { instruction } : {}) });
+}
+
 async function assertScope(ctx: AccessContext, row: Row) {
   if (ctx.role === "ceo" || ctx.supportSessionId) return;
   if (text(row.owner_id) === ctx.userId) return;
@@ -244,7 +279,7 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
     if (ctx.role !== "ceo") throw new Error("Only the CEO can assign operational actions.");
     await assertAssignableOwner(ctx, row, command.ownerId);
     changes = { ...changes, owner_id: command.ownerId, assigned_by: ctx.userId, assigned_at: now, due_at: command.dueAt ?? row.due_at, status: actionStatusAfter("assign", before), escalated_at: null, escalation_reason: null };
-    eventType = "assigned"; note = "Responsibility assigned by the CEO.";
+    eventType = "assigned"; note = command.instruction ?? "Responsibility assigned by the CEO.";
   } else if (command.command === "claim") {
     if (ctx.role !== "farm_manager" || row.owner_id) throw new Error("Only an unassigned in-scope action can be claimed.");
     changes = { ...changes, owner_id: ctx.userId, assigned_by: ctx.userId, assigned_at: now, status: actionStatusAfter("claim", before) };
@@ -269,7 +304,8 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
       if (ctx.role !== "ceo") throw new Error("Only the CEO can verify and close completed actions.");
       if (before !== "awaiting_verification") throw new Error("The Farm Manager must complete and submit this task before CEO verification.");
       const inventoryActive = await inventoryAlertActive(ctx, row);
-      const sourceActive = inventoryActive ?? (await collectOperationalAlerts(ctx)).some((alert) => alert.id === text(row.source_key));
+      const findingId = text(row.source_key).startsWith("reconciliation-") ? text(row.source_key).slice("reconciliation-".length) : null;
+      const sourceActive = findingId ? await isReconciliationFindingActive(ctx, findingId, true) : inventoryActive ?? (await collectOperationalAlerts(ctx)).some((alert) => alert.id === text(row.source_key));
       if (sourceActive) {
         changes = { ...changes, status: actionStatusAfter("verify", before, true) }; eventType = "verification_failed"; note = "The originating check still reports this issue.";
       } else {

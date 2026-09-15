@@ -45,7 +45,7 @@ test("action desk exposes assignment, evidence, source inspection, and verificat
 test("a corrected assigned task remains visible for manager completion and CEO verification", () => {
   assert.match(actionService, /Source status: The source check is clear/);
   assert.match(actionService, /async function inventoryAlertActive/);
-  assert.match(actionService, /const sourceActive = inventoryActive \?\?/);
+  assert.match(actionService, /isReconciliationFindingActive/);
   assert.match(actionService, /if \(ctx\.role !== "ceo"\) throw new Error\("Only the CEO can verify and close completed actions\."\)/);
   assert.match(page, /Complete and send for review/);
   assert.match(page, /Verify and close/);
