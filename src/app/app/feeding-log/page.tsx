@@ -62,6 +62,7 @@ export default function FeedControlPage() {
   const { scope, setScope, period, batches, flocks, loading: scopeLoading } = useFarmScope();
   const [data, setData] = useState<FeedData | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const [templateOpen, setTemplateOpen] = useState(false); const [weightTask, setWeightTask] = useState<Task | null>(null);
+  const deepLinkHandled = useRef(false);
 
   const openFeedAction = useCallback((target: NonNullable<FeedData["exceptions"][number]["actionTarget"]>) => {
     if (target === "template_management") setTemplateOpen(true);
@@ -99,6 +100,13 @@ export default function FeedControlPage() {
     catch (cause) { setError(cause instanceof Error ? cause.message : "Feed Control could not load."); } finally { setLoading(false); }
   }, [period.dateFrom, period.dateTo, scope.batchId]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!data || deepLinkHandled.current) return;
+    const target = new URLSearchParams(window.location.search).get("feed_target");
+    if (target !== "template_management" && target !== "today_sessions" && target !== "feed_history") return;
+    deepLinkHandled.current = true;
+    openFeedAction(target);
+  }, [data, openFeedAction]);
 
   if (scopeLoading || (!scope.batchId && activeBatches.length > 0)) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10"><LoadingState /></main>;
 

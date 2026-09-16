@@ -6,6 +6,8 @@ const migration = await readFile(new URL("../supabase/migrations/20260825000000_
 const workflow = await readFile(new URL("../src/lib/governance-workflow.ts", import.meta.url), "utf8");
 const desk = await readFile(new URL("../src/components/governance-desk.tsx", import.meta.url), "utf8");
 const banner = await readFile(new URL("../src/components/governance-authorization-banner.tsx", import.meta.url), "utf8");
+const templateReview = await readFile(new URL("../src/components/governance-feed-template-review.tsx", import.meta.url), "utf8");
+const feedPage = await readFile(new URL("../src/app/app/feeding-log/page.tsx", import.meta.url), "utf8");
 
 test("requester identity and scope are immutable review evidence", () => {
   assert.match(migration, /requester_name_snapshot.*set not null/s);
@@ -40,6 +42,19 @@ test("guided desk replaces raw identifiers and JSON editing with readable action
   assert.match(desk, /Revise and resubmit/);
   assert.match(desk, /Supporting files/);
   assert.match(desk, /Inspect affected record/);
+});
+
+test("feed-template governance opens the exact editor and previews every approved row", () => {
+  assert.match(desk, /feed_target.*template_management/);
+  assert.match(desk, /filter_batchId/);
+  assert.match(desk, /feed-template-management/);
+  assert.match(feedPage, /get\("feed_target"\)/);
+  assert.match(feedPage, /openFeedAction\(target\)/);
+  assert.match(banner, /Final review before applying/);
+  assert.match(banner, /FeedTemplateReview rows=\{templateRows\}/);
+  assert.doesNotMatch(banner, /String\(item\.value\?\?"Not recorded"\)/);
+  assert.match(templateReview, /approved feed-plan row/);
+  assert.match(templateReview, /Recommended g\/bird/);
 });
 
 test("governance history and private evidence are append-only", () => {
