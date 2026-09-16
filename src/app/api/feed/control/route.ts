@@ -174,10 +174,10 @@ export async function GET(request: Request) {
   const applicableFcr = layerMetric ? calculateLayerFcr(actualFeed, eggMassKg) : growthFcr;
   const expectedDays = expectedFlockDays;
   const exceptions: Row[] = [];
-  if (!activeTemplate) exceptions.push({ severity: "critical", title: "Feed template not configured", reason: "This batch has no active age-based ration and weight standard.", action: "Open template management" });
-  else if (!currentTarget) exceptions.push({ severity: "critical", title: "Batch age is outside the active template", reason: `Age day ${ageToday} has no matching template row.`, action: "Extend template age ranges" });
-  if (todayFlocks.some((flock) => flock.sessions.some((session: Row) => session.status !== "completed"))) exceptions.push({ severity: "warning", title: "Today’s feeding is incomplete", reason: "Complete each planned session before closing the day.", action: "Record today’s sessions" });
-  if (coveredFlockDays < expectedDays) exceptions.push({ severity: "warning", title: `${expectedDays - coveredFlockDays} flock-days missing`, reason: "Coverage includes closed sessions and clearly labelled legacy daily totals only; pre-placement and future dates are excluded.", action: "Reconcile feed history" });
+  if (!activeTemplate) exceptions.push({ severity: "critical", title: "Feed template not configured", reason: "This batch has no active age-based ration and weight standard.", action: "Open template management", actionTarget: "template_management" });
+  else if (!currentTarget) exceptions.push({ severity: "critical", title: "Batch age is outside the active template", reason: `Age day ${ageToday} has no matching template row.`, action: "Extend template age ranges", actionTarget: "template_management" });
+  if (todayFlocks.some((flock) => flock.sessions.some((session: Row) => session.status !== "completed"))) exceptions.push({ severity: "warning", title: "Today’s feeding is incomplete", reason: "Complete each planned session before closing the day.", action: "Record today’s sessions", actionTarget: "today_sessions" });
+  if (coveredFlockDays < expectedDays) exceptions.push({ severity: "warning", title: `${expectedDays - coveredFlockDays} flock-days missing`, reason: "Coverage includes closed sessions and clearly labelled legacy daily totals only; pre-placement and future dates are excluded.", action: "Reconcile feed history", actionTarget: "feed_history" });
   if (inventoryCover !== null && inventoryCover < 7) exceptions.push({ severity: inventoryCover < 3 ? "critical" : "warning", title: "Feed cover is low", reason: `${inventoryCover} days of compatible stock remain at the current consumption rate.`, action: "Review Inventory" });
 
   const tasks = tasksS.data.map((task) => {
@@ -211,6 +211,6 @@ export async function GET(request: Request) {
     template: activeTemplate ? { ...activeTemplate, rows: templateRows, currentTarget } : null, templateVersions: templatesS.data.map((template) => ({ id: template.id, name: template.name, source_type: template.source_type, is_active: template.is_active, created_at: template.created_at })), suggestedRows,
     tasks, milestones, nextCheck: pendingTasks[0] ?? { displayStatus: "All checks complete" }, exceptions,
     settings: { warningVariancePct: warning, criticalVariancePct: critical },
-    permissions: { canManage: ctx.canManage, canConfigure: false, canRecordWeight: ctx.role === "farm_manager" },
+    permissions: { canManage: ctx.canManage, canConfigure: false, canRecordWeight: ctx.role === "farm_manager", templateChangeMode: !ctx.canManage ? "read_only" : ctx.supportSessionId ? "direct" : "governance" },
   });
 }
