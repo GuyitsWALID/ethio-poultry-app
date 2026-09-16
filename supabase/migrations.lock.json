@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 61,
-  "latest": "20260910000000_exact_record_check_resolution.sql",
-  "aggregateSha256": "3184cd63af3b6bb42b3f138123d2e2eb1df8a32613e5314447fe05074232f454",
+  "count": 62,
+  "latest": "20260916000000_fix_feed_template_ordinality.sql",
+  "aggregateSha256": "9986a4801d6e5c07c56ad4dceadc22499dd31f2eb267c36443b039729b7cde72",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -141,6 +141,7 @@
     "20260902000000_configurable_action_notifications.sql": "55e6bdb82c178df86fda76fe1d3270643f14ffe67b5dfdc461742016a27fa22e",
     "20260904000000_scheduled_management_reports.sql": "24fbbcc3ff7a0668931ff4accb3b8d7f3cef9b38e6a5d1a9f6e98e664b6d6915",
     "20260906000000_preserve_receipt_item_identity.sql": "132501f40ddda309cd63741a63273b61291f2ba2b69776e340d6bb28543e73b0",
-    "20260910000000_exact_record_check_resolution.sql": "2b8a56f6d2def7833dcc890f21f7ac1b0cfe53bf5d9d1212acae75f1e8846db5"
+    "20260910000000_exact_record_check_resolution.sql": "2b8a56f6d2def7833dcc890f21f7ac1b0cfe53bf5d9d1212acae75f1e8846db5",
+    "20260916000000_fix_feed_template_ordinality.sql": "bb70ddcfa03009e049df315fbe388bee12c716a95f8b45d838e91f84d7f9e389"
   }
 }

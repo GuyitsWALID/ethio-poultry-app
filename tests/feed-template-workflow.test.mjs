@@ -5,6 +5,7 @@ import test from "node:test";
 const controlRoute = await readFile(new URL("../src/app/api/feed/control/route.ts", import.meta.url), "utf8");
 const templateRoute = await readFile(new URL("../src/app/api/feed/templates/route.ts", import.meta.url), "utf8");
 const page = await readFile(new URL("../src/app/app/feeding-log/page.tsx", import.meta.url), "utf8");
+const ordinalityFix = await readFile(new URL("../supabase/migrations/20260916000000_fix_feed_template_ordinality.sql", import.meta.url), "utf8");
 
 test("feed template exceptions expose a stable actionable destination", () => {
   assert.match(controlRoute, /actionTarget: "template_management"/);
@@ -37,4 +38,12 @@ test("template submission feedback is visible and accessible", () => {
   assert.match(page, /role=\{feedback\.tone === "error" \? "alert" : "status"\}/);
   assert.match(page, /setFeedback\(\{ tone: "error", text \}\)/);
   assert.match(page, /setFeedback\(\{ tone: "success", text \}\)/);
+});
+
+test("template persistence uses PostgreSQL-valid recordset ordinality syntax", () => {
+  assert.match(ordinalityFix, /rows from \(\s*jsonb_to_recordset\(p_rows\) as \(/s);
+  assert.match(ordinalityFix, /\) with ordinality as x\(/);
+  assert.doesNotMatch(ordinalityFix, /jsonb_to_recordset\(p_rows\) with ordinality x\(/);
+  assert.match(ordinalityFix, /insert into public\.batch_feed_template_milestones[\s\S]*select v_template_id,week_number/);
+  assert.match(ordinalityFix, /grant execute on function public\.save_feed_template.*authenticated,service_role/);
 });
