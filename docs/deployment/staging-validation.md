@@ -31,9 +31,13 @@ The repository pins `@opennextjs/cloudflare` and Wrangler and owns both `wrangle
 
 Use these Cloudflare Workers Build settings for the staging Worker:
 
+- Production branch: `notmain`
+- Builds for non-production branches: disabled
 - Build command: `npm run cloudflare:build`
 - Deploy command: `npx wrangler deploy --env staging --keep-vars`
 - Worker name: `ethio-poultry-app-staging` (declared by the `staging` Wrangler environment)
+
+The deployment environment contract also rejects a Cloudflare staging build when `WORKERS_CI_BRANCH` is not `notmain`. Production builds remain restricted to `master`.
 
 Configure the following in both **Build variables and secrets** and the Worker's **Runtime variables and secrets** where applicable:
 
