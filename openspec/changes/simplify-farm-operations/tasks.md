@@ -10,9 +10,9 @@
 ## 2. Database Foundation
 
 - [x] 2.1 Add a migration for `profiles.preferred_locale`, organization Today/CEO feature flags, `client_operation_receipts`, and `daily_task_attestations`; verify constraints, indexes, comments, and additive upgrade behavior with migration tests.
-- [ ] 2.2 Add tenant-scoped RLS and grants so receipts and attestations are accessible only through authorized server operations; verify CEO, assigned manager, out-of-scope manager, System Admin, and cross-tenant cases.
-- [ ] 2.3 Add canonical payload hashing, receipt replay, task-attestation, source-fingerprint, and per-resource revision database helpers; verify same-payload replay and changed-payload rejection in SQL integration tests.
-- [ ] 2.4 Add a versioned atomic Finish day function that locks and revalidates the operating day before delegating to existing close behavior; verify concurrency, stale revision, missing work, repeated close, and no-active-flock cases.
+- [x] 2.2 Add tenant-scoped RLS and grants so receipts and attestations are accessible only through authorized server operations; verify CEO, assigned manager, out-of-scope manager, System Admin, and cross-tenant cases.
+- [x] 2.3 Add canonical payload hashing, receipt replay, task-attestation, source-fingerprint, and per-resource revision database helpers; verify same-payload replay and changed-payload rejection in SQL integration tests.
+- [x] 2.4 Add a versioned atomic Finish day function that locks and revalidates the operating day before delegating to existing close behavior; verify concurrency, stale revision, missing work, repeated close, and no-active-flock cases.
 - [x] 2.5 Regenerate or safely update Supabase types and verify `npm run typecheck` recognizes the new columns, tables, and functions.
 
 ## 3. Deep Today Module

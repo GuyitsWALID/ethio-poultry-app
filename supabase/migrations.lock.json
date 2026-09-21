@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 63,
-  "latest": "20260920000000_simplified_bilingual_farm_operations.sql",
-  "aggregateSha256": "223c770db1fcc65fee243db015fc4927c2fc72741fe260f0ffb6de82be7d0fcc",
+  "count": 64,
+  "latest": "20260921000000_finish_day_composite_return.sql",
+  "aggregateSha256": "9dde94da3500d8108a2c618e94bcda77c14af8bf1be78f92368374ccbc214ce7",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -143,6 +143,7 @@
     "20260906000000_preserve_receipt_item_identity.sql": "132501f40ddda309cd63741a63273b61291f2ba2b69776e340d6bb28543e73b0",
     "20260910000000_exact_record_check_resolution.sql": "2b8a56f6d2def7833dcc890f21f7ac1b0cfe53bf5d9d1212acae75f1e8846db5",
     "20260916000000_fix_feed_template_ordinality.sql": "bb70ddcfa03009e049df315fbe388bee12c716a95f8b45d838e91f84d7f9e389",
-    "20260920000000_simplified_bilingual_farm_operations.sql": "ec5a769855f82414f81d85ba2c4c3d476d844bcb0a379dc9e02859f931878080"
+    "20260920000000_simplified_bilingual_farm_operations.sql": "ec5a769855f82414f81d85ba2c4c3d476d844bcb0a379dc9e02859f931878080",
+    "20260921000000_finish_day_composite_return.sql": "bc2fc388f914707fbdd5ec9e03051c1a70ff8c5454c26b15bf16f427ad5c326f"
   }
 }

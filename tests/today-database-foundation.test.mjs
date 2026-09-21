@@ -6,6 +6,10 @@ const migration = await readFile(
   new URL("../supabase/migrations/20260920000000_simplified_bilingual_farm_operations.sql", import.meta.url),
   "utf8",
 );
+const finishDayHardening = await readFile(
+  new URL("../supabase/migrations/20260921000000_finish_day_composite_return.sql", import.meta.url),
+  "utf8",
+);
 
 test("Today foundation is additive and feature gated", () => {
   assert.match(migration, /add column if not exists preferred_locale text not null default 'en'/i);
@@ -53,6 +57,14 @@ test("versioned Finish day locks, checks revisions, and reuses the authoritative
   assert.match(migration, /Confirm routine supplies for every flock/i);
   assert.match(migration, /public\.close_farm_operating_day\(p_farm_id, p_operating_date/i);
   assert.match(migration, /operating day is already closed/i);
+  assert.match(
+    finishDayHardening,
+    /select \* into v_day\s+from public\.close_farm_operating_day\(p_farm_id, p_operating_date/i,
+  );
+  assert.doesNotMatch(
+    finishDayHardening,
+    /select public\.close_farm_operating_day\(p_farm_id, p_operating_date[^;]+into v_day/i,
+  );
 });
 
 test("command helpers are not directly executable from the browser", () => {
