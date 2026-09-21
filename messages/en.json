@@ -1,0 +1,77 @@
+{
+  "Common": {
+    "language": "Language",
+    "english": "English",
+    "amharic": "Amharic",
+    "save": "Save",
+    "cancel": "Cancel",
+    "continue": "Continue",
+    "back": "Back",
+    "close": "Close",
+    "retry": "Try again",
+    "loading": "Loading…",
+    "notAvailable": "Not available"
+  },
+  "Navigation": {
+    "today": "Today",
+    "flocks": "Flocks",
+    "stock": "Stock",
+    "sales": "Sales",
+    "alerts": "Alerts",
+    "historyMore": "History & More"
+  },
+  "Today": {
+    "title": "Today’s work",
+    "question": "What work must I finish today?",
+    "farm": "Farm",
+    "flock": "Flock",
+    "workDate": "Work date",
+    "overallProgress": "Today’s progress",
+    "noActiveFlock": "No active flock work today",
+    "noActiveFlockHelp": "You can still record stock, sales, expenses, and finish the farm day.",
+    "tasks": {
+      "confirmContext": "Confirm flock and date",
+      "birds": "Check birds",
+      "feeding": "Record feeding",
+      "eggsWater": "Record eggs and water",
+      "healthDeaths": "Record health and deaths",
+      "supplies": "Record supplies used",
+      "review": "Review and finish the day",
+      "stock": "Stock work",
+      "sales": "Sales",
+      "expenses": "Expenses",
+      "assignedFixes": "Assigned fixes"
+    },
+    "states": {
+      "notStarted": "Not started",
+      "draft": "Draft on tablet",
+      "waiting": "Waiting to sync",
+      "complete": "Complete",
+      "needsAttention": "Needs attention"
+    },
+    "connection": {
+      "saved": "Saved on tablet",
+      "waiting": "Waiting to sync",
+      "synced": "Synced",
+      "offline": "Offline"
+    },
+    "review": {
+      "title": "Review today’s work",
+      "completed": "Completed jobs",
+      "missing": "Missing jobs",
+      "unsynced": "Unsynced drafts",
+      "problems": "Problems to fix",
+      "finish": "Finish day"
+    }
+  },
+  "Errors": {
+    "unauthorized": "You do not have access to this work.",
+    "assignmentChanged": "Your farm assignment changed. Connect and refresh before continuing.",
+    "staleRevision": "This record changed after you opened it. Review the latest values and try again.",
+    "locked": "This day is locked. Ask the CEO to approve this change.",
+    "insufficientStock": "There is not enough stock in the selected warehouse.",
+    "validation": "Check the highlighted information and try again.",
+    "offlineFinish": "Connect to the internet before finishing the day.",
+    "unknown": "Something went wrong. Try again."
+  }
+}

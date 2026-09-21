@@ -768,6 +768,60 @@ export type Database = {
           },
         ]
       }
+      client_operation_receipts: {
+        Row: {
+          actor_id: string
+          command_id: string
+          command_type: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          org_id: string
+          payload_hash: string
+          result: Json | null
+          schema_version: number
+        }
+        Insert: {
+          actor_id: string
+          command_id: string
+          command_type: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          org_id: string
+          payload_hash: string
+          result?: Json | null
+          schema_version?: number
+        }
+        Update: {
+          actor_id?: string
+          command_id?: string
+          command_type?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          org_id?: string
+          payload_hash?: string
+          result?: Json | null
+          schema_version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_operation_receipts_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_operation_receipts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           created_at: string
@@ -802,6 +856,77 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "customers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_task_attestations: {
+        Row: {
+          confirmed_by: string
+          created_at: string
+          farm_id: string
+          flock_id: string | null
+          id: string
+          org_id: string
+          source_fingerprint: string
+          superseded_at: string | null
+          task_code: string
+          updated_at: string
+          work_date: string
+        }
+        Insert: {
+          confirmed_by: string
+          created_at?: string
+          farm_id: string
+          flock_id?: string | null
+          id?: string
+          org_id: string
+          source_fingerprint: string
+          superseded_at?: string | null
+          task_code: string
+          updated_at?: string
+          work_date: string
+        }
+        Update: {
+          confirmed_by?: string
+          created_at?: string
+          farm_id?: string
+          flock_id?: string | null
+          id?: string
+          org_id?: string
+          source_fingerprint?: string
+          superseded_at?: string | null
+          task_code?: string
+          updated_at?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_task_attestations_confirmed_by_fkey"
+            columns: ["confirmed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_task_attestations_farm_id_fkey"
+            columns: ["farm_id"]
+            isOneToOne: false
+            referencedRelation: "farms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_task_attestations_flock_id_fkey"
+            columns: ["flock_id"]
+            isOneToOne: false
+            referencedRelation: "flocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_task_attestations_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -1887,6 +2012,9 @@ export type Database = {
           plan: string | null
           primary_location: string | null
           settings_json: Json | null
+          simplified_ceo_workspace_enabled: boolean
+          today_pilot_accepted_at: string | null
+          today_workspace_enabled: boolean
           updated_at: string
         }
         Insert: {
@@ -1899,6 +2027,9 @@ export type Database = {
           plan?: string | null
           primary_location?: string | null
           settings_json?: Json | null
+          simplified_ceo_workspace_enabled?: boolean
+          today_pilot_accepted_at?: string | null
+          today_workspace_enabled?: boolean
           updated_at?: string
         }
         Update: {
@@ -1911,6 +2042,9 @@ export type Database = {
           plan?: string | null
           primary_location?: string | null
           settings_json?: Json | null
+          simplified_ceo_workspace_enabled?: boolean
+          today_pilot_accepted_at?: string | null
+          today_workspace_enabled?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -2184,6 +2318,7 @@ export type Database = {
           is_active: boolean
           org_id: string
           phone: string | null
+          preferred_locale: string
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
         }
@@ -2194,6 +2329,7 @@ export type Database = {
           is_active?: boolean
           org_id: string
           phone?: string | null
+          preferred_locale?: string
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
@@ -2204,6 +2340,7 @@ export type Database = {
           is_active?: boolean
           org_id?: string
           phone?: string | null
+          preferred_locale?: string
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
@@ -3069,8 +3206,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_daily_task_attestation_v1: {
+        Args: {
+          p_actor_id: string
+          p_command_id: string
+          p_schema_version: number
+          p_command_type: string
+          p_payload: Json
+          p_farm_id: string
+          p_flock_id: string | null
+          p_work_date: string
+          p_task_code: string
+          p_expected_source_fingerprint: string
+        }
+        Returns: Json
+      }
       auth_org_id: { Args: never; Returns: string }
+      canonical_today_payload_hash: { Args: { p_payload: Json }; Returns: string }
       close_feed_day: { Args: { p_actor_id: string; p_flock_id: string; p_record_date: string; p_override_reason?: string | null }; Returns: Json }
+      execute_today_command_v1: { Args: { p_actor_id: string; p_command: Json }; Returns: Json }
       create_branch_batch_cycle: {
         Args: {
           p_org_id: string
@@ -3127,6 +3281,26 @@ export type Database = {
           p_quantity: number
         }
         Returns: number
+      }
+      finish_farm_operating_day_v1: {
+        Args: {
+          p_actor_id: string
+          p_command_id: string
+          p_schema_version: number
+          p_payload: Json
+          p_farm_id: string
+          p_operating_date: string
+          p_expected_revision: string
+        }
+        Returns: Json
+      }
+      today_resource_revision: {
+        Args: { p_resource_type: string; p_resource_id: string; p_work_date?: string | null }
+        Returns: string
+      }
+      today_source_fingerprint: {
+        Args: { p_farm_id: string; p_flock_id: string | null; p_work_date: string; p_task_code: string }
+        Returns: string
       }
     }
     Enums: {

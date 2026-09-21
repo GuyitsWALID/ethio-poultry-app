@@ -5,6 +5,7 @@ import { LogOut } from "lucide-react";
 import { useState } from "react";
 
 import { createClient } from "@/utils/supabase/client";
+import { clearOfflineIdentity } from "@/lib/today-workspace/offline-store";
 
 type SignOutButtonProps = {
   iconOnly?: boolean;
@@ -21,6 +22,7 @@ export function SignOutButton({ iconOnly = false, compact = false, tone = "light
     setPending(true);
     const supabase = createClient();
     await supabase.auth.signOut();
+    await clearOfflineIdentity();
     router.replace(redirectTo);
   };
 

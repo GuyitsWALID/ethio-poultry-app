@@ -1,0 +1,77 @@
+{
+  "Common": {
+    "language": "ቋንቋ",
+    "english": "እንግሊዝኛ",
+    "amharic": "አማርኛ",
+    "save": "አስቀምጥ",
+    "cancel": "ተው",
+    "continue": "ቀጥል",
+    "back": "ተመለስ",
+    "close": "ዝጋ",
+    "retry": "እንደገና ሞክር",
+    "loading": "በመጫን ላይ…",
+    "notAvailable": "የለም"
+  },
+  "Navigation": {
+    "today": "ዛሬ",
+    "flocks": "መንጋዎች",
+    "stock": "ክምችት",
+    "sales": "ሽያጭ",
+    "alerts": "ማሳወቂያዎች",
+    "historyMore": "ታሪክ እና ተጨማሪ"
+  },
+  "Today": {
+    "title": "የዛሬ ሥራ",
+    "question": "ዛሬ ማጠናቀቅ ያለብኝ ሥራ ምንድን ነው?",
+    "farm": "እርሻ",
+    "flock": "መንጋ",
+    "workDate": "የሥራ ቀን",
+    "overallProgress": "የዛሬ እድገት",
+    "noActiveFlock": "ዛሬ የሚሠራበት ንቁ መንጋ የለም",
+    "noActiveFlockHelp": "አሁንም ክምችት፣ ሽያጭና ወጪ መመዝገብ እና የእርሻውን ቀን መዝጋት ይችላሉ።",
+    "tasks": {
+      "confirmContext": "መንጋውንና ቀኑን ያረጋግጡ",
+      "birds": "ዶሮዎችን ይቁጠሩ",
+      "feeding": "መኖ ይመዝግቡ",
+      "eggsWater": "እንቁላልና ውሃ ይመዝግቡ",
+      "healthDeaths": "ጤናና ሞት ይመዝግቡ",
+      "supplies": "የተጠቀሙትን እቃ ይመዝግቡ",
+      "review": "ይገምግሙና ቀኑን ይጨርሱ",
+      "stock": "የክምችት ሥራ",
+      "sales": "ሽያጭ",
+      "expenses": "ወጪዎች",
+      "assignedFixes": "የተመደቡ ማስተካከያዎች"
+    },
+    "states": {
+      "notStarted": "አልተጀመረም",
+      "draft": "በታብሌቱ ላይ ተቀምጧል",
+      "waiting": "ለመላክ በመጠበቅ ላይ",
+      "complete": "ተጠናቋል",
+      "needsAttention": "እርምጃ ያስፈልጋል"
+    },
+    "connection": {
+      "saved": "በታብሌቱ ላይ ተቀምጧል",
+      "waiting": "ለመላክ በመጠበቅ ላይ",
+      "synced": "ተልኳል",
+      "offline": "ከመስመር ውጭ"
+    },
+    "review": {
+      "title": "የዛሬን ሥራ ይገምግሙ",
+      "completed": "የተጠናቀቁ ሥራዎች",
+      "missing": "ያልተሠሩ ሥራዎች",
+      "unsynced": "ያልተላኩ ረቂቆች",
+      "problems": "መስተካከል ያለባቸው ችግሮች",
+      "finish": "ቀኑን ጨርስ"
+    }
+  },
+  "Errors": {
+    "unauthorized": "ይህን ሥራ ለማየት ፈቃድ የለዎትም።",
+    "assignmentChanged": "የእርሻ ምደባዎ ተቀይሯል። ከኢንተርኔት ጋር ተገናኝተው እንደገና ያድሱ።",
+    "staleRevision": "ይህ መዝገብ ከከፈቱት በኋላ ተቀይሯል። አዲሱን መረጃ ይመልከቱና እንደገና ይሞክሩ።",
+    "locked": "ይህ ቀን ተዘግቷል። ለውጡን እንዲያጸድቅ ዋና ሥራ አስፈጻሚውን ይጠይቁ።",
+    "insufficientStock": "በተመረጠው መጋዘን ውስጥ በቂ ክምችት የለም።",
+    "validation": "ምልክት የተደረገበትን መረጃ ያስተካክሉና እንደገና ይሞክሩ።",
+    "offlineFinish": "ቀኑን ከማጠናቀቅዎ በፊት ከኢንተርኔት ጋር ይገናኙ።",
+    "unknown": "ችግር ተፈጥሯል። እንደገና ይሞክሩ።"
+  }
+}

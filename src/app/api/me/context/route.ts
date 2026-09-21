@@ -35,7 +35,7 @@ export async function GET() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("org_id, role, is_active")
+      .select("org_id, role, is_active, preferred_locale")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -65,6 +65,7 @@ export async function GET() {
           orgId: effectiveOrgId,
           orgName,
           role: normalizeRole(profile.role),
+          preferredLocale: profile.preferred_locale === "am" ? "am" : "en",
           supportSessionId: supportSession?.id ?? null,
           supportExpiresAt: supportSession?.expires_at ?? null,
         }),
@@ -74,7 +75,7 @@ export async function GET() {
 
     const { data: adminProfile, error: adminProfileError } = await supabaseAdmin
       .from("profiles")
-      .select("org_id, role, is_active")
+      .select("org_id, role, is_active, preferred_locale")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -89,6 +90,7 @@ export async function GET() {
         orgId: adminProfile?.org_id ?? null,
         orgName,
         role: adminProfile?.is_active ? normalizeRole(adminProfile?.role) : null,
+        preferredLocale: adminProfile?.preferred_locale === "am" ? "am" : "en",
       }),
       { status: 200 }
     );

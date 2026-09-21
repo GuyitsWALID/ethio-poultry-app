@@ -82,11 +82,12 @@ export type ManagerAction = {
 export type FarmManagerDashboardResponse = {
   meta: {
     asOf: string;
+    dateFrom: string;
+    dateTo: string;
+    periodDays: number;
     timezone: string;
     refreshedAt: string;
     scopeLabel: string;
-    trailingFrom: string;
-    baselineFrom: string;
     targetCoveragePct: number;
     latestRecordAt: string | null;
   };
@@ -120,7 +121,7 @@ export type FarmManagerDashboardResponse = {
   }>;
   actions: ManagerAction[];
   operationalCosts: {
-    feedCost7d: number | null;
+    feedCost: number | null;
     feedCostPerEgg: number | null;
     feedCostPerGrowingBirdDay: number | null;
     lowStockCount: number;
@@ -205,19 +206,23 @@ export function buildFlockComparison(input: {
   feedClosed: boolean;
   warningVariancePct: number;
   criticalVariancePct: number;
+  baselineFrom?: string;
+  baselineTo?: string;
 }) : FlockComparison {
   const { flock, asOf } = input;
   const ageDays = ageOnDate(flock.placementDate, flock.ageAtPlacementDays, asOf);
   const ageWeeks = Math.floor(ageDays / 7);
   const target = input.targets.find((row) => row.week_number === ageWeeks) ?? null;
   const todayRows = input.dailyRows.filter((row) => row.record_date === asOf);
-  const baselineRows = input.dailyRows.filter((row) => row.record_date >= addDays(asOf, -7) && row.record_date < asOf);
+  const baselineFrom = input.baselineFrom ?? addDays(asOf, -7);
+  const baselineTo = input.baselineTo ?? addDays(asOf, -1);
+  const baselineRows = input.dailyRows.filter((row) => row.record_date >= baselineFrom && row.record_date <= baselineTo);
   const today = summarizeDaily(todayRows);
   const baseline = summarizeDaily(baselineRows);
   const layerMode = flock.type === "layer" || flock.type === "parent_stock";
   const weights = [...input.weights].filter((row) => row.record_date <= asOf && row.average_weight_g !== null).sort((a, b) => b.record_date.localeCompare(a.record_date));
   const latestWeight = weights[0] ?? null;
-  const previousWeight = weights[1] ?? null;
+  const previousWeight = weights.find((row) => row.record_date !== latestWeight?.record_date && row.record_date >= baselineFrom && row.record_date <= baselineTo) ?? null;
   const actual = layerMode ? today.hdep : latestWeight?.average_weight_g ?? null;
   const targetValue = layerMode ? target?.target_hdep_pct ?? null : target?.target_weight_g ?? null;
   const baselineValue = layerMode ? baseline.hdep : previousWeight?.average_weight_g ?? null;
@@ -277,6 +282,15 @@ export function buildFlockComparison(input: {
     status, attentionScore, nextAction, actionRoute,
     dataStatus: complete && targetAvailable ? "complete" : todayRows.length ? "partial" : "missing",
   };
+}
+
+export function sortFlocksByTargetAlignment(rows: FlockComparison[]) {
+  const dataRank = { complete: 3, partial: 2, missing: 1 } as const;
+  return [...rows].sort((a, b) => {
+    const aDistance = a.targetAttainment === null ? Number.POSITIVE_INFINITY : Math.abs(100 - a.targetAttainment);
+    const bDistance = b.targetAttainment === null ? Number.POSITIVE_INFINITY : Math.abs(100 - b.targetAttainment);
+    return aDistance - bDistance || dataRank[b.dataStatus] - dataRank[a.dataStatus] || a.code.localeCompare(b.code);
+  });
 }
 
 export function authorizedFarmIds(

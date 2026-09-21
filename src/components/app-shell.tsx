@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { HeaderAlertBell } from "@/components/header-alert-bell";
 import { HeaderOrgBrand } from "@/components/header-org-brand";
+import { LocaleSwitch } from "@/components/locale-switch";
 import { SignOutButton } from "@/components/sign-out-button";
 import { GovernanceAuthorizationBanner } from "@/components/governance-authorization-banner";
 
@@ -84,6 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
               <div className="flex shrink-0 items-center gap-2 sm:gap-3">
                 <div className="hidden items-center gap-2 px-2 text-xs text-forest-600 md:flex"><CalendarDays className="h-4 w-4" aria-hidden="true" /><span>{addisDateLabel()}</span><span className="hidden text-forest-400 xl:inline">· Addis Ababa</span></div>
+                <LocaleSwitch />
                 <HeaderAlertBell />
                 <SignOutButton compact />
               </div>
