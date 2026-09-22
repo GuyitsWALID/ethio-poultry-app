@@ -3,6 +3,7 @@ import {readFile} from "node:fs/promises";
 import test from "node:test";
 
 const migration = await readFile(new URL("../supabase/migrations/20260920000000_simplified_bilingual_farm_operations.sql", import.meta.url), "utf8");
+const domainGuards = await readFile(new URL("../supabase/migrations/20260922000000_today_command_domain_guards.sql", import.meta.url), "utf8");
 const service = await readFile(new URL("../src/lib/today-workspace/commands.ts", import.meta.url), "utf8");
 const route = await readFile(new URL("../src/app/api/farm-manager/today/commands/route.ts", import.meta.url), "utf8");
 
@@ -23,6 +24,15 @@ test("mutable Today commands compare resource revisions in the database transact
   assert.match(migration, /v_command_type = 'save_daily_record'[\s\S]*today_resource_revision\('daily_record'/);
   assert.match(migration, /v_command_type in \('save_feed_session', 'close_feed_day'\)[\s\S]*today_resource_revision\('feed_day'/);
   assert.match(migration, /source record changed\. Refresh before saving/);
+});
+
+test("feed-session dispatch shares closed-day, catalogue, warehouse, and assignment invariants", () => {
+  assert.match(domainGuards, /before insert or update on public\.feeding_session_records/);
+  assert.match(domainGuards, /feed_day_closures[\s\S]*status = 'closed'/);
+  assert.match(domainGuards, /i\.category = 'feed'/);
+  assert.match(domainGuards, /'kg', 'kilogram', 'kilograms'/);
+  assert.match(domainGuards, /v_warehouse_branch_id is distinct from v_flock_branch_id/);
+  assert.match(migration, /v_command_type = 'save_feed_session'[\s\S]*user_warehouse_access/);
 });
 
 test("the service delegates each command to a server-only atomic function", () => {

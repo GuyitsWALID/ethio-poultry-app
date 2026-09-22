@@ -22,12 +22,13 @@ function mapDatabaseError(error: DatabaseError): TodayErrorCode {
   if (error.code === "40001" || /changed|refresh|revision/.test(message)) return "RESOURCE_CONFLICT";
   if (error.code === "42501" || /assignment|assigned to you|farm manager/.test(message)) return "ASSIGNMENT_REQUIRED";
   if (error.code === "55000" || /operating day.*(locked|not open)/.test(message)) return "OPERATING_DAY_LOCKED";
+  if (/operating window|seven.day|too old|expired/.test(message)) return "OPERATING_WINDOW_EXPIRED";
   if (/insufficient.*stock/.test(message)) return "INSUFFICIENT_STOCK";
   if (/category|medicine items only|vaccine items only|feed inventory item/.test(message)) return "ITEM_CATEGORY_NOT_ALLOWED";
   if (/already used with a different payload/.test(message)) return "COMMAND_ID_REUSED";
-  if (error.code === "23514" || /still missing|still open|confirm .* every flock/.test(message)) return "MISSING_REQUIRED_WORK";
+  if (/still missing|still open|confirm .* every flock/.test(message)) return "MISSING_REQUIRED_WORK";
   if (error.code === "P0002" || /not found/.test(message)) return "SOURCE_NOT_FOUND";
-  if (error.code === "22023") return "INVALID_PAYLOAD";
+  if (["22023", "22P02", "23502", "23503", "23505", "23514"].includes(error.code ?? "")) return "INVALID_PAYLOAD";
   return "INTERNAL_ERROR";
 }
 

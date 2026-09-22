@@ -47,7 +47,9 @@ const uuid = z.string().uuid();
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const nonEmpty = z.string().trim().min(1);
 const positive = z.number().positive();
+const nonNegative = z.number().nonnegative();
 const nullableUuid = uuid.nullable().optional();
+const nullableText = z.string().trim().max(2000).nullable().optional();
 
 const baseCommand = z.object({
   schema_version: z.literal(TODAY_SCHEMA_VERSION),
@@ -65,6 +67,78 @@ const usageRow = z.object({
   quantity: positive,
 });
 
+const feedSession = z.object({
+  session_name: nonEmpty,
+  session_time: z.string().regex(/^\d{2}:\d{2}(?::\d{2})?$/).nullable().optional(),
+  feeders_count: z.number().int().positive(),
+  planned_feed_kg: positive,
+  actual_feed_kg: nonNegative.nullable().optional(),
+  notes: nullableText,
+  feed_item_id: nullableUuid,
+  warehouse_id: nullableUuid,
+  feed_type: z.enum(["starter_feed", "grower_pullet_feed", "layer_feed", "broiler_feed", "medicated_feed"]),
+  status: z.enum(["planned", "completed", "missed"]).default("planned"),
+}).superRefine((value, context) => {
+  if (value.status !== "completed") return;
+  if (value.actual_feed_kg == null) context.addIssue({code: "custom", path: ["actual_feed_kg"], message: "Completed sessions require actual feed."});
+  if (!value.feed_item_id) context.addIssue({code: "custom", path: ["feed_item_id"], message: "Completed sessions require a feed item."});
+  if (!value.warehouse_id) context.addIssue({code: "custom", path: ["warehouse_id"], message: "Completed sessions require a warehouse."});
+});
+
+const newInventoryItem = z.object({
+  name: z.string().trim().min(2).max(120),
+  category: z.enum(["feed", "medicine", "vaccine", "vitamin", "supplement", "equipment", "spare_parts", "packaging", "miscellaneous"]),
+  unit: z.string().trim().min(1).max(40),
+  reorderLevel: nonNegative,
+});
+
+const receiptDetails = z.object({
+  procurement_type: z.enum(["monthly", "emergency", "miscellaneous"]).default("miscellaneous"),
+  supplier_name: z.string().trim().max(160).nullable().optional(),
+  invoice_number: z.string().trim().max(120).nullable().optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
+}).default({procurement_type: "miscellaneous"});
+
+const stockReceipt = z.object({
+  warehouse_id: uuid,
+  item_id: nullableUuid,
+  quantity: positive,
+  unit_cost: nonNegative,
+  item: newInventoryItem.nullable().optional(),
+  details: receiptDetails,
+}).refine((value) => Boolean(value.item_id) !== Boolean(value.item), {
+  message: "Choose either an existing item or enter one new item.",
+  path: ["item_id"],
+});
+
+const salePayload = z.object({
+  product_category: z.enum(["egg", "bird", "training", "equipment_medicine", "consultancy", "package"]),
+  product_label: nonEmpty,
+  quantity: positive,
+  unit_price: nonNegative,
+  paid_amount: nonNegative.default(0),
+  unit: z.string().trim().min(1).max(40),
+  payment_method: nullableText,
+  customer_name: nullableText,
+  customer_phone: nullableText,
+  notes: nullableText,
+}).refine((value) => value.paid_amount <= value.quantity * value.unit_price, {
+  message: "Paid amount cannot exceed the gross amount.",
+  path: ["paid_amount"],
+});
+
+const expensePayload = z.object({
+  category: z.enum(["feed", "medicine", "vaccine", "vitamin", "supplement", "payroll", "utility", "biosecurity", "transport", "maintenance", "labor", "rent", "packaging", "miscellaneous"]),
+  description: nonEmpty,
+  amount: positive,
+  allocation_method: z.enum(["direct", "bird_count", "egg_count", "feed_consumption", "manual_percent"]).default("direct"),
+  entry_kind: z.enum(["monthly", "one_off"]).default("one_off"),
+  warehouse_id: nullableUuid,
+  supplier_name: nullableText,
+  invoice_number: nullableText,
+  reference_doc: nullableText,
+});
+
 const commandSchemas = {
   save_daily_record: baseCommand.extend({
     type: z.literal("save_daily_record"),
@@ -80,7 +154,7 @@ const commandSchemas = {
     flock_id: uuid,
     payload: z.object({
       session_id: nullableUuid,
-      session: z.record(z.string(), z.unknown()),
+      session: feedSession,
     }),
   }),
   close_feed_day: baseCommand.extend({
@@ -123,22 +197,15 @@ const commandSchemas = {
   }),
   record_stock_receipt: baseCommand.extend({
     type: z.literal("record_stock_receipt"),
-    payload: z.object({
-      warehouse_id: uuid,
-      item_id: nullableUuid,
-      quantity: positive,
-      unit_cost: z.number().nonnegative(),
-      item: z.record(z.string(), z.unknown()).optional(),
-      details: z.record(z.string(), z.unknown()).default({}),
-    }),
+    payload: stockReceipt,
   }),
   record_sale: baseCommand.extend({
     type: z.literal("record_sale"),
-    payload: z.record(z.string(), z.unknown()),
+    payload: salePayload,
   }),
   record_expense: baseCommand.extend({
     type: z.literal("record_expense"),
-    payload: z.record(z.string(), z.unknown()),
+    payload: expensePayload,
   }),
   update_assigned_action: baseCommand.extend({
     type: z.literal("update_assigned_action"),
