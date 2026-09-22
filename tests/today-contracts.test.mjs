@@ -26,7 +26,7 @@ test("every version-one command has a usable validated interface", () => {
   const actionId = "10000000-0000-4000-8000-000000000006";
   const commands = [
     {...base, type: "save_daily_record", payload: {record: {record_date: base.work_date}, usages: []}},
-    {...base, type: "save_feed_session", payload: {session: {session_name: "Morning", feeders_count: 4, planned_feed_kg: 25, feed_type: "layer_feed", status: "planned"}}},
+    {...base, type: "save_feed_session", expected_resource_revision: "feed-revision", payload: {session: {session_name: "Morning", feeders_count: 4, planned_feed_kg: 25, feed_type: "layer_feed", status: "planned"}}},
     {...base, type: "close_feed_day", expected_resource_revision: "feed-revision", payload: {}},
     {...base, type: "record_mortality_event", payload: {count: 1, cause: "Natural causes"}},
     {...base, type: "record_health_event", payload: {event_type: "observation", event: {description: "Healthy flock"}}},
@@ -125,8 +125,15 @@ test("completed feed sessions require actual feed and assigned stock selections"
     feed_type: "layer_feed",
     status: "completed",
   };
-  assert.equal(parseTodayCommand({...base, type: "save_feed_session", payload: {session}}).payload.session.status, "completed");
-  assert.throws(() => parseTodayCommand({...base, type: "save_feed_session", payload: {session: {...session, warehouse_id: null}}}));
+  assert.equal(parseTodayCommand({...base, type: "save_feed_session", expected_resource_revision: "feed-revision", payload: {session}}).payload.session.status, "completed");
+  assert.throws(() => parseTodayCommand({...base, type: "save_feed_session", expected_resource_revision: "feed-revision", payload: {session: {...session, warehouse_id: null}}}));
+});
+
+test("mutable Daily Record and feed commands require their resource revision", () => {
+  const daily = {record: {record_date: base.work_date}, usages: [], daily_record_id: "10000000-0000-4000-8000-000000000006"};
+  assert.throws(() => parseTodayCommand({...base, type: "save_daily_record", payload: daily}));
+  assert.doesNotThrow(() => parseTodayCommand({...base, type: "save_daily_record", expected_resource_revision: "daily-revision", payload: daily}));
+  assert.throws(() => parseTodayCommand({...base, type: "save_feed_session", payload: {session: {session_name: "Morning", feeders_count: 4, planned_feed_kg: 25, feed_type: "layer_feed"}}}));
 });
 
 test("sales and expenses are validated before entering the receipt transaction", () => {

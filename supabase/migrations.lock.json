@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 65,
-  "latest": "20260922000000_today_command_domain_guards.sql",
-  "aggregateSha256": "1d2b1d6f7932e26f8cd471ba48e358295ff9280765392df47b988e311d608d99",
+  "count": 66,
+  "latest": "20260922001000_today_command_api_boundary.sql",
+  "aggregateSha256": "d9b68ac46febf5d8946e8747a938f0433ea5f4d7e2f8cc44263afb2d7c612fab",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -145,6 +145,7 @@
     "20260916000000_fix_feed_template_ordinality.sql": "bb70ddcfa03009e049df315fbe388bee12c716a95f8b45d838e91f84d7f9e389",
     "20260920000000_simplified_bilingual_farm_operations.sql": "ec5a769855f82414f81d85ba2c4c3d476d844bcb0a379dc9e02859f931878080",
     "20260921000000_finish_day_composite_return.sql": "bc2fc388f914707fbdd5ec9e03051c1a70ff8c5454c26b15bf16f427ad5c326f",
-    "20260922000000_today_command_domain_guards.sql": "e7c1938f7601f3feffe21888232d2d01a155abe89841f61c54bfad5d7eb777ac"
+    "20260922000000_today_command_domain_guards.sql": "e7c1938f7601f3feffe21888232d2d01a155abe89841f61c54bfad5d7eb777ac",
+    "20260922001000_today_command_api_boundary.sql": "bb1c27936c81579210b8941052544cce02a0e231e7cbebe1a2941e6d020815a5"
   }
 }

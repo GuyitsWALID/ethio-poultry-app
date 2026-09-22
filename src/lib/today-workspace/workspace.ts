@@ -268,6 +268,26 @@ export async function loadTodayWorkspace(
     return [`${flockId}:${taskCode}`, String(result.data)] as const;
   })));
   const fingerprints = new Map(fingerprintPairs);
+  const dailyRevisionPairs = await Promise.all([...dailyByFlock.entries()].map(async ([flockId, record]) => {
+    const result = await governanceAdmin.rpc("today_resource_revision", {
+      p_resource_type: "daily_record",
+      p_resource_id: String(record.id),
+      p_work_date: null,
+    });
+    if (result.error) throw new TodayWorkspaceError("INTERNAL_ERROR", result.error.message, 500);
+    return [flockId, String(result.data)] as const;
+  }));
+  const feedRevisionPairs = await Promise.all(flockIds.map(async (flockId) => {
+    const result = await governanceAdmin.rpc("today_resource_revision", {
+      p_resource_type: "feed_day",
+      p_resource_id: flockId,
+      p_work_date: selection.workDate,
+    });
+    if (result.error) throw new TodayWorkspaceError("INTERNAL_ERROR", result.error.message, 500);
+    return [flockId, String(result.data)] as const;
+  }));
+  const dailyRevisions = new Map(dailyRevisionPairs);
+  const feedRevisions = new Map(feedRevisionPairs);
 
   const data: TodayWorkspaceData = {
     organization: {todayWorkspaceEnabled: Boolean(organization.today_workspace_enabled)},
@@ -300,11 +320,11 @@ export async function loadTodayWorkspace(
           dirtyEggs: asNumber(record.dirty_eggs),
           totalEggs: asNumber(record.total_eggs),
           waterLiters: asNumber(record.water_consumed_liters),
-          revision: String(record.updated_at),
+          revision: dailyRevisions.get(id) ?? "",
         } : null,
         previousClosingBirds: asNumber(previousByFlock.get(id)?.closing_birds),
         feedClosed: closure?.status === "closed",
-        feedRevision: closure ? String(closure.updated_at) : `missing:${id}:${selection.workDate}`,
+        feedRevision: feedRevisions.get(id) ?? "",
         hasHealthOrDeathActivity: mortalityFlocks.has(id) || healthFlocks.has(id) || Number(record?.deaths ?? 0) > 0,
         hasRoutineSupplyUsage: supplyFlocks.has(id),
         healthFingerprint: fingerprints.get(`${id}:health_deaths`) ?? "",

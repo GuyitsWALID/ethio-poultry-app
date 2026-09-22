@@ -235,7 +235,17 @@ export const todayCommandSchema = z.discriminatedUnion("type", [
   commandSchemas.record_expense,
   commandSchemas.update_assigned_action,
   commandSchemas.finish_operating_day,
-]);
+]).superRefine((command, context) => {
+  const updatesDailyRecord = command.type === "save_daily_record" && Boolean(command.payload.daily_record_id);
+  const changesFeedDay = command.type === "save_feed_session";
+  if ((updatesDailyRecord || changesFeedDay) && !command.expected_resource_revision) {
+    context.addIssue({
+      code: "custom",
+      path: ["expected_resource_revision"],
+      message: "Refresh this work before saving it.",
+    });
+  }
+});
 
 export type TodayCommand = z.infer<typeof todayCommandSchema>;
 

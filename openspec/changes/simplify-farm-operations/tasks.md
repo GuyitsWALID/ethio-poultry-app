@@ -22,7 +22,7 @@
 - [x] 3.3 Extract shared domain operations from existing route handlers without changing behavior, and verify legacy route tests still pass for Daily Records, Feed, Health, Mortality, Inventory, Sales, Expenses, and Action Desk.
 - [x] 3.4 Implement `executeTodayCommand` dispatch for daily records, feed sessions/close, mortality, health/vaccination, no-activity attestations, inventory receipts, sales, expenses, assigned actions, and Finish day; verify each command uses the authoritative operation and transaction boundary.
 - [x] 3.5 Add `GET /api/farm-manager/today` as a thin adapter with private/no-store headers and assignment-safe error handling; verify unauthorized targets reveal no scoped data.
-- [ ] 3.6 Add `POST /api/farm-manager/today/commands` as a thin adapter with idempotency, authorization, structured conflict/rejection results, and stable message codes; verify retry, stale assignment, lock, stock, category, and revision cases.
+- [x] 3.6 Add `POST /api/farm-manager/today/commands` as a thin adapter with idempotency, authorization, structured conflict/rejection results, and stable message codes; verify retry, stale assignment, lock, stock, category, and revision cases.
 
 ## 4. Localization Foundation
 
