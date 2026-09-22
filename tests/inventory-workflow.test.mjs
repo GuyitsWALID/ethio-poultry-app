@@ -15,6 +15,7 @@ const receiptIdentityFix = await readFile(new URL("../supabase/migrations/202609
 const vaccinationDateMigration = await readFile(new URL("../supabase/migrations/20260824002000_weekly_operating_grace_and_vaccination_date.sql", import.meta.url), "utf8");
 const healthPage = await readFile(new URL("../src/app/app/health/page.tsx", import.meta.url), "utf8");
 const operations = await readFile(new URL("../src/lib/inventory-operations.ts", import.meta.url), "utf8");
+const farmOperations = await readFile(new URL("../src/lib/farm-operations.ts", import.meta.url), "utf8");
 
 test("inventory begins with four plain operational jobs", () => {
   assert.match(page, /Current stock/);
@@ -43,8 +44,9 @@ test("physical counts compare the shelf with the ledger without silent adjustmen
 test("monthly and one-off expenses are validated and persisted distinctly", () => {
   assert.match(migration, /entry_kind text not null default 'one_off'/);
   assert.match(migration, /check \(entry_kind in \('monthly', 'one_off'\)\)/);
-  assert.match(costRoute, /VALID_ENTRY_KINDS/);
-  assert.match(costRoute, /entry_kind: entryKind/);
+  assert.match(costRoute, /recordExpense/);
+  assert.match(farmOperations, /z\.enum\(\["monthly", "one_off"\]\)/);
+  assert.match(farmOperations, /entry_kind: value\.entry_kind/);
   assert.match(page, /Confirmed monthly expense/);
   assert.match(page, /One-off miscellaneous expense/);
   assert.match(page, /does not change warehouse stock/i);
@@ -99,7 +101,8 @@ test("vaccination completion records the actual date without rewriting its plann
   assert.match(vaccinationDateMigration,/p_administered_on date/);
   assert.match(vaccinationDateMigration,/operating_date=p_administered_on and status='locked'/);
   assert.match(vaccinationDateMigration,/values\(v_org_id,v_flock_id,p_administered_on/);
-  assert.match(healthEventsRoute,/p_administered_on:administeredOn/);
+  assert.match(healthEventsRoute,/recordHealthEvidence/);
+  assert.match(farmOperations,/p_administered_on: administeredOn/);
   assert.match(healthPage,/name="administered_on"/);
   assert.match(healthPage,/Scheduled for/);
 });

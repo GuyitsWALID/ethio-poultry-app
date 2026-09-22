@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import {accessJson,canAccessFarm,getAccessContext,governanceAdmin,isAccessResponse} from "@/lib/access-context";
 import {recordAuditEvent} from "@/lib/audit-ledger";
+import {FarmOperationError,recordHealthEvidence} from "@/lib/farm-operations";
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,32 +26,16 @@ export async function GET(){
 }
 
 export async function POST(request:Request){
-  const ctx=await getAccessContext({tenant:true});if(isAccessResponse(ctx))return ctx;if(ctx.role!=="farm_manager"&&!ctx.supportSessionId)return accessJson({error:"Only an assigned farm manager can record health evidence."},403);
+  const ctx=await getAccessContext({tenant:true});if(isAccessResponse(ctx))return ctx;
+  if(ctx.role!=="farm_manager"&&!ctx.supportSessionId)return accessJson({error:"Only an assigned farm manager can record health evidence."},403);
   const body=await request.json().catch(()=>null) as Record<string,unknown>|null;
-  const vaccinationScheduleId=String(body?.vaccination_schedule_id??"").trim();
-  if(vaccinationScheduleId){
-    const itemId=String(body?.inventory_item_id??"").trim();const warehouseId=String(body?.warehouse_id??"").trim();const quantity=Number(body?.quantity);const administeredOn=String(body?.administered_on??"").trim();
-    if(!itemId||!warehouseId||!Number.isFinite(quantity)||quantity<=0||!DATE.test(administeredOn))return accessJson({error:"Vaccine item, warehouse, administered quantity, and actual administration date are required."},400);
-    const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Addis_Ababa",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-    if(administeredOn>today)return accessJson({error:"The administration date cannot be in the future."},400);
-    const {data,error}=await (governanceAdmin as any).rpc("complete_vaccination_with_inventory",{p_actor_id:ctx.userId,p_schedule_id:vaccinationScheduleId,p_item_id:itemId,p_warehouse_id:warehouseId,p_quantity:quantity,p_administered_on:administeredOn});
-    if(error)return accessJson({error:error.message},error.code==="42501"?403:error.code==="55000"?423:400);
-    await recordAuditEvent(ctx,{eventType:"vaccination.completed_with_inventory",operation:"insert",entityTable:"vaccination_events",entityId:vaccinationScheduleId,reason:"Completed vaccination and issued vaccine stock atomically.",after:data,warehouseId});
-    return accessJson({completion:data},201);
+  try{
+    const result=await recordHealthEvidence(ctx,body);
+    return result.kind==="vaccination"?accessJson({completion:result.data},201):accessJson({event:result.data},201);
+  }catch(error){
+    if(error instanceof FarmOperationError)return accessJson({error:error.message,...(error.guidance??{})},error.status);
+    return accessJson({error:error instanceof Error?error.message:"Unknown error"},500);
   }
-  const flockId=String(body?.flock_id??"");const eventDate=String(body?.event_date??"");const eventType=String(body?.event_type??"observation");if(!flockId||!DATE.test(eventDate)||!["disease","treatment","observation"].includes(eventType))return accessJson({error:"Flock, date, and a valid event type are required."},400);
-  const {data:flock}=await governanceAdmin.from("flocks").select("farm_id").eq("id",flockId).eq("org_id",ctx.orgId).maybeSingle();if(!flock||!(await canAccessFarm(ctx,String(flock.farm_id))))return accessJson({error:"Active farm assignment is required."},403);
-  if(!ctx.supportSessionId){const {data:operatingDay}=await governanceAdmin.from("farm_operating_days").select("status").eq("farm_id",flock.farm_id).eq("operating_date",eventDate).maybeSingle();if(operatingDay?.status==="locked"){const proposed={flock_id:flockId,event_date:eventDate,event_type:eventType,description:String(body?.description??"").trim()||null,diagnosis:String(body?.diagnosis??"").trim()||null,treatment:String(body?.treatment??"").trim()||null};return accessJson({error:"This operating day is locked. Request a governed health correction instead.",governance:{request_type:"health_schedule",farm_id:String(flock.farm_id),reason:`Record the ${eventType} health evidence for ${eventDate} after the operating window closed.`,proposed_values:proposed,changed_fields:Object.keys(proposed),destination:`Health event on ${eventDate}`,correction_route:"/app/health"}},423);}}
-  const vetName=String(body?.external_veterinarian_name??"").trim();const recommendation=String(body?.veterinarian_recommendation??"").trim();const reference=String(body?.veterinarian_reference??"").trim();const attachment=String(body?.attachment_url??"").trim();const recommendationStatus=String(body?.recommendation_status??"").trim();const hasVetEvidence=Boolean(vetName||recommendation||reference||attachment||recommendationStatus);if(hasVetEvidence&&(!vetName||!recommendation))return accessJson({error:"Veterinarian name and recommendation are required when external guidance is recorded."},400);if(recommendationStatus&&!["received","planned","implemented","declined"].includes(recommendationStatus))return accessJson({error:"Invalid recommendation status."},400);if(recommendationStatus==="declined"&&String(body?.treatment??"").trim().length<8)return accessJson({error:"Declined guidance requires an explanation in the action taken field."},400);
-  const inventoryItemId=String(body?.inventory_item_id??"").trim()||null;const warehouseId=String(body?.warehouse_id??"").trim()||null;const quantity=body?.quantity==null||body.quantity===""?null:Number(body.quantity);
-  if((inventoryItemId||warehouseId||quantity!==null)&&(!inventoryItemId||!warehouseId||quantity===null||!Number.isFinite(quantity)||quantity<=0))return accessJson({error:"Medicine item, warehouse, and administered quantity must be supplied together."},400);
-  const row={org_id:ctx.orgId,flock_id:flockId,event_date:eventDate,event_type:eventType,description:String(body?.description??"").trim()||null,diagnosis:String(body?.diagnosis??"").trim()||null,treatment:String(body?.treatment??"").trim()||null,attachment_url:attachment||null,vet_id:ctx.userId,external_veterinarian_name:vetName||null,veterinarian_recommendation:recommendation||null,veterinarian_reference:reference||null,veterinarian_attachment:attachment?{url:attachment}:null,recommendation_status:recommendationStatus||null};
-  if(inventoryItemId){
-    const {data,error}=await (governanceAdmin as any).rpc("record_health_event_with_inventory",{p_actor_id:ctx.userId,p_flock_id:flockId,p_event_date:eventDate,p_event_type:eventType,p_event:row,p_item_id:inventoryItemId,p_warehouse_id:warehouseId,p_quantity:quantity});
-    if(error)return accessJson({error:error.message},error.code==="42501"?403:error.code==="55000"?423:400);
-    await recordAuditEvent(ctx,{eventType:"health_treatment.recorded_with_inventory",operation:"insert",entityTable:"health_events",entityId:String(data.event_id),reason:"Recorded treatment and medicine usage atomically.",after:data,farmId:String(flock.farm_id),flockId,warehouseId});return accessJson({event:data},201);
-  }
-  const {data,error}=await governanceAdmin.from("health_events").insert(row).select("*").single();if(error)return accessJson({error:error.message},400);await recordAuditEvent(ctx,{eventType:"health_evidence.recorded",operation:"insert",entityTable:"health_events",entityId:String(data.id),reason:`Recorded ${eventType} health evidence.`,after:data,farmId:String(flock.farm_id),flockId});return accessJson({event:data},201);
 }
 
 export async function PATCH(request:Request){
