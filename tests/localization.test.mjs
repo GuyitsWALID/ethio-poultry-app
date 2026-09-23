@@ -9,6 +9,10 @@ import {
   formatOperationDate,
   formatOperationDateTime,
 } from "../src/i18n/formats.ts";
+import {
+  managerTodayMessageKeys,
+  terminologyReview,
+} from "../src/i18n/terminology-review.ts";
 
 function messageKeys(value, prefix = "") {
   return Object.entries(value).flatMap(([key, child]) => {
@@ -25,6 +29,26 @@ test("core Today messages are translated rather than copied", () => {
   for (const key of ["title", "question", "farm", "flock", "workDate"]) {
     assert.notEqual(am.Today[key], en.Today[key]);
   }
+});
+
+test("the terminology review manifest covers every manager-facing Today message", () => {
+  const expected = messageKeys({
+    Common: en.Common,
+    Navigation: en.Navigation,
+    Today: en.Today,
+    Errors: en.Errors,
+  }).sort();
+
+  assert.deepEqual([...managerTodayMessageKeys].sort(), expected);
+  assert.equal(new Set(managerTodayMessageKeys).size, managerTodayMessageKeys.length);
+  assert.equal(terminologyReview.sourceDocument, "docs/poultry-terminology-glossary.md");
+});
+
+test("partner approval is recorded explicitly with its reviewed version", () => {
+  assert.equal(terminologyReview.status, "approved");
+  assert.equal(terminologyReview.version, "2026-09-23-approved-1");
+  assert.equal(terminologyReview.reviewer, "product_owner_poultry_partner");
+  assert.equal(terminologyReview.reviewedAt, "2026-09-23");
 });
 
 test("operation date formatting is fixed to Addis Ababa", () => {

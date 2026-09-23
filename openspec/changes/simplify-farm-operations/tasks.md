@@ -29,7 +29,7 @@
 - [x] 4.1 Install and configure `next-intl` for preference-based `en` and `am` operation without locale URL prefixes; verify existing authenticated URLs remain unchanged.
 - [x] 4.2 Add typed shared and Today message catalogs plus locale/date/number/ETB helpers fixed to `Africa/Addis_Ababa`; verify catalog parity and locale formatting tests.
 - [x] 4.3 Add the CEO/Farm Manager English/Amharic header control, profile persistence, offline device fallback, and Admin exclusion; verify immediate switching, reload persistence, and Admin English-only behavior.
-- [ ] 4.4 Build and partner-review the poultry terminology glossary using the selected Amharic references; verify every manager-facing Today term has an approved English and Amharic entry.
+- [x] 4.4 Build and partner-review the poultry terminology glossary using the selected Amharic references; verify every manager-facing Today term has an approved English and Amharic entry.
 - [ ] 4.5 Migrate Farm Manager navigation, Today, validation, notifications, loading, empty, success, and error text to catalog keys; verify the hard-coded-string check and translated browser tests pass.
 - [ ] 4.6 Migrate the remaining CEO/Farm Manager Feed, Health, Inventory, Sales, Alerts, Governance, Record Checks, and Reports interface text before broad bilingual release; verify missing-key checks and Amharic expansion layouts.
 
