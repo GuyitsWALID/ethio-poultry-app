@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { createClient } from "@/utils/supabase/client";
@@ -16,6 +17,7 @@ type SignOutButtonProps = {
 
 export function SignOutButton({ iconOnly = false, compact = false, tone = "light", redirectTo = "/auth/sign-in" }: SignOutButtonProps) {
   const router = useRouter();
+  const t = useTranslations("Common");
   const [pending, setPending] = useState(false);
 
   const handleSignOut = async () => {
@@ -38,7 +40,7 @@ export function SignOutButton({ iconOnly = false, compact = false, tone = "light
       disabled={pending}
     >
       <LogOut className="h-4 w-4" aria-hidden="true" />
-      {iconOnly ? <span className="sr-only">Sign out</span> : <span className={compact ? "hidden sm:inline" : ""}>{pending ? "Signing out…" : "Sign out"}</span>}
+      {iconOnly ? <span className="sr-only">{t("signOut")}</span> : <span className={compact ? "hidden sm:inline" : ""}>{pending ? t("signingOut") : t("signOut")}</span>}
     </button>
   );
 }

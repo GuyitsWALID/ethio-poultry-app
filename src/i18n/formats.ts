@@ -22,6 +22,15 @@ export function formatOperationDateTime(value: Date | string | number, locale: A
   }).format(new Date(value));
 }
 
+export function formatHeaderDate(value: Date | string | number, locale: AppLocale) {
+  return new Intl.DateTimeFormat(displayLocales[locale], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: ADDIS_ABABA_TIME_ZONE,
+  }).format(new Date(value));
+}
+
 export function formatNumber(value: number, locale: AppLocale, maximumFractionDigits = 2) {
   return new Intl.NumberFormat(displayLocales[locale], {
     maximumFractionDigits,

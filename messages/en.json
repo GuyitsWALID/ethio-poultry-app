@@ -10,7 +10,16 @@
     "close": "Close",
     "retry": "Try again",
     "loading": "Loading…",
-    "notAvailable": "Not available"
+    "notAvailable": "Not available",
+    "signOut": "Sign out",
+    "signingOut": "Signing out…",
+    "dashboard": "Dashboard",
+    "openNavigation": "Open navigation",
+    "closeNavigation": "Close navigation",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "primaryNavigation": "Primary navigation",
+    "addisAbaba": "Addis Ababa"
   },
   "Navigation": {
     "today": "Today",
@@ -19,6 +28,108 @@
     "sales": "Sales",
     "alerts": "Alerts",
     "historyMore": "History & More"
+  },
+  "ManagerNavigation": {
+    "brand": "Poultry Farms",
+    "assignedBranchScope": "Assigned branch scope",
+    "sections": {
+      "farmOperations": "Farm operations",
+      "branchAnalytics": "Branch analytics",
+      "supportFunctions": "Support functions"
+    },
+    "items": {
+      "managerDashboard": "Manager Dashboard",
+      "dailyRecords": "Daily Records",
+      "dailyClose": "Daily Close",
+      "feed": "Feed",
+      "mortality": "Mortality",
+      "farmMonitoring": "Farm Monitoring",
+      "flocksBatches": "Flocks & Batches",
+      "governance": "Governance",
+      "recordChecks": "Record Checks",
+      "operationsAnalytics": "Operations Analytics",
+      "branchReports": "Branch Reports",
+      "healthLog": "Health Log",
+      "inventoryLog": "Inventory Log",
+      "sales": "Sales"
+    }
+  },
+  "PageTitles": {
+    "commandCenter": "Command center",
+    "branchNetwork": "Branch network",
+    "managerDashboard": "Manager dashboard",
+    "dailyRecords": "Daily Records",
+    "dailyClose": "Daily Close",
+    "feedControl": "Feed Control",
+    "mortality": "Mortality",
+    "farmMonitoring": "Farm Monitoring",
+    "flocksBatches": "Flocks & Batches",
+    "operationsAnalytics": "Operations Analytics",
+    "branchReports": "Branch Reports",
+    "healthLog": "Health Log",
+    "inventoryLog": "Inventory Log",
+    "sales": "Sales",
+    "alerts": "Alerts",
+    "governance": "Governance",
+    "operatingDays": "Operating Days",
+    "recordChecks": "Record Checks",
+    "operationsWorkspace": "Operations workspace",
+    "groups": {
+      "executiveOversight": "Executive oversight",
+      "farmOperations": "Farm operations",
+      "branchIntelligence": "Branch intelligence",
+      "supportFunctions": "Support functions",
+      "operationsAttention": "Operations attention",
+      "controlledChange": "Controlled change",
+      "dailyClosebook": "Daily closebook",
+      "automaticVerification": "Automatic verification",
+      "poultryManagement": "Poultry management"
+    }
+  },
+  "Notifications": {
+    "bellLabel": "{attentionCount} items need attention, {unreadCount} unread updates",
+    "panelLabel": "Attention and notifications",
+    "eyebrow": "Operations inbox",
+    "title": "Attention and updates",
+    "description": "Unfinished work stays visible until the system verifies it.",
+    "attention": "Attention",
+    "unread": "Unread",
+    "sectionsLabel": "Operations inbox sections",
+    "needsAttention": "Needs attention",
+    "updates": "Updates",
+    "openActionDesk": "Open action desk",
+    "settings": "Notification settings",
+    "markAllRead": "Mark all as read",
+    "due": "Due {time}",
+    "owner": "Owner: {name}",
+    "notAssigned": "Not assigned",
+    "new": "New",
+    "openAssignedTask": "Open task in Action Desk",
+    "current": "Current",
+    "severity": {
+      "high": "Urgent",
+      "medium": "Review",
+      "low": "Update"
+    },
+    "status": {
+      "open": "Unassigned",
+      "assigned": "Assigned",
+      "acknowledged": "Acknowledged",
+      "in_progress": "In progress",
+      "awaiting_verification": "Waiting for verification",
+      "escalated": "Escalated",
+      "resolved": "Resolved"
+    },
+    "errors": {
+      "attention": "Work needing attention could not be refreshed",
+      "updates": "Updates could not be refreshed"
+    },
+    "empty": {
+      "attentionTitle": "No work needs attention",
+      "attentionCopy": "All assigned checks and actions are resolved or waiting for a new event.",
+      "updatesTitle": "No recent updates",
+      "updatesCopy": "New assignments, deadlines, and verified outcomes will appear here."
+    }
   },
   "Today": {
     "title": "Today’s work",

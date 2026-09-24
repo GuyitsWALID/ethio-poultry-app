@@ -10,6 +10,7 @@ const settings = await readFile(new URL("../src/components/notifications/notific
 const monitoring = await readFile(new URL("../.github/workflows/platform-monitoring.yml", import.meta.url), "utf8");
 const wrangler = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
 const emailAdapter = await readFile(new URL("../src/lib/notification-email.ts", import.meta.url), "utf8");
+const en = JSON.parse(await readFile(new URL("../messages/en.json", import.meta.url), "utf8"));
 
 test("notification custody is recipient-scoped and direct client mutation is denied", () => {
   assert.match(migration, /create table if not exists public\.notification_preferences/i);
@@ -39,14 +40,16 @@ test("action events publish durable role-aware notifications", () => {
 test("notification experience supports unread state and user-controlled thresholds", () => {
   assert.match(bell, /unreadCount/);
   assert.match(bell, /\/api\/alerts\/header/);
-  assert.match(bell, /Needs attention/);
-  assert.match(bell, /Updates/);
-  assert.match(bell, /Unfinished work stays visible until system verification/);
-  assert.match(bell, /Owner: Not assigned/);
+  assert.match(bell, /t\("needsAttention"\)/);
+  assert.match(bell, /t\("updates"\)/);
+  assert.match(bell, /t\("description"\)/);
+  assert.match(bell, /t\("owner"/);
+  assert.equal(en.Notifications.needsAttention, "Needs attention");
+  assert.equal(en.Notifications.description, "Unfinished work stays visible until the system verifies it.");
   assert.match(bell, /mark_read/);
   assert.match(bell, /mark_all_read/);
-  assert.match(bell, /Open task in Action Desk/);
-  assert.match(bell, /Notification settings/);
+  assert.match(bell, /t\("openAssignedTask"\)/);
+  assert.match(bell, /t\("settings"\)/);
   assert.match(bell, /if \(!open && unreadCount > 0\) setView\("updates"\)/);
   assert.match(settings, /update_preferences/);
   assert.match(settings, /Tasks assigned directly by the CEO always appear/);

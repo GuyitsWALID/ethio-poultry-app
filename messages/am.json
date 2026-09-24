@@ -10,7 +10,16 @@
     "close": "ዝጋ",
     "retry": "እንደገና ሞክር",
     "loading": "በመጫን ላይ…",
-    "notAvailable": "የለም"
+    "notAvailable": "የለም",
+    "signOut": "ውጣ",
+    "signingOut": "በመውጣት ላይ…",
+    "dashboard": "ዋና ገጽ",
+    "openNavigation": "ምናሌውን ክፈት",
+    "closeNavigation": "ምናሌውን ዝጋ",
+    "expandSidebar": "የጎን ምናሌውን ዘርጋ",
+    "collapseSidebar": "የጎን ምናሌውን አሳጥር",
+    "primaryNavigation": "ዋና ምናሌ",
+    "addisAbaba": "አዲስ አበባ"
   },
   "Navigation": {
     "today": "ዛሬ",
@@ -19,6 +28,108 @@
     "sales": "ሽያጭ",
     "alerts": "ማሳወቂያዎች",
     "historyMore": "ታሪክ እና ተጨማሪ"
+  },
+  "ManagerNavigation": {
+    "brand": "የዶሮ እርሻዎች",
+    "assignedBranchScope": "የተመደበ የቅርንጫፍ ወሰን",
+    "sections": {
+      "farmOperations": "የእርሻ ሥራዎች",
+      "branchAnalytics": "የቅርንጫፍ ትንታኔ",
+      "supportFunctions": "የድጋፍ ሥራዎች"
+    },
+    "items": {
+      "managerDashboard": "የሥራ አስኪያጅ ዋና ገጽ",
+      "dailyRecords": "የዕለት መዝገቦች",
+      "dailyClose": "የዕለት መዝጊያ",
+      "feed": "መኖ",
+      "mortality": "ሞት",
+      "farmMonitoring": "የእርሻ ክትትል",
+      "flocksBatches": "መንጋዎች እና ቡድኖች",
+      "governance": "የለውጥ ፈቃድ",
+      "recordChecks": "የመዝገብ ማረጋገጫ",
+      "operationsAnalytics": "የሥራ ክንውን ትንታኔ",
+      "branchReports": "የቅርንጫፍ ሪፖርቶች",
+      "healthLog": "የጤና መዝገብ",
+      "inventoryLog": "የክምችት መዝገብ",
+      "sales": "ሽያጭ"
+    }
+  },
+  "PageTitles": {
+    "commandCenter": "የአስተዳደር ማዕከል",
+    "branchNetwork": "የቅርንጫፍ መረብ",
+    "managerDashboard": "የሥራ አስኪያጅ ዋና ገጽ",
+    "dailyRecords": "የዕለት መዝገቦች",
+    "dailyClose": "የዕለት መዝጊያ",
+    "feedControl": "የመኖ ቁጥጥር",
+    "mortality": "ሞት",
+    "farmMonitoring": "የእርሻ ክትትል",
+    "flocksBatches": "መንጋዎች እና ቡድኖች",
+    "operationsAnalytics": "የሥራ ክንውን ትንታኔ",
+    "branchReports": "የቅርንጫፍ ሪፖርቶች",
+    "healthLog": "የጤና መዝገብ",
+    "inventoryLog": "የክምችት መዝገብ",
+    "sales": "ሽያጭ",
+    "alerts": "ማሳወቂያዎች",
+    "governance": "የለውጥ ፈቃድ",
+    "operatingDays": "የሥራ ቀናት",
+    "recordChecks": "የመዝገብ ማረጋገጫ",
+    "operationsWorkspace": "የሥራ ቦታ",
+    "groups": {
+      "executiveOversight": "የአስተዳደር ክትትል",
+      "farmOperations": "የእርሻ ሥራዎች",
+      "branchIntelligence": "የቅርንጫፍ መረጃ",
+      "supportFunctions": "የድጋፍ ሥራዎች",
+      "operationsAttention": "ትኩረት የሚፈልጉ ሥራዎች",
+      "controlledChange": "በፈቃድ የሚደረግ ለውጥ",
+      "dailyClosebook": "የዕለት መዝጊያ መዝገብ",
+      "automaticVerification": "ራስ-ሰር ማረጋገጫ",
+      "poultryManagement": "የዶሮ እርባታ አስተዳደር"
+    }
+  },
+  "Notifications": {
+    "bellLabel": "{attentionCount} ሥራዎች ትኩረት ይፈልጋሉ፣ {unreadCount} ያልተነበቡ መልዕክቶች",
+    "panelLabel": "ትኩረት እና ማሳወቂያዎች",
+    "eyebrow": "የሥራ መልዕክት ሳጥን",
+    "title": "ትኩረት እና አዳዲስ መረጃዎች",
+    "description": "ሥርዓቱ እስኪያረጋግጥ ድረስ ያልተጠናቀቀ ሥራ ይታያል።",
+    "attention": "ትኩረት",
+    "unread": "ያልተነበበ",
+    "sectionsLabel": "የሥራ መልዕክት ሳጥን ክፍሎች",
+    "needsAttention": "ትኩረት ያስፈልጋል",
+    "updates": "አዳዲስ መረጃዎች",
+    "openActionDesk": "የተመደበ ሥራ ገጽን ክፈት",
+    "settings": "የማሳወቂያ ቅንብሮች",
+    "markAllRead": "ሁሉንም እንደተነበበ አድርግ",
+    "due": "መጨረሻ {time}",
+    "owner": "ኃላፊ፦ {name}",
+    "notAssigned": "አልተመደበም",
+    "new": "አዲስ",
+    "openAssignedTask": "የተመደበውን ሥራ ክፈት",
+    "current": "አሁን",
+    "severity": {
+      "high": "አስቸኳይ",
+      "medium": "ይገምግሙ",
+      "low": "መረጃ"
+    },
+    "status": {
+      "open": "አልተመደበም",
+      "assigned": "ተመድቧል",
+      "acknowledged": "ታይቷል",
+      "in_progress": "በሂደት ላይ",
+      "awaiting_verification": "ማረጋገጫ በመጠበቅ ላይ",
+      "escalated": "ለአስተዳደር ቀርቧል",
+      "resolved": "ተፈቷል"
+    },
+    "errors": {
+      "attention": "ትኩረት የሚፈልገውን ሥራ ማደስ አልተቻለም",
+      "updates": "አዳዲስ መረጃዎችን ማደስ አልተቻለም"
+    },
+    "empty": {
+      "attentionTitle": "ትኩረት የሚፈልግ ሥራ የለም",
+      "attentionCopy": "የተመደቡ ማረጋገጫዎችና ሥራዎች ተጠናቀዋል ወይም አዲስ ክስተት እየጠበቁ ነው።",
+      "updatesTitle": "አዲስ መረጃ የለም",
+      "updatesCopy": "አዲስ ምደባዎች፣ የጊዜ ገደቦችና የተረጋገጡ ውጤቶች እዚህ ይታያሉ።"
+    }
   },
   "Today": {
     "title": "የዛሬ ሥራ",
