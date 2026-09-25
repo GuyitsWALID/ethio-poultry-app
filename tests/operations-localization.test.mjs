@@ -30,3 +30,21 @@ test("Alerts and notification settings use bilingual catalogs", async () => {
     assert.doesNotMatch(settings, new RegExp(`(["'\\x60])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\1`));
   }
 });
+
+test("Inventory and warehouse workflows use the bilingual catalog", async () => {
+  const inventory = await read("../src/app/app/inventory/page.tsx");
+
+  assert.match(inventory, /useTranslations\("Inventory"\)/);
+  assert.match(inventory, /formatEtb\(/);
+  assert.match(inventory, /formatNumber\(/);
+
+  for (const phrase of [
+    "Current stock and automatic usage",
+    "Count every stocked item together",
+    "Receive stock into",
+    "This records a cost and does not change warehouse stock.",
+    "More stock actions",
+  ]) {
+    assert.doesNotMatch(inventory, new RegExp(`(["'\\x60])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\1`));
+  }
+});
