@@ -131,6 +131,135 @@
       "updatesCopy": "New assignments, deadlines, and verified outcomes will appear here."
     }
   },
+  "AlertsPage": {
+    "filters": {
+      "farms": "Farms",
+      "owners": "Owners",
+      "priorities": "Priorities",
+      "statuses": "Statuses",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "hero": {
+      "eyebrow": "Accountable action desk",
+      "title": "Every warning has an owner and a verified finish.",
+      "copy": "Assign responsibility, acknowledge the work, record what was corrected, then let the originating system verify the result.",
+      "refresh": "Refresh and verify"
+    },
+    "errors": {
+      "load": "Could not load the action desk.",
+      "update": "The action could not be updated."
+    },
+    "summary": {
+      "unassigned": "Unassigned",
+      "mine": "My actions",
+      "dueSoon": "Due within 24h",
+      "escalated": "Escalated",
+      "awaiting": "Awaiting check"
+    },
+    "queue": {
+      "eyebrow": "Active responsibility",
+      "title": "Operational action queue",
+      "count": "{visible} of {total} active actions shown",
+      "refreshing": "Refreshing sources…",
+      "search": "Search actions",
+      "filter": "Filter actions",
+      "all": "All active",
+      "mine": "My actions",
+      "unassigned": "Unassigned",
+      "escalated": "Escalated",
+      "verification": "Awaiting verification",
+      "collecting": "Collecting and checking operational actions…"
+    },
+    "severity": {
+      "high": "Urgent",
+      "medium": "Review",
+      "low": "Advisory"
+    },
+    "card": {
+      "owner": "Owner:",
+      "due": "Due:",
+      "notAssigned": "Not assigned",
+      "escalated": "Escalated {date}",
+      "responsibility": "Responsibility",
+      "chooseManager": "Choose Farm Manager",
+      "reassign": "Reassign",
+      "assign": "Assign action",
+      "claim": "Claim this action",
+      "ceoRequired": "CEO assignment is required.",
+      "reviewSource": "Review corrected source",
+      "inspectSource": "Inspect source",
+      "acknowledge": "Acknowledge",
+      "start": "Start work",
+      "complete": "Complete and send for review",
+      "verify": "Verify and close",
+      "sent": "Completion sent to CEO",
+      "history": "History ({count})"
+    },
+    "empty": {
+      "title": "No actions match this view",
+      "copy": "Clear the filter or continue normal operations."
+    },
+    "dialog": {
+      "completeTitle": "Confirm task completion",
+      "startTitle": "Start investigation",
+      "acknowledgeTitle": "Acknowledge responsibility",
+      "eyebrow": "Accountable action",
+      "close": "Close",
+      "completeHelp": "Confirm that you corrected the source record. The CEO will receive a notification, review the updated source, and run the final system check.",
+      "whatFixed": "What did you fix?",
+      "workNote": "Work note",
+      "fixedPlaceholder": "Briefly describe the stock, record, or value you corrected.",
+      "notePlaceholder": "Describe what you will check and the immediate next step.",
+      "evidence": "Reference or evidence",
+      "optional": "(optional)",
+      "evidencePlaceholder": "Optional receipt number, count sheet, or observation.",
+      "evidenceHelp": "Your confirmation does not close the task. The CEO must verify that the originating check is clear.",
+      "cancel": "Cancel",
+      "completeAction": "Complete and notify CEO",
+      "save": "Save and continue"
+    },
+    "roles": {
+      "ceo": "CEO",
+      "farm_manager": "Farm Manager",
+      "system_admin": "System Administrator"
+    },
+    "events": {
+      "assigned": "Assigned",
+      "claimed": "Claimed",
+      "acknowledge": "Acknowledged",
+      "work_started": "Work started",
+      "due_date_changed": "Due date changed",
+      "resolution_submitted": "Completion submitted",
+      "verification_failed": "Verification failed",
+      "system_verified": "System verified"
+    },
+    "timeUnavailable": "Time unavailable"
+  },
+  "NotificationSettings": {
+    "loadError": "Notification preferences could not be loaded.",
+    "saveError": "Notification preferences could not be saved.",
+    "saved": "Notification preferences saved.",
+    "eyebrow": "Notification control",
+    "title": "Choose what interrupts you.",
+    "copy": "The action desk always keeps the full record. These settings control which updates appear in your bell and, when available, reach your email.",
+    "safety": "Changing notifications never changes ownership, deadlines, escalation, or verification.",
+    "bellLabel": "Show in the notification bell",
+    "all": "All action updates",
+    "reviewUrgent": "Review and urgent only",
+    "urgent": "Urgent only",
+    "off": "Do not show optional bell updates",
+    "mandatory": "Tasks assigned directly by the CEO always appear. Other updates follow this setting.",
+    "emailTitle": "Email updates",
+    "emailCopy": "Transactional notices for assigned work and escalation.",
+    "enableEmail": "Enable email notifications",
+    "reviewAndUrgent": "Review and urgent",
+    "emailReady": "Cloudflare email delivery is ready.",
+    "checkingEmail": "Checking email delivery…",
+    "saving": "Saving…",
+    "save": "Save notification preferences"
+  },
   "Today": {
     "title": "Today’s work",
     "question": "What work must I finish today?",

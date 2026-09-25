@@ -52,8 +52,11 @@ test("notification experience supports unread state and user-controlled threshol
   assert.match(bell, /t\("settings"\)/);
   assert.match(bell, /if \(!open && unreadCount > 0\) setView\("updates"\)/);
   assert.match(settings, /update_preferences/);
-  assert.match(settings, /Tasks assigned directly by the CEO always appear/);
-  assert.match(settings, /Changing notifications never changes ownership, deadlines, escalation, or verification/);
+  assert.match(settings, /useTranslations\("NotificationSettings"\)/);
+  assert.match(settings, /t\("mandatory"\)/);
+  assert.match(settings, /t\("safety"\)/);
+  assert.equal(en.NotificationSettings.mandatory, "Tasks assigned directly by the CEO always appear. Other updates follow this setting.");
+  assert.equal(en.NotificationSettings.safety, "Changing notifications never changes ownership, deadlines, escalation, or verification.");
 });
 
 test("external delivery is opt-in, bounded, and disabled by default", () => {

@@ -32,6 +32,15 @@
 - [x] 4.4 Build and partner-review the poultry terminology glossary using the selected Amharic references; verify every manager-facing Today term has an approved English and Amharic entry.
 - [ ] 4.5 Migrate Farm Manager navigation, Today, validation, notifications, loading, empty, success, and error text to catalog keys; verify the hard-coded-string check and translated browser tests pass.
 - [ ] 4.6 Migrate the remaining CEO/Farm Manager Feed, Health, Inventory, Sales, Alerts, Governance, Record Checks, and Reports interface text before broad bilingual release; verify missing-key checks and Amharic expansion layouts.
+  - [x] Alerts, Action Desk, and notification preferences.
+  - [ ] Inventory and warehouse workflows.
+  - [ ] Feed Control and template management.
+  - [ ] Health, vaccination, and mortality workflows.
+  - [ ] Sales and expense workflows.
+  - [ ] Governance and approval workflows.
+  - [ ] Record Checks and guided resolution workflows.
+  - [ ] Reports and financial-close workflows.
+  - [ ] Cross-module missing-key and Amharic expansion verification.
 
 ## 5. Offline Web Foundation
 
