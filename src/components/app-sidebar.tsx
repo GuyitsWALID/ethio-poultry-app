@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  Bell,
   Box,
   Boxes,
   Briefcase,
@@ -12,8 +13,10 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  CalendarDays,
   Egg,
   HeartPulse,
+  History,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
@@ -30,7 +33,6 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 
 import type { AppRole } from "@/lib/roles";
-import { normalizeRole } from "@/lib/roles";
 import { SignOutButton } from "@/components/sign-out-button";
 
 type ManagerNavigationMessageKey =
@@ -57,12 +59,14 @@ type NavItem = {
   href: string;
   label?: string;
   managerMessageKey?: ManagerNavigationMessageKey;
+  navigationKey?: "today" | "flocks" | "alerts" | "historyMore";
 };
 
 type NavSection = {
   id: string;
   title: string;
   managerMessageKey?: ManagerNavigationMessageKey;
+  navigationKey?: "historyMore";
   items: NavItem[];
 };
 
@@ -91,6 +95,9 @@ const itemIcons: Record<string, LucideIcon> = {
   dailyClose: ClipboardList,
   recordChecks: Scale,
   accessUsers: Users,
+  today: CalendarDays,
+  alerts: Bell,
+  historyMore: History,
 };
 
 const ceoNavSections: NavSection[] = [
@@ -169,26 +176,51 @@ const farmManagerNavSections: NavSection[] = [
   },
 ];
 
-export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
+const simplifiedFarmManagerNavSections: NavSection[] = [
+  {
+    id: "todayFirst",
+    title: "",
+    managerMessageKey: "sections.farmOperations",
+    items: [
+      {id: "today", navigationKey: "today", href: "/app/today"},
+      {id: "flocksBatches", navigationKey: "flocks", href: "/app/flocks"},
+      {id: "alerts", navigationKey: "alerts", href: "/app/alerts"},
+    ],
+  },
+  {
+    id: "historyMore",
+    title: "",
+    navigationKey: "historyMore",
+    items: [
+      {id: "dailyRecords", managerMessageKey: "items.dailyRecords", href: "/app/daily-records"},
+      {id: "dailyClose", managerMessageKey: "items.dailyClose", href: "/app/operating-days"},
+      {id: "feed", managerMessageKey: "items.feed", href: "/app/feeding-log"},
+      {id: "mortality", managerMessageKey: "items.mortality", href: "/app/mortality"},
+      {id: "healthLog", managerMessageKey: "items.healthLog", href: "/app/health"},
+      {id: "inventoryLog", managerMessageKey: "items.inventoryLog", href: "/app/inventory"},
+      {id: "sales", managerMessageKey: "items.sales", href: "/app/sales"},
+      {id: "governance", managerMessageKey: "items.governance", href: "/app/governance"},
+      {id: "recordChecks", managerMessageKey: "items.recordChecks", href: "/app/reconciliation"},
+      {id: "branchReports", managerMessageKey: "items.branchReports", href: "/app/reports"},
+    ],
+  },
+];
+
+export function AppSidebar({ viewerRole, todayWorkspaceEnabled, mobileOpen = false, onMobileClose }: { viewerRole: AppRole | null; todayWorkspaceEnabled: boolean; mobileOpen?: boolean; onMobileClose?: () => void }) {
   const pathname = usePathname();
   const tCommon = useTranslations("Common");
   const tManagerNavigation = useTranslations("ManagerNavigation");
-  const [role, setRole] = useState<AppRole>("ceo");
+  const tNavigation = useTranslations("Navigation");
   const [orgName, setOrgName] = useState("Organization");
   const [collapsed, setCollapsed] = useState(false);
   const [closedSections, setClosedSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const resolveRole = async () => {
-      const response = await fetch("/api/me/context", { method: "GET" });
-      if (!response.ok) {
-        setRole("ceo");
-        return;
-      }
+      const response = await fetch("/api/me/context", { method: "GET", cache: "no-store" });
+      if (!response.ok) return;
 
       const data = await response.json();
-      const resolvedRole = normalizeRole(data?.role);
-      if (resolvedRole) setRole(resolvedRole);
       const nextOrgName = String(data?.orgName ?? "").trim();
       if (nextOrgName) setOrgName(nextOrgName);
     };
@@ -204,13 +236,14 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
   }, [mobileOpen, onMobileClose]);
 
   const navSections = useMemo<NavSection[]>(() => {
-    if (role === "farm_manager") return farmManagerNavSections;
-    return ceoNavSections;
-  }, [role]);
-  const footer = role === "farm_manager" ? tManagerNavigation("assignedBranchScope") : "Organization Scope";
-  const brand = role === "farm_manager" ? tManagerNavigation("brand") : "Poultry Farms";
-  const sectionLabel = (section: NavSection) => section.managerMessageKey ? tManagerNavigation(section.managerMessageKey) : section.title;
-  const itemLabel = (item: NavItem) => item.managerMessageKey ? tManagerNavigation(item.managerMessageKey) : item.label ?? item.id;
+    if (viewerRole === "farm_manager") return todayWorkspaceEnabled ? simplifiedFarmManagerNavSections : farmManagerNavSections;
+    if (viewerRole === "ceo" || viewerRole === "system_admin") return ceoNavSections;
+    return [];
+  }, [todayWorkspaceEnabled, viewerRole]);
+  const footer = viewerRole === "farm_manager" ? tManagerNavigation("assignedBranchScope") : "Organization Scope";
+  const brand = viewerRole === "farm_manager" ? tManagerNavigation("brand") : "Poultry Farms";
+  const sectionLabel = (section: NavSection) => section.navigationKey ? tNavigation(section.navigationKey) : section.managerMessageKey ? tManagerNavigation(section.managerMessageKey) : section.title;
+  const itemLabel = (item: NavItem) => item.navigationKey ? tNavigation(item.navigationKey) : item.managerMessageKey ? tManagerNavigation(item.managerMessageKey) : item.label ?? item.id;
   const visibleNavSections = useMemo(
     () => navSections.filter((section) => section.items.length > 0),
     [navSections]

@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
+import {TodayEntryLink} from "@/components/today/today-entry-link";
 import { governanceGuidanceUrl, type GovernanceGuidance } from "@/lib/governance-guidance";
 import { createClient } from "@/utils/supabase/client";
 
@@ -104,7 +105,7 @@ const ScheduleTypeIcon = ({ type, className = "h-4 w-4" }: { type: ScheduleItem[
 };
 
 export default function HealthPage() {
-  const { scope, filteredFarms, filteredHouses, filteredFlocks, batches } = useFarmScope();
+  const { scope, filteredFarms, filteredHouses, filteredFlocks, batches, todayWorkspaceEnabled, isFarmManager } = useFarmScope();
   const [healthFarmId, setHealthFarmId] = usePageFilter<string>("healthFarmId", "");
   const [healthHouseId, setHealthHouseId] = usePageFilter<string>("healthHouseId", "");
   const [healthFlockId, setHealthFlockId] = usePageFilter<string>("healthFlockId", "");
@@ -941,8 +942,7 @@ export default function HealthPage() {
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.22em] text-amber-300"><HeartPulse className="h-4 w-4" aria-hidden="true" />Flock health protection desk</div><h1 className="mt-3 font-display text-3xl font-semibold leading-tight sm:text-4xl">Keep every preventive action on the runway</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100">Plan vaccination, biosecurity and weight checks in one clinical operations view. Overdue work rises first, upcoming work stays visible, and every completion leaves an auditable flock record.</p></div>
           {canOperate?<div className="grid gap-2 sm:grid-cols-2 xl:min-w-[600px] xl:grid-cols-4">
-            <button type="button" onClick={() => setShowEvidenceModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-semibold text-forest-950 transition hover:bg-amber-300"><Stethoscope className="h-4 w-4" aria-hidden="true" />Health evidence</button><button type="button" onClick={()=>setShowTreatmentInventoryModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-xs font-semibold text-white transition hover:bg-white/15"><HeartPulse className="h-4 w-4" aria-hidden="true"/>Record treatment</button>
-            <button type="button" onClick={() => setShowVaccineModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sand-50 px-4 text-xs font-semibold text-forest-900 transition hover:bg-white"><Syringe className="h-4 w-4" aria-hidden="true" />Vaccination</button>
+            {todayWorkspaceEnabled&&isFarmManager?<TodayEntryLink task="health_deaths" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-semibold text-forest-950 transition hover:bg-amber-300"><Stethoscope className="h-4 w-4" aria-hidden="true" />Record today&apos;s health work</TodayEntryLink>:<><button type="button" onClick={() => setShowEvidenceModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-semibold text-forest-950 transition hover:bg-amber-300"><Stethoscope className="h-4 w-4" aria-hidden="true" />Health evidence</button><button type="button" onClick={()=>setShowTreatmentInventoryModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-xs font-semibold text-white transition hover:bg-white/15"><HeartPulse className="h-4 w-4" aria-hidden="true"/>Record treatment</button><button type="button" onClick={() => setShowVaccineModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sand-50 px-4 text-xs font-semibold text-forest-900 transition hover:bg-white"><Syringe className="h-4 w-4" aria-hidden="true" />Vaccination</button></>}
             <button type="button" onClick={() => setShowCleanupModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Eraser className="h-4 w-4" aria-hidden="true" />Biosecurity</button>
             <button type="button" onClick={() => setShowWeightModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Scale className="h-4 w-4" aria-hidden="true" />Weight check</button>
           </div>:<div className="rounded-xl border border-white/20 bg-white/[.07] px-4 py-3 text-sm text-sand-100"><ShieldCheck className="mb-2 h-5 w-5 text-amber-300"/>Executive evidence view. Operational entry remains with assigned Farm Managers.</div>}

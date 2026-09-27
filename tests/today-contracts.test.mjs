@@ -16,7 +16,7 @@ const base = {
 };
 
 test("Today command catalogue is closed and complete", () => {
-  assert.equal(todayCommandTypes.length, 12);
+  assert.equal(todayCommandTypes.length, 13);
   assert.throws(() => parseTodayCommand({...base, type: "invent_new_command", payload: {}}));
 });
 
@@ -33,6 +33,7 @@ test("every version-one command has a usable validated interface", () => {
     {...base, type: "complete_vaccination", payload: {schedule_id: actionId, item_id: itemId, warehouse_id: warehouseId, quantity: 100}},
     {...base, type: "confirm_no_activity", payload: {task_code: "routine_supplies", source_fingerprint: "source-fingerprint"}},
     {...base, type: "record_stock_receipt", payload: {warehouse_id: warehouseId, item_id: itemId, quantity: 10, unit_cost: 25}},
+    {...base, type: "record_stock_count", payload: {warehouse_id: warehouseId, rows: [{item_id: itemId, counted_quantity: 10}]}},
     {...base, type: "record_sale", payload: {product_category: "egg", product_label: "Egg trays", quantity: 2, unit_price: 100, unit: "tray"}},
     {...base, type: "record_expense", payload: {category: "transport", description: "Delivery", amount: 500}},
     {...base, type: "update_assigned_action", payload: {action_id: actionId, event_type: "started", note: "Started the assigned work"}},
@@ -114,6 +115,19 @@ test("stock receipts require one item source and normalize a valid purchase type
   }));
 });
 
+test("physical stock counts require at least one non-negative item count", () => {
+  const command = parseTodayCommand({
+    ...base,
+    type: "record_stock_count",
+    payload: {
+      warehouse_id: "10000000-0000-4000-8000-000000000004",
+      rows: [{item_id: "10000000-0000-4000-8000-000000000005", counted_quantity: 0}],
+    },
+  });
+  assert.equal(command.payload.rows.length, 1);
+  assert.throws(() => parseTodayCommand({...base, type: "record_stock_count", payload: {warehouse_id: command.payload.warehouse_id, rows: []}}));
+});
+
 test("completed feed sessions require actual feed and assigned stock selections", () => {
   const session = {
     session_name: "Morning",
@@ -134,6 +148,15 @@ test("mutable Daily Record and feed commands require their resource revision", (
   assert.throws(() => parseTodayCommand({...base, type: "save_daily_record", payload: daily}));
   assert.doesNotThrow(() => parseTodayCommand({...base, type: "save_daily_record", expected_resource_revision: "daily-revision", payload: daily}));
   assert.throws(() => parseTodayCommand({...base, type: "save_feed_session", payload: {session: {session_name: "Morning", feeders_count: 4, planned_feed_kg: 25, feed_type: "layer_feed"}}}));
+});
+
+test("a focused Daily Record command can preserve routine-supply usage", () => {
+  const command = parseTodayCommand({
+    ...base,
+    type: "save_daily_record",
+    payload: {record: {record_date: base.work_date, closing_birds: 100}, usages: null},
+  });
+  assert.equal(command.payload.usages, null);
 });
 
 test("sales and expenses are validated before entering the receipt transaction", () => {

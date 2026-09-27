@@ -102,6 +102,29 @@ begin
   if v_result is distinct from v_replay or v_result->>'status' <> 'applied' then
     raise exception 'Identical command replay did not return the stored result.';
   end if;
+
+  v_command := jsonb_build_object(
+    'schema_version', 1,
+    'command_id', '13000000-0000-4000-8000-000000000109',
+    'type', 'record_stock_count',
+    'farm_id', v_farm,
+    'work_date', v_day,
+    'payload', jsonb_build_object(
+      'warehouse_id', v_warehouse,
+      'rows', jsonb_build_array(
+        jsonb_build_object(
+          'item_id', '13000000-0000-4000-8000-000000000011',
+          'counted_quantity', 0
+        )
+      ),
+      'notes', 'Today integration shelf count'
+    )
+  );
+  v_result := public.dispatch_today_command_v1(v_actor, v_command);
+  v_replay := public.dispatch_today_command_v1(v_actor, v_command);
+  if v_result is distinct from v_replay or v_result->>'status' <> 'applied' then
+    raise exception 'Physical stock count replay did not return the stored result.';
+  end if;
   begin
     perform public.dispatch_today_command_v1(
       v_actor,
@@ -238,6 +261,10 @@ do $$
 begin
   if (select count(*) from public.daily_sales_records where org_id = '13000000-0000-4000-8000-000000000001') <> 1 then
     raise exception 'Identical command replay duplicated the sale.';
+  end if;
+  if (select count(*) from public.inventory_count_sessions where org_id = '13000000-0000-4000-8000-000000000001') <> 1
+     or (select count(*) from public.inventory_physical_counts where org_id = '13000000-0000-4000-8000-000000000001') <> 1 then
+    raise exception 'Physical stock count was missing or duplicated.';
   end if;
   if exists (select 1 from public.health_events where org_id = '13000000-0000-4000-8000-000000000001')
      or exists (

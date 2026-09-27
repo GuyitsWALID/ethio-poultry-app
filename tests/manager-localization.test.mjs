@@ -18,7 +18,7 @@ test("Farm Manager primary chrome uses catalogs instead of protected English lit
   assert.match(shell, /useTranslations\("PageTitles"\)/);
   assert.match(bell, /useTranslations\("Notifications"\)/);
   assert.match(signOut, /useTranslations\("Common"\)/);
-  assert.match(appLayout, /<AppShell viewerRole=\{viewerRole\}>/);
+  assert.match(appLayout, /<AppShell viewerRole=\{viewerRole\} todayWorkspaceEnabled=\{todayWorkspaceEnabled\}>/);
   assert.match(shell, /<LocaleSwitch viewerRole=\{viewerRole\} \/>/);
   assert.match(localeSwitch, /useState<string \| null>\(viewerRole\)/);
 

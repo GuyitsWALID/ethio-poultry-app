@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import en from "../messages/en.json" with {type: "json"};
 
 const migration = await readFile(new URL("../supabase/migrations/20260814000000_governed_warehouse_setup.sql", import.meta.url), "utf8");
 const management = await readFile(new URL("../src/lib/warehouse-management.ts", import.meta.url), "utf8");
@@ -31,9 +32,12 @@ test("CEO setup can assign an active farm manager and emits an audit event", () 
 });
 
 test("inventory presents warehouse-specific balances and setup", () => {
-  assert.match(page, /Working warehouse/);
-  assert.match(page, /Enter everything currently on the shelf/);
-  assert.match(page, /create and assign a warehouse/i);
+  assert.equal(en.Inventory.selector.warehouse, "Working warehouse");
+  assert.equal(en.Inventory.opening.title, "Enter everything currently on the shelf");
+  assert.match(en.Inventory.noWarehouse.copy, /create and assign a warehouse/i);
+  assert.match(page, /t\("selector\.warehouse"\)/);
+  assert.match(page, /t\("opening\.title"\)/);
+  assert.match(page, /t\("noWarehouse\.copy"\)/);
   assert.match(page,/usePageFilter<string>\("warehouseId", ""\)/);
 });
 

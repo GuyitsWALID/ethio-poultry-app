@@ -29,6 +29,7 @@ import {
 import { useFarmScope } from "@/components/farm-scope-context";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { RecordCheckCorrectionBanner } from "@/components/record-check-correction-banner";
+import {TodayEntryLink} from "@/components/today/today-entry-link";
 import type { ReconciliationResolution } from "@/lib/reconciliation-resolution-contract";
 
 type SalesRecord = {
@@ -238,6 +239,7 @@ export default function SalesPage() {
     houses,
     flocks,
     batches,
+    todayWorkspaceEnabled,
   } = useFarmScope();
   const [records, setRecords] = useState<SalesRecord[]>([]);
   const [analytics, setAnalytics] = useState<Analytics>(emptyAnalytics);
@@ -464,7 +466,7 @@ export default function SalesPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void loadSales()} disabled={loading} className="inline-flex h-11 items-center gap-2 rounded-xl border border-sand-50/25 bg-white/5 px-4 text-sm font-semibold text-sand-50 transition hover:bg-white/10 disabled:opacity-60"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />Refresh</button>
-            {canMutate ? <button type="button" onClick={openCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-sand-50 px-4 text-sm font-semibold text-forest-900 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"><Plus className="h-4 w-4" aria-hidden="true" />Record today&apos;s sale</button> : null}
+            {canMutate ? todayWorkspaceEnabled ? <TodayEntryLink task="sales" className="inline-flex h-11 items-center gap-2 rounded-xl bg-sand-50 px-4 text-sm font-semibold text-forest-900 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"><Plus className="h-4 w-4" aria-hidden="true" />Record today&apos;s sale</TodayEntryLink> : <button type="button" onClick={openCreate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-sand-50 px-4 text-sm font-semibold text-forest-900 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"><Plus className="h-4 w-4" aria-hidden="true" />Record today&apos;s sale</button> : null}
           </div>
         </div>
       </section>

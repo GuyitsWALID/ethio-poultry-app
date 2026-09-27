@@ -19,10 +19,17 @@ const supabaseAdmin = createClient(
   }
 );
 
+function privateJson(body: unknown, status = 200) {
+  return Response.json(body, {
+    status,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
 export async function GET() {
   try {
     if (serverConfigurationError) {
-      return Response.json({ error: serverConfigurationError, code: "SERVER_CONFIGURATION_ERROR" }, { status: 503 });
+      return privateJson({ error: serverConfigurationError, code: "SERVER_CONFIGURATION_ERROR" }, 503);
     }
     const supabase = await createAuthedClient();
     const {
@@ -30,7 +37,7 @@ export async function GET() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+      return privateJson({ error: "Unauthorized" }, 401);
     }
 
     const { data: profile } = await supabase
@@ -39,14 +46,14 @@ export async function GET() {
       .eq("id", user.id)
       .maybeSingle();
 
-    const getOrgName = async (orgId: string | null | undefined) => {
+    const getOrganization = async (orgId: string | null | undefined) => {
       if (!orgId) return null;
       const { data: org } = await supabaseAdmin
         .from("organizations")
-        .select("name")
+        .select("name,today_workspace_enabled")
         .eq("id", orgId)
         .maybeSingle();
-      return org?.name ?? null;
+      return org ?? null;
     };
 
     if (profile?.org_id && profile.is_active && normalizeRole(profile.role)) {
@@ -58,18 +65,18 @@ export async function GET() {
         supportSession = data;
         if (data) effectiveOrgId = data.target_org_id;
       }
-      const orgName = await getOrgName(effectiveOrgId);
-      return new Response(
-        JSON.stringify({
+      const organization = await getOrganization(effectiveOrgId);
+      return privateJson(
+        {
           userId: user.id,
           orgId: effectiveOrgId,
-          orgName,
+          orgName: organization?.name ?? null,
+          todayWorkspaceEnabled: Boolean(organization?.today_workspace_enabled),
           role: normalizeRole(profile.role),
           preferredLocale: profile.preferred_locale === "am" ? "am" : "en",
           supportSessionId: supportSession?.id ?? null,
           supportExpiresAt: supportSession?.expires_at ?? null,
-        }),
-        { status: 200 }
+        }
       );
     }
 
@@ -80,24 +87,22 @@ export async function GET() {
       .maybeSingle();
 
     if (adminProfileError) {
-      return new Response(JSON.stringify({ error: adminProfileError.message }), { status: 500 });
+      return privateJson({ error: adminProfileError.message }, 500);
     }
 
-    const orgName = await getOrgName(adminProfile?.org_id);
-    return new Response(
-      JSON.stringify({
+    const organization = await getOrganization(adminProfile?.org_id);
+    return privateJson(
+      {
         userId: user.id,
         orgId: adminProfile?.org_id ?? null,
-        orgName,
+        orgName: organization?.name ?? null,
+        todayWorkspaceEnabled: Boolean(organization?.today_workspace_enabled),
         role: adminProfile?.is_active ? normalizeRole(adminProfile?.role) : null,
         preferredLocale: adminProfile?.preferred_locale === "am" ? "am" : "en",
-      }),
-      { status: 200 }
+      }
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-    });
+    return privateJson({ error: message }, 500);
   }
 }

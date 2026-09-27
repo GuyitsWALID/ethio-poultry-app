@@ -12,7 +12,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { normalizeRole, routeForRole } from "@/lib/roles";
@@ -25,10 +24,17 @@ const workdaySteps = [
 ];
 
 export default function SignInPage() {
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const destinationForRole = async (role: ReturnType<typeof normalizeRole>) => {
+    if (role !== "farm_manager") return routeForRole(role);
+    const response = await fetch("/api/me/context", {cache: "no-store"});
+    if (!response.ok) return routeForRole(role);
+    const context = await response.json();
+    return context?.todayWorkspaceEnabled ? "/app/today" : routeForRole(role);
+  };
 
   useEffect(() => {
     const checkSession = async () => {
@@ -46,11 +52,11 @@ export default function SignInPage() {
         .maybeSingle();
 
       const resolvedRole = profile?.role ?? user.app_metadata?.role ?? user.user_metadata?.role;
-      router.replace(routeForRole(normalizeRole(resolvedRole)));
+      window.location.replace(await destinationForRole(normalizeRole(resolvedRole)));
     };
 
     void checkSession();
-  }, [router]);
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -96,7 +102,7 @@ export default function SignInPage() {
       return;
     }
 
-    router.replace(routeForRole(normalizedRole));
+    window.location.replace(await destinationForRole(normalizedRole));
   };
 
   return (

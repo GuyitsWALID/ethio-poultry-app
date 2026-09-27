@@ -24,6 +24,10 @@ function flock(overrides = {}) {
       openingBirds: 1000,
       closingBirds: 998,
       deaths: 2,
+      culls: 0,
+      transfersIn: 0,
+      transfersOut: 0,
+      otherRemovals: 0,
       normalEggs: 800,
       brokenEggs: 5,
       dirtyEggs: 3,
@@ -60,7 +64,16 @@ test("complete layer evidence makes the operating day finishable", () => {
   assert.equal(workspace.capabilities.canFinish, true);
   assert(workspace.flocks[0].tasks.every((item) => item.state === "complete"));
   assert.equal(workspace.flocks[0].openingBirds, 1000);
+  assert.equal(workspace.flocks[0].birdCheck.openingSource, "daily_record");
+  assert.equal(workspace.flocks[0].birdCheck.closingBirds, 998);
   assert.equal(workspace.flocks[0].ageDays, 119);
+});
+
+test("an unbalanced bird count needs attention until it is corrected", () => {
+  const unbalanced = flock({dailyRecord: {...flock().dailyRecord, closingBirds: 997}});
+  const workspace = deriveTodayWorkspace(data([unbalanced]), selection, true);
+  assert.equal(workspace.flocks[0].tasks.find((item) => item.code === "birds")?.state, "needs_attention");
+  assert.equal(workspace.capabilities.canFinish, false);
 });
 
 test("broilers do not require egg classification but still require water", () => {
@@ -92,6 +105,13 @@ test("a partial flock day identifies each missing authoritative task", () => {
   assert.equal(workspace.capabilities.canFinish, false);
 });
 
+test("the current flock count is not presented as a historical opening balance", () => {
+  const withoutHistory = flock({dailyRecord: null, previousClosingBirds: null, currentCount: 987});
+  const workspace = deriveTodayWorkspace(data([withoutHistory]), selection, true);
+  assert.equal(workspace.flocks[0].birdCheck.openingBirds, null);
+  assert.equal(workspace.flocks[0].birdCheck.openingSource, "missing");
+});
+
 test("a no-active-flock farm can still finish its operating day", () => {
   const workspace = deriveTodayWorkspace(data([]), selection, true);
   assert.equal(workspace.flocks.length, 0);
@@ -119,4 +139,6 @@ test("Today GET is a thin private adapter and checks assignment before loading s
   assert.match(route, /error_code/);
   assert(workspaceModule.indexOf("await canAccessFarm") < workspaceModule.indexOf('from("organizations")'));
   assert.doesNotMatch(route, /governanceAdmin|\.from\(/);
+  assert.match(workspaceModule, /from\("batches"\)\.select\("id,batch_code"\)/);
+  assert.doesNotMatch(workspaceModule, /batch_number/);
 });

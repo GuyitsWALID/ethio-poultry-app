@@ -11,6 +11,7 @@ export const todayCommandTypes = [
   "complete_vaccination",
   "confirm_no_activity",
   "record_stock_receipt",
+  "record_stock_count",
   "record_sale",
   "record_expense",
   "update_assigned_action",
@@ -111,6 +112,15 @@ const stockReceipt = z.object({
   path: ["item_id"],
 });
 
+const stockCount = z.object({
+  warehouse_id: uuid,
+  rows: z.array(z.object({
+    item_id: uuid,
+    counted_quantity: nonNegative,
+  })).min(1).max(500),
+  notes: nullableText,
+});
+
 const salePayload = z.object({
   product_category: z.enum(["egg", "bird", "training", "equipment_medicine", "consultancy", "package"]),
   product_label: nonEmpty,
@@ -146,7 +156,7 @@ const commandSchemas = {
     payload: z.object({
       daily_record_id: nullableUuid,
       record: z.record(z.string(), z.unknown()),
-      usages: z.array(usageRow).default([]),
+      usages: z.array(usageRow).nullable().optional(),
     }),
   }),
   save_feed_session: baseCommand.extend({
@@ -199,6 +209,10 @@ const commandSchemas = {
     type: z.literal("record_stock_receipt"),
     payload: stockReceipt,
   }),
+  record_stock_count: baseCommand.extend({
+    type: z.literal("record_stock_count"),
+    payload: stockCount,
+  }),
   record_sale: baseCommand.extend({
     type: z.literal("record_sale"),
     payload: salePayload,
@@ -231,6 +245,7 @@ export const todayCommandSchema = z.discriminatedUnion("type", [
   commandSchemas.complete_vaccination,
   commandSchemas.confirm_no_activity,
   commandSchemas.record_stock_receipt,
+  commandSchemas.record_stock_count,
   commandSchemas.record_sale,
   commandSchemas.record_expense,
   commandSchemas.update_assigned_action,
@@ -285,8 +300,10 @@ export function parseTodayCommand(input: unknown): TodayCommand {
 
 export type TodayTaskState = "not_started" | "draft_on_tablet" | "waiting_to_sync" | "complete" | "needs_attention";
 
+export type TodayTaskCode = "birds" | "feeding" | "eggs_water" | "health_deaths" | "routine_supplies" | "review_finish" | "stock" | "sales" | "expenses" | "assigned_fixes";
+
 export type TodayTask = {
-  code: "birds" | "feeding" | "eggs_water" | "health_deaths" | "routine_supplies" | "review_finish" | "stock" | "sales" | "expenses" | "assigned_fixes";
+  code: TodayTaskCode;
   required: boolean;
   applicable: boolean;
   state: TodayTaskState;
@@ -306,7 +323,46 @@ export type TodayFlockContext = {
   ageDays: number;
   openingBirds: number | null;
   previousClosingBirds: number | null;
+  feedClosed: boolean;
+  feedActualKg: number | null;
+  eggsWaterSummary: {waterLiters: number | null; totalEggs: number | null};
+  healthSummary: {hasActivity: boolean; confirmedNone: boolean};
+  suppliesSummary: {hasUsage: boolean; confirmedNone: boolean};
+  birdCheck: {
+    dailyRecordId: string | null;
+    openingBirds: number | null;
+    openingSource: "daily_record" | "previous_close" | "flock_current_count" | "missing";
+    closingBirds: number | null;
+    deaths: number;
+    culls: number;
+    transfersIn: number;
+    transfersOut: number;
+    otherRemovals: number;
+    waterLiters: number | null;
+    resourceRevision?: string;
+  };
   tasks: TodayTask[];
+};
+
+export type TodayTaskDetail = {
+  task: TodayTaskCode;
+  farmId: string;
+  flockId: string | null;
+  workDate: string;
+  warehouses: Array<{id: string; name: string}>;
+  inventory: Array<{
+    id: string;
+    name: string;
+    category: string;
+    unit: string;
+    unitCost: number;
+    reorderLevel: number;
+    balances: Array<{warehouseId: string; quantity: number}>;
+  }>;
+  correctionDestination: string;
+  resourceRevision?: string;
+  dependencies: string[];
+  data: Record<string, unknown>;
 };
 
 export type TodayWorkspace = {

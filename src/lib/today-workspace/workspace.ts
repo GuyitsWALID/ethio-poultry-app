@@ -7,6 +7,7 @@ import {
   type TodayTask,
   type TodayWorkspace,
 } from "./contracts.ts";
+import {assessBirdCheck} from "./bird-check.ts";
 
 type Row = Record<string, unknown>;
 
@@ -46,6 +47,10 @@ export type TodayWorkspaceData = {
       openingBirds: number | null;
       closingBirds: number | null;
       deaths: number | null;
+      culls: number | null;
+      transfersIn: number | null;
+      transfersOut: number | null;
+      otherRemovals: number | null;
       normalEggs: number | null;
       brokenEggs: number | null;
       dirtyEggs: number | null;
@@ -55,6 +60,7 @@ export type TodayWorkspaceData = {
     };
     previousClosingBirds: number | null;
     feedClosed: boolean;
+    feedActualKg: number | null;
     feedRevision: string;
     hasHealthOrDeathActivity: boolean;
     hasRoutineSupplyUsage: boolean;
@@ -64,6 +70,7 @@ export type TodayWorkspaceData = {
     suppliesAttestationFingerprint: string | null;
   }>;
   assignedActionCount: number;
+  farmActivity?: {stockReceipts: number; stockCounts: number; sales: number; expenses: number};
 };
 
 function task(input: TodayTask): TodayTask {
@@ -78,6 +85,21 @@ export function deriveTodayWorkspace(
   const flocks: TodayFlockContext[] = data.flocks.map((flock) => {
     const layer = flock.type === "layer" || flock.type === "parent_stock";
     const daily = flock.dailyRecord;
+    const openingBirds = daily?.openingBirds ?? flock.previousClosingBirds ?? null;
+    const openingSource = daily?.openingBirds !== null && daily?.openingBirds !== undefined
+      ? "daily_record" as const
+      : flock.previousClosingBirds !== null
+        ? "previous_close" as const
+        : "missing" as const;
+    const birdAssessment = assessBirdCheck({
+      openingBirds,
+      closingBirds: daily?.closingBirds ?? null,
+      deaths: daily?.deaths ?? 0,
+      culls: daily?.culls ?? 0,
+      transfersIn: daily?.transfersIn ?? 0,
+      transfersOut: daily?.transfersOut ?? 0,
+      otherRemovals: daily?.otherRemovals ?? 0,
+    });
     const healthConfirmed = flock.hasHealthOrDeathActivity
       || flock.healthAttestationFingerprint === flock.healthFingerprint;
     const suppliesConfirmed = flock.hasRoutineSupplyUsage
@@ -95,7 +117,7 @@ export function deriveTodayWorkspace(
     const tasks: TodayTask[] = [
       task({
         code: "birds", required: true, applicable: true,
-        state: daily ? "complete" : "not_started",
+        state: birdAssessment.valid ? "complete" : daily ? "needs_attention" : "not_started",
         sourceRef: daily ? `daily_farm_records/${daily.id}` : undefined,
         resourceRevision: daily?.revision,
       }),
@@ -129,8 +151,35 @@ export function deriveTodayWorkspace(
       batchLabel: flock.batchLabel,
       houseLabel: flock.houseLabel,
       ageDays: ageOnDate(flock.placementDate, flock.ageAtPlacementDays, selection.workDate),
-      openingBirds: daily?.openingBirds ?? flock.previousClosingBirds ?? flock.currentCount,
+      openingBirds,
       previousClosingBirds: flock.previousClosingBirds,
+      feedClosed: flock.feedClosed,
+      feedActualKg: flock.feedActualKg,
+      eggsWaterSummary: {
+        waterLiters: daily?.waterLiters ?? null,
+        totalEggs: daily?.totalEggs ?? null,
+      },
+      healthSummary: {
+        hasActivity: flock.hasHealthOrDeathActivity,
+        confirmedNone: !flock.hasHealthOrDeathActivity && healthConfirmed,
+      },
+      suppliesSummary: {
+        hasUsage: flock.hasRoutineSupplyUsage,
+        confirmedNone: !flock.hasRoutineSupplyUsage && suppliesConfirmed,
+      },
+      birdCheck: {
+        dailyRecordId: daily?.id ?? null,
+        openingBirds,
+        openingSource,
+        closingBirds: daily?.closingBirds ?? null,
+        deaths: daily?.deaths ?? 0,
+        culls: daily?.culls ?? 0,
+        transfersIn: daily?.transfersIn ?? 0,
+        transfersOut: daily?.transfersOut ?? 0,
+        otherRemovals: daily?.otherRemovals ?? 0,
+        waterLiters: daily?.waterLiters ?? null,
+        resourceRevision: daily?.revision,
+      },
       tasks,
     };
   });
@@ -139,9 +188,9 @@ export function deriveTodayWorkspace(
   const readyToFinish = requiredTasks.every((item) => item.state === "complete");
   const noActiveFlock = flocks.length === 0;
   const farmTasks: TodayTask[] = [
-    task({code: "stock", required: false, applicable: true, state: "not_started"}),
-    task({code: "sales", required: false, applicable: true, state: "not_started"}),
-    task({code: "expenses", required: false, applicable: true, state: "not_started"}),
+    task({code: "stock", required: false, applicable: true, state: ((data.farmActivity?.stockReceipts ?? 0) + (data.farmActivity?.stockCounts ?? 0)) > 0 ? "complete" : "not_started"}),
+    task({code: "sales", required: false, applicable: true, state: (data.farmActivity?.sales ?? 0) > 0 ? "complete" : "not_started"}),
+    task({code: "expenses", required: false, applicable: true, state: (data.farmActivity?.expenses ?? 0) > 0 ? "complete" : "not_started"}),
     task({
       code: "assigned_fixes", required: false, applicable: data.assignedActionCount > 0,
       state: data.assignedActionCount > 0 ? "needs_attention" : "complete",
@@ -202,7 +251,7 @@ export async function loadTodayWorkspace(
   const [organizationResult, profileResult, farmResult] = await Promise.all([
     governanceAdmin.from("organizations").select("today_workspace_enabled").eq("id", context.orgId).maybeSingle(),
     governanceAdmin.from("profiles").select("preferred_locale").eq("id", context.userId).maybeSingle(),
-    governanceAdmin.from("farms").select("id,name").eq("org_id", context.orgId).eq("id", selection.farmId).maybeSingle(),
+    governanceAdmin.from("farms").select("id,name,branch_id").eq("org_id", context.orgId).eq("id", selection.farmId).maybeSingle(),
   ]);
   const organization = expectData(organizationResult, "Organization");
   const profile = expectData(profileResult, "Profile");
@@ -223,28 +272,39 @@ export async function loadTodayWorkspace(
   const flockIds = flockRows.map((row) => String(row.id));
   const houseIds = [...new Set(flockRows.map((row) => String(row.house_id)).filter(Boolean))];
   const batchIds = [...new Set(flockRows.map((row) => String(row.batch_id ?? "")).filter(Boolean))];
+  const warehouseScopeResult = await governanceAdmin.from("warehouses")
+    .select("id")
+    .eq("org_id", context.orgId)
+    .eq("status", "active")
+    .or(`farm_id.eq.${selection.farmId},and(farm_id.is.null,branch_id.eq.${String(farm.branch_id)})`);
+  if (warehouseScopeResult.error) throw new TodayWorkspaceError("INTERNAL_ERROR", warehouseScopeResult.error.message, 500);
+  const warehouseIds = (warehouseScopeResult.data ?? []).map((row: Row) => String(row.id));
 
   const empty = Promise.resolve({data: [] as Row[], error: null});
-  const [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, operatingDay, operatingRevision] = await Promise.all([
+  const [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, operatingRevision] = await Promise.all([
     houseIds.length ? governanceAdmin.from("houses").select("id,name").eq("org_id", context.orgId).in("id", houseIds) : empty,
-    batchIds.length ? governanceAdmin.from("batches").select("id,batch_number").eq("org_id", context.orgId).in("id", batchIds) : empty,
-    flockIds.length ? governanceAdmin.from("daily_farm_records").select("id,flock_id,opening_birds,closing_birds,deaths,normal_eggs,broken_eggs,dirty_eggs,total_eggs,water_consumed_liters,updated_at").eq("org_id", context.orgId).in("flock_id", flockIds).eq("record_date", selection.workDate).is("voided_at", null) : empty,
+    batchIds.length ? governanceAdmin.from("batches").select("id,batch_code").eq("org_id", context.orgId).in("id", batchIds) : empty,
+    flockIds.length ? governanceAdmin.from("daily_farm_records").select("id,flock_id,opening_birds,closing_birds,deaths,culls,transfers_in,transfers_out,other_removals,normal_eggs,broken_eggs,dirty_eggs,total_eggs,water_consumed_liters,updated_at").eq("org_id", context.orgId).in("flock_id", flockIds).eq("record_date", selection.workDate).is("voided_at", null) : empty,
     flockIds.length ? governanceAdmin.from("daily_farm_records").select("id,flock_id,closing_birds,record_date").eq("org_id", context.orgId).in("flock_id", flockIds).lt("record_date", selection.workDate).is("voided_at", null).order("record_date", {ascending: false}) : empty,
-    flockIds.length ? governanceAdmin.from("feed_day_closures").select("id,flock_id,status,updated_at").eq("org_id", context.orgId).in("flock_id", flockIds).eq("record_date", selection.workDate) : empty,
+    flockIds.length ? governanceAdmin.from("feed_day_closures").select("id,flock_id,status,actual_feed_kg,updated_at").eq("org_id", context.orgId).in("flock_id", flockIds).eq("record_date", selection.workDate) : empty,
     flockIds.length ? governanceAdmin.from("mortality_events").select("id,flock_id").eq("org_id", context.orgId).in("flock_id", flockIds).eq("record_date", selection.workDate) : empty,
     flockIds.length ? governanceAdmin.from("health_events").select("id,flock_id").eq("org_id", context.orgId).in("flock_id", flockIds).eq("event_date", selection.workDate).is("voided_at", null) : empty,
     flockIds.length ? governanceAdmin.from("stock_ledger").select("id,flock_id").eq("org_id", context.orgId).in("flock_id", flockIds).eq("farm_id", selection.farmId).eq("transaction_date", selection.workDate).eq("source_kind", "daily_record_usage") : empty,
     governanceAdmin.from("daily_task_attestations").select("flock_id,task_code,source_fingerprint").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("work_date", selection.workDate).is("superseded_at", null),
     governanceAdmin.from("operational_actions").select("id").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("owner_id", context.userId).not("status", "in", "(resolved)") ,
+    governanceAdmin.from("stock_ledger").select("id").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("transaction_date", selection.workDate).eq("transaction_type", "receipt"),
+    warehouseIds.length ? governanceAdmin.from("inventory_count_sessions").select("id").eq("org_id", context.orgId).in("warehouse_id", warehouseIds).eq("counted_on", selection.workDate) : empty,
+    governanceAdmin.from("daily_sales_records").select("id").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("sale_date", selection.workDate),
+    governanceAdmin.from("cost_entries").select("id").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("entry_date", selection.workDate),
     governanceAdmin.from("farm_operating_days").select("status").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("operating_date", selection.workDate).maybeSingle(),
     governanceAdmin.rpc("today_resource_revision", {p_resource_type: "operating_day", p_resource_id: selection.farmId, p_work_date: selection.workDate}),
   ]);
-  const firstError = [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, operatingDay, operatingRevision]
+  const firstError = [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, operatingRevision]
     .map((result) => result.error).find(Boolean);
   if (firstError) throw new TodayWorkspaceError("INTERNAL_ERROR", firstError.message, 500);
 
   const houseById = new Map((houses.data ?? []).map((row: Row) => [String(row.id), String(row.name)]));
-  const batchById = new Map((batches.data ?? []).map((row: Row) => [String(row.id), String(row.batch_number)]));
+  const batchById = new Map((batches.data ?? []).map((row: Row) => [String(row.id), String(row.batch_code)]));
   const dailyByFlock = new Map((daily.data ?? []).map((row: Row) => [String(row.flock_id), row]));
   const previousByFlock = new Map<string, Row>();
   for (const row of (previousDaily.data ?? []) as Row[]) {
@@ -315,6 +375,10 @@ export async function loadTodayWorkspace(
           openingBirds: asNumber(record.opening_birds),
           closingBirds: asNumber(record.closing_birds),
           deaths: asNumber(record.deaths),
+          culls: asNumber(record.culls),
+          transfersIn: asNumber(record.transfers_in),
+          transfersOut: asNumber(record.transfers_out),
+          otherRemovals: asNumber(record.other_removals),
           normalEggs: asNumber(record.normal_eggs),
           brokenEggs: asNumber(record.broken_eggs),
           dirtyEggs: asNumber(record.dirty_eggs),
@@ -324,6 +388,7 @@ export async function loadTodayWorkspace(
         } : null,
         previousClosingBirds: asNumber(previousByFlock.get(id)?.closing_birds),
         feedClosed: closure?.status === "closed",
+        feedActualKg: closure?.status === "closed" ? asNumber(closure.actual_feed_kg) : null,
         feedRevision: feedRevisions.get(id) ?? "",
         hasHealthOrDeathActivity: mortalityFlocks.has(id) || healthFlocks.has(id) || Number(record?.deaths ?? 0) > 0,
         hasRoutineSupplyUsage: supplyFlocks.has(id),
@@ -334,6 +399,12 @@ export async function loadTodayWorkspace(
       };
     }),
     assignedActionCount: actions.data?.length ?? 0,
+    farmActivity: {
+      stockReceipts: stockReceipts.data?.length ?? 0,
+      stockCounts: stockCounts.data?.length ?? 0,
+      sales: sales.data?.length ?? 0,
+      expenses: expenses.data?.length ?? 0,
+    },
   };
   return deriveTodayWorkspace(data, selection, context.role === "farm_manager");
 }

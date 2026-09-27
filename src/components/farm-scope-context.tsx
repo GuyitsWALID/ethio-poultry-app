@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback, Suspense, Fragment } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { pageFilterStorageKey, readPageFilters, writePageFilters, type PageFilterValues } from "@/lib/page-filter-state";
+import type { ActiveRole } from "@/lib/permissions";
 
 type ScopeState = {
   branchId: string;
@@ -33,6 +34,7 @@ type Batch = {
 type ScopeContextValue = {
   role: string | null;
   isFarmManager: boolean;
+  todayWorkspaceEnabled: boolean;
   loading: boolean;
   scope: ScopeState;
   setScope: React.Dispatch<React.SetStateAction<ScopeState>>;
@@ -93,12 +95,12 @@ function normalizeScope(scope: ScopeState, options: { branches: Branch[]; farms:
 }
 const ScopeContext = createContext<ScopeContextValue | null>(null);
 
-export function FarmScopeProvider({ children }: { children: React.ReactNode }) {
+export function FarmScopeProvider({ children, viewerRole, todayWorkspaceEnabled = false }: { children: React.ReactNode; viewerRole: ActiveRole | null; todayWorkspaceEnabled?: boolean }) {
   const pathname = usePathname();
-  return <Suspense fallback={<p role="status" className="p-6 text-forest-700">Loading workspace…</p>}><PageScopeProvider key={pathname} pathname={pathname}>{children}</PageScopeProvider></Suspense>;
+  return <Suspense fallback={<p role="status" className="p-6 text-forest-700">Loading workspace…</p>}><PageScopeProvider key={pathname} pathname={pathname} viewerRole={viewerRole} todayWorkspaceEnabled={todayWorkspaceEnabled}>{children}</PageScopeProvider></Suspense>;
 }
 
-function PageScopeProvider({ children, pathname }: { children: React.ReactNode; pathname: string }) {
+function PageScopeProvider({ children, pathname, viewerRole, todayWorkspaceEnabled }: { children: React.ReactNode; pathname: string; viewerRole: ActiveRole | null; todayWorkspaceEnabled: boolean }) {
   const searchParams = useSearchParams();
   const search = searchParams.toString();
   const destinationKey = ["finding", "flock", "batch", "record", "record_id", "source_id", "approval", "authorization", "request"].map(key => searchParams.get(key) ?? "").join("|");
@@ -106,8 +108,6 @@ function PageScopeProvider({ children, pathname }: { children: React.ReactNode; 
   const storageKey = useRef("");
   const [filterValues, setFilterValues] = useState<PageFilterValues>({});
   const setFilterValue = useCallback((key: string, value: string) => setFilterValues(current => current[key] === value ? current : ({ ...current, [key]: value })), []);
-  const [role, setRole] = useState<string | null>(null);
-  const [isFarmManager, setIsFarmManager] = useState(false);
   const [loading, setLoading] = useState(true);
   const [scope, setScope] = useState<ScopeState>(initialScope);
   const [period, setPeriod] = useState<ReportingPeriod>(() => reportingPeriodFor("mtd"));
@@ -148,7 +148,7 @@ function PageScopeProvider({ children, pathname }: { children: React.ReactNode; 
   useEffect(() => {
     const loadScopeData = async () => {
       setLoading(true);
-      const contextResponse = await fetch("/api/me/context", { method: "GET" });
+      const contextResponse = await fetch("/api/me/context", { method: "GET", cache: "no-store" });
       if (!contextResponse.ok) {
         setLoading(false);
         return;
@@ -156,7 +156,6 @@ function PageScopeProvider({ children, pathname }: { children: React.ReactNode; 
 
       const context = await contextResponse.json();
       const orgId = context?.orgId as string | null;
-      const role = context?.role as string | null;
       const userId = context?.userId as string | null;
 
       if (!orgId || !userId) {
@@ -164,13 +163,9 @@ function PageScopeProvider({ children, pathname }: { children: React.ReactNode; 
         return;
       }
 
-      setRole(role);
-      const isManager = role === "farm_manager";
-      setIsFarmManager(isManager);
-
       // The server applies organization and active farm-assignment scope. Keeping
       // these reads behind one endpoint avoids RLS-dependent empty dropdowns.
-      const response = await fetch("/api/scope/options", { method: "GET" });
+      const response = await fetch("/api/scope/options", { method: "GET", cache: "no-store" });
       if (!response.ok) {
         setBranches([]); setFarms([]); setHouses([]); setFlocks([]); setBatches([]); setLoading(false); return;
       }
@@ -229,8 +224,9 @@ function PageScopeProvider({ children, pathname }: { children: React.ReactNode; 
   return (
     <ScopeContext.Provider
       value={{
-        role,
-        isFarmManager,
+        role: viewerRole,
+        isFarmManager: viewerRole === "farm_manager",
+        todayWorkspaceEnabled,
         loading,
         scope,
         setScope,

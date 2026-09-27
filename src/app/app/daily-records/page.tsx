@@ -26,6 +26,7 @@ import {
 import { useFarmScope } from "@/components/farm-scope-context";
 import { governanceGuidanceUrl, type GovernanceGuidance } from "@/lib/governance-guidance";
 import { RecordCheckCorrectionBanner } from "@/components/record-check-correction-banner";
+import {TodayEntryLink} from "@/components/today/today-entry-link";
 import type { ReconciliationResolution } from "@/lib/reconciliation-resolution-contract";
 import type { Database } from "@/types/supabase";
 import { createClient } from "@/utils/supabase/client";
@@ -165,7 +166,7 @@ type WarehouseRow = {
 type RoutineUsageRow = { key:string; itemId:string; warehouseId:string; quantity:string; notes:string };
 
 export default function DailyRecordsPage() {
-  const { role, scope, setScope, branches, flocks, filteredFarms, filteredFlocks, filteredBatches, filteredHouses } =
+  const { role, scope, setScope, branches, flocks, filteredFarms, filteredFlocks, filteredBatches, filteredHouses, todayWorkspaceEnabled } =
     useFarmScope();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rows, setRows] = useState<DailyRow[]>([]);
@@ -819,7 +820,7 @@ export default function DailyRecordsPage() {
               <p className="text-sand-300">Current scope</p><p className="mt-1 max-w-[220px] font-semibold text-white">{visibleScopeLabel}</p>
             </div>
             {canCreateRecord ? (
-              <button type="button" onClick={() => { setNewRecordDate(addisToday()); setFormError(null); setFormSuccess(null); setIsModalOpen(true); }} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sand-50 px-5 text-sm font-semibold text-forest-900 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-300">
+              todayWorkspaceEnabled ? <TodayEntryLink task="birds" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sand-50 px-5 text-sm font-semibold text-forest-900 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"><Plus className="h-4 w-4" aria-hidden="true" />Record today&apos;s work</TodayEntryLink> : <button type="button" onClick={() => { setNewRecordDate(addisToday()); setFormError(null); setFormSuccess(null); setIsModalOpen(true); }} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sand-50 px-5 text-sm font-semibold text-forest-900 transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-300">
                 <Plus className="h-4 w-4" aria-hidden="true" />New daily record
               </button>
             ) : null}

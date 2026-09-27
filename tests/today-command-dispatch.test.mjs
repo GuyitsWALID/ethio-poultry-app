@@ -5,6 +5,7 @@ import test from "node:test";
 const migration = await readFile(new URL("../supabase/migrations/20260920000000_simplified_bilingual_farm_operations.sql", import.meta.url), "utf8");
 const domainGuards = await readFile(new URL("../supabase/migrations/20260922000000_today_command_domain_guards.sql", import.meta.url), "utf8");
 const apiBoundary = await readFile(new URL("../supabase/migrations/20260922001000_today_command_api_boundary.sql", import.meta.url), "utf8");
+const stockCountBoundary = await readFile(new URL("../supabase/migrations/20260927000000_today_stock_count_command.sql", import.meta.url), "utf8");
 const service = await readFile(new URL("../src/lib/today-workspace/commands.ts", import.meta.url), "utf8");
 const route = await readFile(new URL("../src/app/api/farm-manager/today/commands/route.ts", import.meta.url), "utf8");
 
@@ -19,6 +20,9 @@ test("all authoritative command branches execute inside the receipt transaction"
   assert.match(boundary, /insert into public\.client_operation_receipts[\s\S]*update public\.client_operation_receipts set result/);
   assert.match(boundary, /pg_advisory_xact_lock/);
   assert.match(boundary, /payload_hash <> v_hash/);
+  assert.match(stockCountBoundary, /record_inventory_count_session/);
+  assert.match(stockCountBoundary, /insert into public\.client_operation_receipts[\s\S]*update public\.client_operation_receipts/);
+  assert.match(stockCountBoundary, /pg_advisory_xact_lock/);
 });
 
 test("mutable Today commands compare resource revisions in the database transaction", () => {
@@ -63,6 +67,10 @@ test("the database dispatcher owns replay and current authorization checks", () 
   assert.match(apiBoundary, /'status', 'conflict'/);
   assert.match(apiBoundary, /Persist the normalized result so retries are/);
   assert.match(apiBoundary, /jsonb_set\(v_result, '\{resource_revision\}'/);
+  assert.match(stockCountBoundary, /auth\.uid\(\) is distinct from p_actor_id/);
+  assert.match(stockCountBoundary, /today_workspace_enabled/);
+  assert.match(stockCountBoundary, /active farm assignment is required/i);
+  assert.match(stockCountBoundary, /required earlier command is not complete/i);
 });
 
 test("feed revisions include both sessions and closures", () => {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import ts from "typescript";
 import { readFile } from "node:fs/promises";
+import en from "../messages/en.json" with {type: "json"};
 
 const policySource = await readFile(new URL("../src/lib/action-desk-policy.ts", import.meta.url), "utf8");
 const policyCompiled = ts.transpileModule(policySource, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -35,11 +36,13 @@ test("database custody is scoped, server-mutated, and append-only", () => {
 });
 
 test("action desk exposes assignment, evidence, source inspection, and verification", () => {
-  assert.match(page, /Choose Farm Manager/);
-  assert.match(page, /Complete and send for review/);
-  assert.match(page, /Inspect source/);
-  assert.match(page, /Verify and close/);
-  assert.match(page, /CEO must verify that the originating check is clear/i);
+  assert.equal(en.AlertsPage.card.chooseManager, "Choose Farm Manager");
+  assert.equal(en.AlertsPage.card.complete, "Complete and send for review");
+  assert.equal(en.AlertsPage.card.inspectSource, "Inspect source");
+  assert.equal(en.AlertsPage.card.verify, "Verify and close");
+  assert.match(en.AlertsPage.dialog.evidenceHelp, /CEO must verify that the originating check is clear/i);
+  for (const key of ["chooseManager", "complete", "inspectSource", "verify"]) assert.match(page, new RegExp(`t\\(\"card\\.${key}\"\\)`));
+  assert.match(page, /t\("dialog\.evidenceHelp"\)/);
 });
 
 test("a corrected assigned task remains visible for manager completion and CEO verification", () => {
@@ -47,8 +50,8 @@ test("a corrected assigned task remains visible for manager completion and CEO v
   assert.match(actionService, /async function inventoryAlertActive/);
   assert.match(actionService, /isReconciliationFindingActive/);
   assert.match(actionService, /if \(ctx\.role !== "ceo"\) throw new Error\("Only the CEO can verify and close completed actions\."\)/);
-  assert.match(page, /Complete and send for review/);
-  assert.match(page, /Verify and close/);
+  assert.match(page, /t\("card\.complete"\)/);
+  assert.match(page, /t\("card\.verify"\)/);
   assert.match(notificationService, /Task completed by \$\{actorName\}/);
   assert.match(notificationService, /Source corrected:/);
   assert.match(notificationService, /\["assigned", "resolution_submitted"\]\.includes\(notification\.eventType\)/);

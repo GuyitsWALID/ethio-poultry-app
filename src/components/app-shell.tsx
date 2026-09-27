@@ -16,6 +16,7 @@ import type { AppLocale } from "@/i18n/locale";
 import type { ActiveRole } from "@/lib/permissions";
 
 const routeTitles = [
+  ["/app/today", "today", "groups.farmOperations"],
   ["/app/farm-manager", "managerDashboard", "groups.farmOperations"],
   ["/app/ceo/setup", "branchNetwork", "groups.executiveOversight"],
   ["/app/ceo", "commandCenter", "groups.executiveOversight"],
@@ -35,7 +36,7 @@ const routeTitles = [
   ["/app/reconciliation", "recordChecks", "groups.automaticVerification"],
 ] as const;
 
-export function AppShell({ children, viewerRole }: { children: React.ReactNode; viewerRole: ActiveRole | null }) {
+export function AppShell({ children, viewerRole, todayWorkspaceEnabled }: { children: React.ReactNode; viewerRole: ActiveRole | null; todayWorkspaceEnabled: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const locale = useLocale() as AppLocale;
@@ -66,7 +67,7 @@ export function AppShell({ children, viewerRole }: { children: React.ReactNode; 
   return (
     <div className="min-h-screen bg-sand-50">
       <div className="flex min-h-screen">
-        <AppSidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
+        <AppSidebar viewerRole={viewerRole} todayWorkspaceEnabled={todayWorkspaceEnabled} mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
 
         <div className="flex min-w-0 flex-1 flex-col">
           {support ? <div role="status" className="sticky top-0 z-[60] flex flex-wrap items-center justify-center gap-3 bg-ember-600 px-4 py-2 text-center text-xs font-semibold text-white"><span>Support access active for {support.orgName}. Every read and change is audited. Expires {new Date(support.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.</span><button type="button" onClick={()=>void endSupport()} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/30 px-3 hover:bg-white/10"><ShieldX className="h-3.5 w-3.5"/>End support session</button></div> : null}
