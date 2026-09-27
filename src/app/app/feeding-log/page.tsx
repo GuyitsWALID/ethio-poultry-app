@@ -9,7 +9,7 @@ import { AlertTriangle, Check, ChevronDown, Clock3, PackageOpen, RefreshCw, Scal
 import { useFarmScope } from "@/components/farm-scope-context";
 import { FarmScopeFilters } from "@/components/farm-scope-filters";
 import { RecordCheckCorrectionBanner } from "@/components/record-check-correction-banner";
-import {TodayEntryLink} from "@/components/today/today-entry-link";
+import {TodayEntryLink, useTodayEntryMode} from "@/components/today/today-entry-link";
 
 type Metric = { value: number | null; unit: string; status: string; reason?: string; label?: string; actualKg?: number; plannedKg?: number; variancePct?: number | null; uniformityPct?: number | null; sampleCount?: number; kind?: string };
 type Session = { id: string | null; session_name: string; session_time: string | null; planned_feed_kg: number; actual_feed_kg: number | null; feeders_count: number; status: string; feed_item_id: string | null; warehouse_id: string | null; feed_type: string | null; notes: string | null };
@@ -60,7 +60,8 @@ function KpiCard({ title, metric, icon }: { title: string; metric: Metric; icon:
 }
 
 export default function FeedControlPage() {
-  const { scope, setScope, period, batches, flocks, loading: scopeLoading, todayWorkspaceEnabled, isFarmManager } = useFarmScope();
+  const { scope, setScope, period, batches, flocks, loading: scopeLoading } = useFarmScope();
+  const {enabled: todayEntryEnabled} = useTodayEntryMode();
   const [data, setData] = useState<FeedData | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const [templateOpen, setTemplateOpen] = useState(false); const [weightTask, setWeightTask] = useState<Task | null>(null);
   const deepLinkHandled = useRef(false);
@@ -133,7 +134,7 @@ export default function FeedControlPage() {
     <div aria-live="polite" className="sr-only">{message || error || (loading ? "Loading Feed Control" : "")}</div>
     {error && <div role="alert" className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><span>{error}</span><button type="button" onClick={() => void load()} className="underline">Retry</button></div>}
     {loading && !data ? <LoadingState /> : data && <>
-      <TodayFeeding data={data} reload={load} announce={setMessage} todayEntryEnabled={todayWorkspaceEnabled && isFarmManager} />
+      <TodayFeeding data={data} reload={load} announce={setMessage} todayEntryEnabled={todayEntryEnabled} />
       <section aria-labelledby="feed-actions-title"><div className="mb-3 flex items-end justify-between"><div><h2 id="feed-actions-title" className="text-xl font-semibold text-[#173225]">Action queue</h2><p className="mt-1 text-sm text-[#647267]">Only exceptions with a precise cause and recovery action.</p></div><Status tone={data.exceptions.length ? "warning" : "good"}>{data.exceptions.length ? `${data.exceptions.length} open` : "Clear"}</Status></div>
         {data.exceptions.length ? <div className="grid gap-3 lg:grid-cols-2">{data.exceptions.map((item) => <article key={`${item.title}-${item.reason}`} className="rounded-2xl border border-[#e5d9c4] bg-white p-4"><div className="flex gap-3"><AlertTriangle className={`mt-0.5 size-5 shrink-0 ${item.severity === "critical" ? "text-red-600" : "text-amber-600"}`} /><div><h3 className="font-semibold text-[#193426]">{item.title}</h3><p className="mt-1 text-sm leading-6 text-[#637167]">{item.reason}</p>{item.actionTarget ? <button type="button" onClick={() => openFeedAction(item.actionTarget!)} className="mt-2 min-h-11 rounded-lg text-left text-xs font-semibold uppercase tracking-wide text-[#8a6735] underline decoration-[#cbb98f] underline-offset-4 hover:text-[#173225] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#244b35]">{item.action}</button> : <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-[#8a6735]">{item.action}</p>}</div></div></article>)}</div> : <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">No feed-control exceptions in this scope.</div>}
       </section>

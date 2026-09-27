@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import {useSearchParams} from "next/navigation";
 
 import {useFarmScope} from "@/components/farm-scope-context";
 import type {TodayTaskCode} from "@/lib/today-workspace/contracts";
+import {buildTodayEntryHref, isLegacyCorrectionTarget, type TodayEntryTarget} from "@/lib/today-workspace/entry-routing";
 
 function addisToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -18,17 +20,9 @@ function addisToday() {
 
 export function useTodayEntryMode() {
   const scope = useFarmScope();
-  const enabled = scope.isFarmManager && scope.todayWorkspaceEnabled;
-  const todayHref = (task: TodayTaskCode, target?: {farmId?: string; houseId?: string; flockId?: string; date?: string}) => {
-    const query = new URLSearchParams({task, date: target?.date ?? addisToday()});
-    const farmId = target?.farmId ?? scope.scope.farmId;
-    const houseId = target?.houseId ?? scope.scope.houseId;
-    const flockId = target?.flockId ?? scope.scope.flockId;
-    if (farmId) query.set("farm_id", farmId);
-    if (houseId) query.set("house_id", houseId);
-    if (flockId) query.set("flock_id", flockId);
-    return `/app/today?${query.toString()}`;
-  };
+  const query = useSearchParams();
+  const enabled = scope.isFarmManager && scope.todayWorkspaceEnabled && !isLegacyCorrectionTarget(query);
+  const todayHref = (task: TodayTaskCode, target?: TodayEntryTarget) => buildTodayEntryHref(task, target ?? {}, scope.scope, scope.flocks, scope.houses, addisToday());
   return {enabled, todayHref};
 }
 
@@ -39,7 +33,7 @@ export function TodayEntryLink({
   children,
 }: {
   task: TodayTaskCode;
-  target?: {farmId?: string; houseId?: string; flockId?: string; date?: string};
+  target?: TodayEntryTarget;
   className?: string;
   children: React.ReactNode;
 }) {

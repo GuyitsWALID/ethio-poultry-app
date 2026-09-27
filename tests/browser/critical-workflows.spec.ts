@@ -27,7 +27,7 @@ async function tenantLogin(page: Page, account: Credentials) {
   await page.getByLabel("Email").fill(account.email);
   await page.getByLabel("Password").fill(account.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/app\/(ceo|farm-manager)/);
+  await expect(page).toHaveURL(/\/app\/(ceo|farm-manager|today)/);
 }
 
 function monitorRuntime(page: Page): RuntimeMonitor {
@@ -84,14 +84,38 @@ test.describe("Farm Manager critical workflows", () => {
       await expect.poll(async () => warehouse.locator("option").count()).toBeGreaterThan(1);
       if (!(await warehouse.inputValue())) await warehouse.selectOption({ index: 1 });
       await expect(page.getByRole("heading", { name: "Current stock and automatic usage" })).toBeVisible();
-      await page.getByRole("button", { name: /Receive stock/i }).click();
-      await expect(page.getByRole("heading", { name: /Receive stock into/i })).toBeVisible();
-      await expect(page.getByRole("button", { name: "New item" })).toBeVisible();
+      const context = await (await page.request.get("/api/me/context")).json();
+      if (context.todayWorkspaceEnabled) {
+        await page.getByRole("link", {name: /Receive stock/i}).click();
+        await expect(page).toHaveURL(/\/app\/today\?.*task=stock/);
+        expect(new URL(page.url()).searchParams.get("warehouse_id")).toBeTruthy();
+      } else {
+        await page.getByRole("button", { name: /Receive stock/i }).click();
+        await expect(page.getByRole("heading", { name: /Receive stock into/i })).toBeVisible();
+        await expect(page.getByRole("button", { name: "New item" })).toBeVisible();
+      }
     } else {
       await expect(page.getByRole("heading", { name: "No active warehouse is assigned" })).toBeVisible();
       await expect(warehouse.locator("option")).toHaveCount(1);
     }
     runtime.assertClean();
+  });
+
+  test("enabled managers reach the matching Today card from routine legacy entry", async ({page}) => {
+    const contextResponse = await page.request.get("/api/me/context");
+    await expectOk(contextResponse);
+    test.skip(!(await contextResponse.json()).todayWorkspaceEnabled, "Requires a Today-enabled staging tenant.");
+    for (const [route, name, task] of [
+      ["/app/daily-records", "Record today's work", "birds"],
+      ["/app/health", "Record today's health work", "health_deaths"],
+      ["/app/sales", "Record today's sale", "sales"],
+      ["/app/mortality", "Record health and deaths", "health_deaths"],
+    ]) {
+      await page.goto(route);
+      await page.getByRole("link", {name, exact: true}).click();
+      await expect(page).toHaveURL(/\/app\/today\?/);
+      expect(new URL(page.url()).searchParams.get("task")).toBe(task);
+    }
   });
 
   test("daily, feed, and health workspaces load their governed operational options", async ({ page }) => {
@@ -123,6 +147,13 @@ test.describe("Farm Manager critical workflows", () => {
     await expectOk(await page.request.get("/api/sales/records"));
     await expectOk(await page.request.get("/api/sales/analytics"));
 
+    const context = await (await page.request.get("/api/me/context")).json();
+    if (context.todayWorkspaceEnabled) {
+      await page.getByRole("link", {name: "Record today's sale", exact: true}).click();
+      await expect(page).toHaveURL(/\/app\/today\?.*task=sales/);
+      runtime.assertClean();
+      return;
+    }
     await page.getByRole("button", { name: "Record today's sale" }).click();
     const dialog = page.getByRole("dialog", { name: "Record a new sale" });
     await expect(dialog).toBeVisible();

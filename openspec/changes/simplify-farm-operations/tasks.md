@@ -61,7 +61,7 @@
 - [x] 6.7 Implement the expandable Routine supplies card with explicit nothing-used confirmation and repeatable eligible usage rows; verify feed, medicine, and vaccine items remain excluded and unrelated Daily Record values are preserved.
 - [x] 6.8 Implement directly editable Stock receipts and scheduled counts, Sales, Expenses, and Assigned fixes cards in Today; verify optional work does not silently block close, assigned work remains visible, and every mutation uses the existing authoritative operation.
 - [x] 6.9 Implement Review and Finish day with complete/missing/queued/rejected/conflict summaries and online atomic close; verify concurrent mutation, stale revision, retry, already-closed, and offline behavior.
-- [ ] 6.10 Update normal Daily Records, Feed, Health, Mortality, Stock, Sales, and Expense create actions to open the exact Today card for enabled managers while keeping history, configuration, governed corrections, and alert deep links intact.
+- [x] 6.10 Update normal Daily Records, Feed, Health, Mortality, Stock, Sales, and Expense create actions to open the exact Today card for enabled managers while keeping history, configuration, governed corrections, and alert deep links intact.
 - [x] 6.11 Add one-open-card-at-a-time behavior, collapsed authoritative summaries, successful-save auto-advance, short first-use bilingual guidance, and contextual examples; verify guidance can be dismissed and reopened and never blocks experienced users.
 
 ## 7. Simplified Navigation and Rollout
