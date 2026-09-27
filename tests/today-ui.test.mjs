@@ -68,11 +68,15 @@ test("Check birds is a focused safe save rather than another large Daily Record 
 
 test("successful saves advance and Review blocks unsafe closure", () => {
   assert.match(screen, /sequence\.slice\(Math\.max\(0, currentIndex \+ 1\)\)/);
-  assert.match(screen, /reviewTasks=\{required\.filter/);
+  assert.match(screen, /reviewTasks=\{reviewTasks\}/);
+  assert.match(screen, /contextLabel:\s*flock\.code/);
   assert.match(embeddedTasks, /reviewCompleted/);
   assert.match(embeddedTasks, /reviewMissing/);
   assert.match(embeddedTasks, /reviewUnsynced/);
   assert.match(embeddedTasks, /reviewProblems/);
+  assert.match(embeddedTasks, /reviewConflicts/);
+  assert.match(embeddedTasks, /reviewRejected/);
+  assert.match(embeddedTasks, /finishCommandId\.current/);
   assert.match(embeddedTasks, /!online\|\|!canFinish/);
 });
 

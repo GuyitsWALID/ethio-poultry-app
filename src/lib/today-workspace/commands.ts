@@ -22,6 +22,7 @@ function mapDatabaseError(error: DatabaseError): TodayErrorCode {
   const message = error.message.toLowerCase();
   if (error.code === "40001" || /changed|refresh|revision/.test(message)) return "RESOURCE_CONFLICT";
   if (/already used with a different payload/.test(message)) return "COMMAND_ID_REUSED";
+  if (/operating day is already closed/.test(message)) return "OPERATING_DAY_LOCKED";
   if (/required earlier command|dependency/.test(message)) return "DEPENDENCY_INCOMPLETE";
   if (/insufficient.*stock/.test(message)) return "INSUFFICIENT_STOCK";
   if (/category|medicine items only|vaccine items only|feed inventory item/.test(message)) return "ITEM_CATEGORY_NOT_ALLOWED";

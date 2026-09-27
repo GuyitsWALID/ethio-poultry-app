@@ -1,5 +1,6 @@
 import type { TodayCommandResult } from "./contracts.ts";
 import type { OfflineStore, QueuedCommand } from "./offline-store.ts";
+import {finishIssueFromResult} from "./finish-review.ts";
 
 export type CommandSender = (command: QueuedCommand["command"]) => Promise<TodayCommandResult>;
 export type SyncSummary = { applied: string[]; conflicts: string[]; rejected: string[]; blocked: string[]; offline: boolean };
@@ -50,6 +51,10 @@ export async function sendTodayCommand(command: QueuedCommand["command"]): Promi
   });
   const result = await response.json() as TodayCommandResult;
   if (!response.ok && !result.status) throw new Error("SYNC_UNAVAILABLE");
+  const issue = finishIssueFromResult(result);
+  if (issue && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("ethiopoultry:today-command-issue", {detail: issue}));
+  }
   return result;
 }
 

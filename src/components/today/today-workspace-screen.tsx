@@ -22,6 +22,7 @@ import {EmbeddedTaskCard} from "@/components/today/embedded-task-card";
 import { formatNumber, formatOperationDate } from "@/i18n/formats";
 import type { AppLocale } from "@/i18n/locale";
 import type { TodayTask, TodayWorkspace } from "@/lib/today-workspace/contracts";
+import type {FinishIssue, ReviewTask} from "@/lib/today-workspace/finish-review";
 
 type WorkspaceError = "FEATURE_DISABLED" | "ROLE_NOT_ALLOWED" | "ASSIGNMENT_REQUIRED" | "LOAD_FAILED";
 type AssignedFarm = {id: string; name: string; branch_id: string};
@@ -62,10 +63,20 @@ export function TodayWorkspaceScreen() {
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [advanceFrom, setAdvanceFrom] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [finishIssues, setFinishIssues] = useState<FinishIssue[]>([]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setGuideOpen(window.localStorage.getItem("ethiopoultry.today.guide.dismissed.v1") !== "true"), 0);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const record = (event: Event) => {
+      const issue = (event as CustomEvent<FinishIssue>).detail;
+      setFinishIssues((current) => [...current.filter((item) => item.commandId !== issue.commandId), issue]);
+    };
+    window.addEventListener("ethiopoultry:today-command-issue", record);
+    return () => window.removeEventListener("ethiopoultry:today-command-issue", record);
   }, []);
 
   const assignedFarms = farms.length ? farms : directFarms ?? [];
@@ -182,6 +193,7 @@ export function TodayWorkspaceScreen() {
   }, [farmId, reloadVersion, role, workDate]);
 
   function reload() {
+    setFinishIssues([]);
     setLoading(true);
     setReloadVersion((current) => current + 1);
   }
@@ -194,14 +206,24 @@ export function TodayWorkspaceScreen() {
     if (!workspace) return [];
     return [...workspace.flocks.flatMap((flock) => flock.tasks), ...workspace.farmTasks].filter((task) => task.required && task.applicable);
   }, [workspace]);
+  const reviewTasks = useMemo<ReviewTask[]>(() => {
+    if (!workspace) return [];
+    return [
+      ...workspace.flocks.flatMap((flock) => flock.tasks
+        .filter((task) => task.required && task.applicable)
+        .map((task) => ({...task, contextLabel: flock.code}))),
+      ...workspace.farmTasks
+        .filter((task) => task.required && task.applicable && task.code !== "review_finish")
+        .map((task) => ({...task, contextLabel: workspace.farm.name})),
+    ];
+  }, [workspace]);
   const completed = required.filter((task) => task.state === "complete").length;
   const progress = required.length ? Math.round(completed / required.length * 100) : 0;
 
   useEffect(() => {
-    if (!workspace || !activeFlockId) return;
+    if (!workspace) return;
     const flock = workspace.flocks.find((item) => item.id === activeFlockId);
-    if (!flock) return;
-    const sequence = [...flock.tasks.filter((item) => item.applicable), ...workspace.farmTasks.filter((item) => item.applicable)];
+    const sequence = [...(flock?.tasks.filter((item) => item.applicable) ?? []), ...workspace.farmTasks.filter((item) => item.applicable)];
     if (advanceFrom) {
       const currentIndex = sequence.findIndex((item) => `${item.code}` === advanceFrom);
       const next = sequence.slice(Math.max(0, currentIndex + 1)).find((item) => item.state !== "complete")
@@ -247,8 +269,8 @@ export function TodayWorkspaceScreen() {
     {guideOpen ? <section aria-label={t("guide.title")} className="relative rounded-2xl border border-leaf-200 bg-leaf-500/5 p-5"><button type="button" onClick={dismissGuide} aria-label={t("guide.dismiss")} className="absolute right-3 top-3 inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-forest-700"><X className="h-5 w-5"/></button><h2 className="pr-12 font-display text-xl font-semibold text-forest-900">{t("guide.title")}</h2><div className="mt-4 grid gap-3 md:grid-cols-3">{([1,2,3] as const).map((step)=><div key={step} className="rounded-xl bg-white p-4"><span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-forest-900 text-sm font-semibold text-white">{step}</span><p className="mt-3 text-sm font-semibold text-forest-900">{t(`guide.step${step}Title`)}</p><p className="mt-1 text-sm leading-6 text-forest-600">{t(`guide.step${step}Help`)}</p></div>)}</div><button type="button" onClick={dismissGuide} className="mt-4 min-h-12 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white">{t("guide.start")}</button></section> : null}
 
     <section className="grid gap-3 rounded-2xl border border-sand-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-[1fr_210px_1fr_1fr_auto] xl:items-end">
-      <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("farm")}<select value={farmId} onChange={(event) => { const id=event.target.value;setSelectedFarmId(id);setSelectedHouseId("");setFlockId("");setWorkspace(null);setError(null);setScope((current)=>({...current,farmId:id,houseId:"",flockId:"",batchId:""})); }} className="min-h-12 rounded-xl border border-sand-300 bg-white px-3 text-sm text-forest-900"><option value="">{t("chooseFarm")}</option>{assignedFarms.map((farm)=><option key={farm.id} value={farm.id}>{farm.name}</option>)}</select></label>
-      <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("workDate")}<input type="date" min={earliestEditableDate(today)} max={today} value={workDate} onChange={(event)=>{setWorkDate(event.target.value);setWorkspace(null);setError(null);}} className="min-h-12 rounded-xl border border-sand-300 px-3 text-sm" /></label>
+      <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("farm")}<select value={farmId} onChange={(event) => { const id=event.target.value;setSelectedFarmId(id);setSelectedHouseId("");setFlockId("");setWorkspace(null);setError(null);setFinishIssues([]);setScope((current)=>({...current,farmId:id,houseId:"",flockId:"",batchId:""})); }} className="min-h-12 rounded-xl border border-sand-300 bg-white px-3 text-sm text-forest-900"><option value="">{t("chooseFarm")}</option>{assignedFarms.map((farm)=><option key={farm.id} value={farm.id}>{farm.name}</option>)}</select></label>
+      <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("workDate")}<input type="date" min={earliestEditableDate(today)} max={today} value={workDate} onChange={(event)=>{setWorkDate(event.target.value);setWorkspace(null);setError(null);setFinishIssues([]);}} className="min-h-12 rounded-xl border border-sand-300 px-3 text-sm" /></label>
       <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("house")}<select value={houseId} disabled={!availableHouses.length} onChange={(event)=>{const id=event.target.value;setSelectedHouseId(id);setFlockId("");setScope((current)=>({...current,houseId:id,flockId:"",batchId:""}));}} className="min-h-12 rounded-xl border border-sand-300 bg-white px-3 text-sm text-forest-900 disabled:bg-sand-50"><option value="">{t("chooseHouse")}</option>{availableHouses.map((house)=><option key={house.id} value={house.id}>{house.name}</option>)}</select></label>
       <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("flock")}<select value={activeFlockId} disabled={!houseId || !availableFlocks.length} onChange={(event)=>{const id=event.target.value;setFlockId(id);setScope((current)=>({...current,flockId:id,batchId:""}));}} className="min-h-12 rounded-xl border border-sand-300 bg-white px-3 text-sm text-forest-900 disabled:bg-sand-50"><option value="">{t("chooseFlock")}</option>{availableFlocks.map((flock)=><option key={flock.id} value={flock.id}>{flock.code}</option>)}</select></label>
       <button type="button" onClick={reload} disabled={loading||!farmId} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin motion-reduce:animate-none":""}`} />{t("refresh")}</button>
@@ -262,7 +284,7 @@ export function TodayWorkspaceScreen() {
     {workspace && !error ? <>
       {!workspace.flocks.length ? <section className="rounded-3xl border border-dashed border-sand-300 bg-white p-8 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-leaf-600"/><h2 className="mt-3 font-display text-2xl font-semibold text-forest-900">{t("noActiveFlock")}</h2><p className="mt-2 text-sm text-forest-600">{t("noActiveFlockHelp")}</p></section> : null}
       {visibleFlocks.map((flock)=><section key={flock.id} className="overflow-hidden rounded-3xl border border-sand-200 bg-sand-50 shadow-sm"><header className="grid gap-4 border-b border-sand-200 bg-white p-5 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-display text-2xl font-semibold text-forest-900">{flock.code}</h2><span className="rounded-full bg-forest-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white">{flock.type.replaceAll("_"," ")}</span></div><p className="mt-1 text-sm text-forest-600">{flock.houseLabel}{flock.batchLabel?` · ${flock.batchLabel}`:""} · {t("age",{days:flock.ageDays})}</p></div><div className="grid grid-cols-2 gap-2 text-xs"><div className="rounded-xl bg-sand-50 px-3 py-2"><span className="block text-forest-500">{t("openingBirds")}</span><strong className="mt-1 block text-base text-forest-900">{flock.openingBirds===null?"—":formatNumber(flock.openingBirds,locale)}</strong></div><div className="rounded-xl bg-sand-50 px-3 py-2"><span className="block text-forest-500">{t("previousClose")}</span><strong className="mt-1 block text-base text-forest-900">{flock.previousClosingBirds===null?"—":formatNumber(flock.previousClosingBirds,locale)}</strong></div></div></header><div className="grid gap-3 p-4">{flock.tasks.filter((task)=>task.applicable).map((task)=>task.code === "birds" ? <BirdCheckCard key={`${flock.id}:${flock.birdCheck.resourceRevision ?? "new"}`} flock={flock} task={task} farmId={workspace.farm.id} workDate={workspace.workDate} online={online} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onSaved={()=>saved(task)}/> : <EmbeddedTaskCard key={task.code} task={task} flock={flock} farmId={workspace.farm.id} workDate={workspace.workDate} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onChanged={reload} onSaved={()=>saved(task)}/>)}</div></section>)}
-      <section><div className="mb-3 flex items-center gap-2"><HeartPulse className="h-5 w-5 text-forest-600"/><h2 className="font-display text-xl font-semibold text-forest-900">{t("additional")}</h2></div><div className="grid gap-3">{workspace.farmTasks.filter((task)=>task.applicable).map((task)=><EmbeddedTaskCard key={task.code} task={task} flock={visibleFlocks[0]} farmId={workspace.farm.id} workDate={workspace.workDate} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onChanged={reload} onSaved={()=>saved(task)} dayRevision={workspace.operatingDay.revision} reviewTasks={required.filter((item)=>item.code!=="review_finish")} online={online} canFinish={workspace.capabilities.canFinish}/>)}</div></section>
+      <section><div className="mb-3 flex items-center gap-2"><HeartPulse className="h-5 w-5 text-forest-600"/><h2 className="font-display text-xl font-semibold text-forest-900">{t("additional")}</h2></div><div className="grid gap-3">{workspace.farmTasks.filter((task)=>task.applicable).map((task)=><EmbeddedTaskCard key={task.code} task={task} flock={visibleFlocks[0]} farmId={workspace.farm.id} workDate={workspace.workDate} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onChanged={reload} onSaved={()=>saved(task)} dayRevision={workspace.operatingDay.revision} reviewTasks={reviewTasks} finishIssues={finishIssues} online={online} canFinish={workspace.capabilities.canFinish}/>)}</div></section>
     </>:null}
   </main>;
 }

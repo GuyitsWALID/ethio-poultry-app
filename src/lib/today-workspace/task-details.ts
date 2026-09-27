@@ -185,7 +185,19 @@ export async function loadTodayTaskDetail(
   }
 
   if (task === "review_finish") {
-    return {...base, task, resourceRevision: await resourceRevision("operating_day", input.farmId, input.workDate), data: {message: "Refresh the Today workspace before finishing."}};
+    const day = await governanceAdmin.from("farm_operating_days")
+      .select("status,closed_at")
+      .eq("org_id", context.orgId)
+      .eq("farm_id", input.farmId)
+      .eq("operating_date", input.workDate)
+      .maybeSingle();
+    if (day.error) throw new TodayWorkspaceError("INTERNAL_ERROR", day.error.message, 500);
+    return {
+      ...base,
+      task,
+      resourceRevision: await resourceRevision("operating_day", input.farmId, input.workDate),
+      data: {status: day.data?.status ?? "open", closedAt: day.data?.closed_at ?? null},
+    };
   }
 
   return {...base, task, data: {}};
