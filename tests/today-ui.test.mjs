@@ -5,6 +5,7 @@ import test from "node:test";
 const page = await readFile(new URL("../src/app/app/today/page.tsx", import.meta.url), "utf8");
 const screen = await readFile(new URL("../src/components/today/today-workspace-screen.tsx", import.meta.url), "utf8");
 const birdCheck = await readFile(new URL("../src/components/today/bird-check-card.tsx", import.meta.url), "utf8");
+const healthForm = await readFile(new URL("../src/components/today/health-task-form.tsx", import.meta.url), "utf8");
 const embeddedTasks = await readFile(new URL("../src/components/today/embedded-task-card.tsx", import.meta.url), "utf8");
 const shell = await readFile(new URL("../src/components/app-shell.tsx", import.meta.url), "utf8");
 const assignedFarmsRoute = await readFile(new URL("../src/app/api/farm-manager/today/farms/route.ts", import.meta.url), "utf8");
@@ -22,14 +23,15 @@ test("Today preserves the feature-flag fallback while routine work stays embedde
   assert.match(screen, /<EmbeddedTaskCard/);
   assert.doesNotMatch(screen, /taskRoutes|Open task/);
   assert.match(embeddedTasks, /\/api\/farm-manager\/today\/tasks\/\$\{task\.code\}/);
-  for (const command of ["save_daily_record", "save_feed_session", "close_feed_day", "record_health_event", "record_mortality_event", "record_stock_receipt", "record_sale", "record_expense", "update_assigned_action", "finish_operating_day"]) assert.match(embeddedTasks, new RegExp(command));
+  for (const command of ["save_daily_record", "save_feed_session", "close_feed_day", "record_stock_receipt", "record_sale", "record_expense", "update_assigned_action", "finish_operating_day"]) assert.match(embeddedTasks, new RegExp(command));
+  for (const command of ["save_daily_record", "record_health_event", "complete_vaccination", "confirm_no_activity"]) assert.match(healthForm, new RegExp(command));
 });
 
 test("Today provides a simple farm, house, flock, and seven-day date flow", () => {
   assert.match(screen, /useFarmScope/);
   assert.match(screen, /\/api\/farm-manager\/today\/farms/);
   assert.match(screen, /setUTCDate\(value\.getUTCDate\(\) - 6\)/);
-  assert.match(screen, /type="date" min=\{earliestEditableDate\(today\)\} max=\{today\}/);
+  assert.match(screen, /<OperationDateInput min=\{earliestEditableDate\(today\)\} max=\{today\}/);
   assert.match(screen, /t\("house"\)/);
   assert.match(screen, /t\("chooseHouse"\)/);
   assert.match(screen, /flock\.house_id === houseId/);
@@ -55,15 +57,16 @@ test("Today meets the first tablet interaction and accessibility contract", () =
   assert.doesNotMatch(`${screen}\n${embeddedTasks}`, /<table|overflow-x-auto/);
 });
 
-test("Check birds is a focused safe save rather than another large Daily Record form", () => {
+test("Check birds starts the record and health owns routine losses", () => {
   assert.match(screen, /<BirdCheckCard/);
   assert.match(birdCheck, /assessBirdCheck/);
   assert.match(birdCheck, /usages: null/);
-  assert.match(birdCheck, /expected_resource_revision/);
-  assert.match(birdCheck, /inputMode=\{field\.decimal \? "decimal" : "numeric"\}/);
-  assert.match(birdCheck, /correction_destination/);
-  assert.match(birdCheck, /setDirty\(true\)/);
-  assert.match(birdCheck, /states\.draft/);
+  assert.doesNotMatch(birdCheck, /<input type="number"/);
+  assert.match(birdCheck, /initial\.deaths/);
+  assert.match(birdCheck, /initial\.culls/);
+  assert.match(healthForm, /type="checkbox"/);
+  assert.match(healthForm, /_today_bird_loss/);
+  assert.match(healthForm, /expected_resource_revision/);
 });
 
 test("successful saves advance and Review blocks unsafe closure", () => {

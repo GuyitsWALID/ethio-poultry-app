@@ -1,5 +1,6 @@
 "use client";
 
+import {OperationDateInput} from "@/components/operation-date-input";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bird, Boxes, CalendarDays, CheckCircle2, Layers3, MoreHorizontal, PackageOpen, RefreshCw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -257,8 +258,8 @@ function BatchManagement({ embedded = false }: { embedded?: boolean }) {
             <option value="internal_transfer">Internal Transfer</option>
           </select>
           <input name="supplier_name" placeholder="Supplier name" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-          <input name="purchase_date" type="date" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
-          <input name="placement_date" type="date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+          <OperationDateInput name="purchase_date" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+          <OperationDateInput name="placement_date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="age_at_placement_days" type="number" min={0} required placeholder="Age at placement (days)" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="male_count" type="number" placeholder="Male count" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
           <input name="female_count" type="number" placeholder="Female count" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />

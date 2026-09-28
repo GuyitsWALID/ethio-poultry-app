@@ -1,4 +1,11 @@
 {
+  "Calendar": {
+    "ethiopian": "የኢትዮጵያ ዘመን አቆጣጠር",
+    "day": "ቀን",
+    "month": "ወር",
+    "year": "ዓመት",
+    "invalid": "በተፈቀደው ጊዜ ውስጥ ትክክለኛ ቀን ይምረጡ።"
+  },
   "Common": {
     "language": "ቋንቋ",
     "english": "እንግሊዝኛ",
@@ -327,7 +334,7 @@
     "noActiveFlockHelp": "አሁንም ክምችት፣ ሽያጭና ወጪ መመዝገብ እና የእርሻውን ቀን መዝጋት ይችላሉ።",
     "birdCheck": {
       "title": "ዶሮዎችን ያረጋግጡ",
-      "help": "መንጋውን ይቁጠሩ እና የዶሮ እንቅስቃሴን ይመዝግቡ። ውሃ በሚቀጥለው ደረጃ ይመዘገባል።",
+      "help": "የዛሬን የቀጥታ ዶሮዎች ብዛት ይመልከቱ። ሞትና መወገድ በጤና ክፍል ይመዝግቡ፤ ቁጥሩ በራሱ ይዘምናል።",
       "opening": "በቀኑ መጀመሪያ ያሉ ዶሮዎች",
       "sources": {
         "daily_record": "በዛሬው መዝገብ ተቀምጧል",
@@ -349,6 +356,8 @@
       "missingOpening": "የመነሻ ቁጥሩ የለም። ከመቀጠልዎ በፊት ዋናውን መዝገብ ይመልከቱ።",
       "openRecord": "ዕለታዊ መዝገቦችን ክፈት",
       "save": "የዶሮ ቆጠራን አስቀምጥ",
+      "healthEntry": "የቀኑ መጨረሻ ዶሮዎች = የመጀመሪያ ዶሮዎች − የሞቱ − የተወገዱ። ሞትና መወገድን በጤና ክፍል ይመዝግቡ።",
+      "legacyMovements": "በዚህ መዝገብ የቀድሞ እንቅስቃሴ ወይም ማረም የሚያስፈልገው ቁጥር አለ። ትክክለኛውን ለማረም ዕለታዊ መዝገቦችን ይጠቀሙ።",
       "saving": "እየተቀመጠ ነው…",
       "saved": "የዶሮ ቆጠራው ተቀምጧል።",
       "offlineHelp": "ይህን ገጽ ክፍት ያድርጉ። ከመስመር ውጭ ረቂቅ ማስቀመጥ በሚቀጥለው ሥራ ይጨመራል፤ ከማስቀመጥዎ በፊት ይገናኙ።"
@@ -359,7 +368,11 @@
       "saved": "ተቀምጧል። ወደሚቀጥለው ያልተጠናቀቀ ደረጃ ይሄዳል።", "saving": "እየተቀመጠ ነው…", "saveContinue": "አስቀምጥና ቀጥል",
       "sessionSaved": "የመኖ ጊዜው ተቀምጧል።", "feedingSessions":"የዛሬ የመኖ ጊዜዎች", "feedClosed": "የዛሬ መኖ ተጠናቋል፣ ክምችቱም አንድ ጊዜ ተቀንሷል።", "feedAlreadyClosed": "የዛሬ መኖ ተዘግቶ ተጠናቋል።", "done": "ተጠናቋል", "pending": "ቀርቷል",
       "sessionName": "የመኖ ጊዜ", "sessionTime": "ሰዓት", "feeders": "የመመገቢያ ብዛት", "plannedKg": "የታቀደ መኖ (ኪ.ግ)", "actualKg": "የተጠቀሙት መኖ (ኪ.ግ)", "status": "ውጤት", "planned": "ገና አልተመዘገበም", "completed": "ተመግቧል", "missed": "አልተከናወነም", "feedType": "የመኖ ዓይነት", "feedTypes":{"starter":"የመጀመሪያ መኖ","grower":"የእድገት / ቄብ መኖ","layer":"የእንቁላል ዶሮ መኖ","broiler":"የሥጋ ዶሮ መኖ","medicated":"መድኃኒት ያለው መኖ"}, "feedItem": "የመኖ እቃ", "warehouse": "መጋዘን", "choose": "ይምረጡ", "notesOrMissedReason": "ማስታወሻ ወይም መኖው ያልተሰጠበት ምክንያት", "missedReason":"ይህ የመኖ ጊዜ ለምን ቀረ?", "missedReasonRequired": "ይህ የመኖ ጊዜ ለምን እንደቀረ ያብራሩ።", "saveSession": "መኖውን አስቀምጥ", "closeFeedDay": "የዛሬን መኖ ጨርስ",
-      "healthModes": {"none": "ዛሬ የጤና ችግር ወይም ሞት የለም", "death": "ዶሮ ሞቷል", "health": "የጤና ችግር ወይም ሕክምና", "vaccination": "የታቀደ ክትባት አጠናቅቅ"},
+      "healthModes": {"none": "የጤና ችግር፣ ሞት ወይም መወገድ የለም", "death": "ዶሮ ሞቷል", "cull": "ዶሮ ተወግዷል", "health": "የጤና ችግር ወይም ሕክምና", "vaccination": "የታቀደ ክትባት አጠናቅቅ"},
+      "healthChoicesHelp": "ዛሬ የተከሰተውን ምልክት ያድርጉ። ከአንድ በላይ መምረጥ ይችላሉ፤ የታየውን እያንዳንዱን ክፍል ያስቀምጡ።",
+      "recordedLosses": "ዛሬ የተመዘገበ፦ {deaths} ሞት፣ {culls} የተወገዱ።",
+      "cullCount": "የተወገዱ ብዛት", "cullReason": "ለምን ተወገዱ?", "saveLoss": "ሞትና መወገድን አስቀምጥ", "lossSaved": "ሞት፣ መወገድና የቀሩት ዶሮዎች ቁጥር በአንድ ላይ ተቀምጧል።", "startBirdCheckFirst": "ሞትና መወገድን ከመመዝገብዎ በፊት በዶሮ ቆጠራ የዛሬን መዝገብ ይጀምሩ።",
+      "deathCauses": {"natural": "የተፈጥሮ ሞት", "illness": "በሕመም", "unknown": "ምክንያቱ አልታወቀም"},
       "vaccination": "የታቀደ ክትባት", "vaccine": "የክትባት እቃ", "vaccinationSaved": "ክትባቱ ተጠናቆ የክትባት ክምችት ተሻሽሏል።",
       "confirmedNone": "ዛሬ ምንም የሚመዘገብ እንደሌለ ተረጋግጧል።", "healthSaved": "የጤና መረጃው ተቀምጧል።", "deathCount": "የሞቱ ብዛት", "cause": "ምክንያት", "time": "ሰዓት (አማራጭ)", "diagnosis": "ምርመራ (አማራጭ)", "notes": "ማስታወሻ (አማራጭ)", "eventType": "ምን ተከሰተ?", "observation": "ምልከታ", "disease": "በሽታ", "treatment": "ሕክምና", "description": "ምን አዩ?", "medicine": "የተጠቀሙት መድኃኒት (አማራጭ)", "noneUsed": "መድኃኒት አልተጠቀምንም", "quantity": "ብዛት", "confirmNone": "ዛሬ ምንም እንደሌለ አረጋግጥ",
       "nothingUsed": "ዛሬ ምንም እቃ አልተጠቀምንም", "recordSupply": "የተጠቀሙ እቃዎችን መዝግብ", "item": "እቃ", "confirmedNothing": "ምንም መደበኛ እቃ እንዳልተጠቀምን ተረጋግጧል።", "suppliesSaved": "የእቃ አጠቃቀሙ ተቀምጦ ክምችቱ ተሻሽሏል።", "confirmNothing": "ምንም እንዳልተጠቀምን አረጋግጥ", "addSupply": "ሌላ እቃ ጨምር", "remove": "አስወግድ",

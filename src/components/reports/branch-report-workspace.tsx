@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+import {OperationDateInput} from "@/components/operation-date-input";
 import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
 
 import Link from "next/link";
@@ -183,8 +184,8 @@ function ReportFilters({
           <p className="text-xs text-sand-100">Previous {days}-day period is compared automatically.</p>
         </div>
         <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
-          <label className={labelClass}>From<input className={controlClass} type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} /></label>
-          <label className={labelClass}>To<input className={controlClass} type="date" value={dateTo} min={dateFrom} max={today} onChange={(event) => setDateTo(event.target.value)} /></label>
+          <label className={labelClass}>From<OperationDateInput className={controlClass} value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} /></label>
+          <label className={labelClass}>To<OperationDateInput className={controlClass} value={dateTo} min={dateFrom} max={today} onChange={(event) => setDateTo(event.target.value)} /></label>
           {role === "ceo" ? <label className={labelClass}>Branch<select className={controlClass} value={scope.branchId} onChange={(event) => setScope((current) => ({ ...current, branchId: event.target.value, farmId: "", houseId: "", flockId: "", batchId: "" }))}><option value="">All branches</option>{branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : null}
           <label className={labelClass}>Farm<select className={controlClass} value={scope.farmId} onChange={(event) => setScope((current) => ({ ...current, farmId: event.target.value, houseId: "", flockId: "", batchId: "" }))}><option value="">All farms</option>{filteredFarms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label className={labelClass}>House<select className={controlClass} value={scope.houseId} onChange={(event) => setScope((current) => ({ ...current, houseId: event.target.value, flockId: "", batchId: "" }))}><option value="">All houses</option>{filteredHouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>

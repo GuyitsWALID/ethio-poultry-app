@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+import {OperationDateInput} from "@/components/operation-date-input";
 import { useEffect, useState } from "react";
 import {
   Area,
@@ -202,11 +203,11 @@ function ScopeAndDateFilters({
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <label className="grid gap-1 text-xs text-forest-600">
           From
-          <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900" />
+          <OperationDateInput value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900" />
         </label>
         <label className="grid gap-1 text-xs text-forest-600">
           To
-          <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900" />
+          <OperationDateInput value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="h-10 rounded-xl border border-sand-200 bg-white px-3 text-sm text-forest-900" />
         </label>
         {mode === "management" ? (
           <label className="grid gap-1 text-xs text-forest-600">

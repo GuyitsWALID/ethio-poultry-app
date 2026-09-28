@@ -1,5 +1,6 @@
  "use client";
 
+import {OperationDateInput} from "@/components/operation-date-input";
 import { reportingPeriodFor, useFarmScope, type PeriodPreset } from "@/components/farm-scope-context";
 import { ResetPageFilters } from "@/components/page-filter-controls";
 
@@ -53,11 +54,11 @@ export function FarmScopeFilters({ title = "Filter this page", fields = ["branch
           <>
             <label className="grid gap-1 text-xs text-forest-600">
               From
-              <input type="date" className={selectClass} value={period.dateFrom} max={period.dateTo} onChange={(event) => setPeriod((prev) => ({ ...prev, dateFrom: event.target.value }))} />
+              <OperationDateInput className={selectClass} value={period.dateFrom} max={period.dateTo} onChange={(event) => setPeriod((prev) => ({ ...prev, dateFrom: event.target.value }))} />
             </label>
             <label className="grid gap-1 text-xs text-forest-600">
               To
-              <input type="date" className={selectClass} value={period.dateTo} min={period.dateFrom} onChange={(event) => setPeriod((prev) => ({ ...prev, dateTo: event.target.value }))} />
+              <OperationDateInput className={selectClass} value={period.dateTo} min={period.dateFrom} onChange={(event) => setPeriod((prev) => ({ ...prev, dateTo: event.target.value }))} />
             </label>
           </>
         ) : null}

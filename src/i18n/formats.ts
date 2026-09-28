@@ -1,4 +1,4 @@
-import type { AppLocale } from "./request";
+import type { AppLocale } from "./locale";
 
 const displayLocales: Record<AppLocale, string> = {
   en: "en-ET",
@@ -6,10 +6,12 @@ const displayLocales: Record<AppLocale, string> = {
 };
 
 export const ADDIS_ABABA_TIME_ZONE = "Africa/Addis_Ababa";
+export const displayCalendar = (locale: AppLocale) => locale === "am" ? "ethiopic" : "gregory";
 
 export function formatOperationDate(value: Date | string | number, locale: AppLocale) {
   return new Intl.DateTimeFormat(displayLocales[locale], {
     dateStyle: "medium",
+    calendar: displayCalendar(locale),
     timeZone: ADDIS_ABABA_TIME_ZONE,
   }).format(new Date(value));
 }
@@ -18,6 +20,7 @@ export function formatOperationDateTime(value: Date | string | number, locale: A
   return new Intl.DateTimeFormat(displayLocales[locale], {
     dateStyle: "medium",
     timeStyle: "short",
+    calendar: displayCalendar(locale),
     timeZone: ADDIS_ABABA_TIME_ZONE,
   }).format(new Date(value));
 }
@@ -27,6 +30,7 @@ export function formatHeaderDate(value: Date | string | number, locale: AppLocal
     weekday: "short",
     month: "short",
     day: "numeric",
+    calendar: displayCalendar(locale),
     timeZone: ADDIS_ABABA_TIME_ZONE,
   }).format(new Date(value));
 }

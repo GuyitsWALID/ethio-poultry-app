@@ -7,13 +7,14 @@ import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AppLocale } from "@/i18n/locale";
+import {formatOperationDateTime} from "@/i18n/formats";
 import type { ActionCard, ActionStatus } from "@/lib/action-desk-contract";
 import type { NotificationCenter, NotificationItem } from "@/lib/notification-contract";
 
 function timeLabel(value: string, locale: AppLocale, currentLabel: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return currentLabel;
-  return new Intl.DateTimeFormat(locale === "am" ? "am-ET" : "en-ET", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Africa/Addis_Ababa" }).format(date);
+  return formatOperationDateTime(date, locale);
 }
 
 const severityStyle = {

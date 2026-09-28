@@ -10,8 +10,10 @@ import {
   formatOperationDate,
   formatOperationDateTime,
 } from "../src/i18n/formats.ts";
+import {ethiopianMonthDays, ethiopianMonthNames, toEthiopianDate, toGregorianDate} from "../src/i18n/ethiopian-calendar.ts";
 import {
   managerTodayMessageKeys,
+  pendingTerminologyReviewKeys,
   terminologyReview,
 } from "../src/i18n/terminology-review.ts";
 import {
@@ -82,6 +84,9 @@ test("partner approval is recorded explicitly with its reviewed version", () => 
   assert.equal(terminologyReview.version, "2026-09-23-approved-1");
   assert.equal(terminologyReview.reviewer, "product_owner_poultry_partner");
   assert.equal(terminologyReview.reviewedAt, "2026-09-23");
+  assert.deepEqual(terminologyReview.pendingReviewMessageKeys, pendingTerminologyReviewKeys);
+  assert(pendingTerminologyReviewKeys.every((key) => managerTodayMessageKeys.includes(key)));
+  assert(pendingTerminologyReviewKeys.every((key) => !terminologyReview.messageKeys.includes(key)));
 });
 
 test("operation date formatting is fixed to Addis Ababa", () => {
@@ -91,6 +96,23 @@ test("operation date formatting is fixed to Addis Ababa", () => {
   assert.match(formatOperationDateTime(instant, "en"), /Sep 21, 2026/);
   assert.match(formatHeaderDate(instant, "en"), /Sep 21/);
   assert.notEqual(formatHeaderDate(instant, "am"), formatHeaderDate(instant, "en"));
+  assert.match(formatOperationDate(instant, "am"), /2019|፳፻፲፱/);
+  assert.match(formatHeaderDate(instant, "am"), /መስከረም/);
+});
+
+test("Ethiopian calendar round-trips Gregorian operational dates", () => {
+  for (const iso of ["2026-09-11", "2026-09-27", "2023-09-11", "2023-09-12", "2024-02-29", "2025-01-01"]) {
+    const ethiopian = toEthiopianDate(iso);
+    assert.ok(ethiopian, iso);
+    assert.equal(toGregorianDate(ethiopian), iso);
+  }
+  assert.deepEqual(toEthiopianDate("2026-09-11"), {year: 2019, month: 1, day: 1});
+  assert.deepEqual(toEthiopianDate("2023-09-11"), {year: 2015, month: 13, day: 6});
+  assert.equal(toGregorianDate({year: 2016, month: 13, day: 6}), null);
+  assert.equal(ethiopianMonthDays(2015, 13), 6);
+  assert.equal(ethiopianMonthDays(2016, 13), 5);
+  assert.equal(ethiopianMonthNames().length, 13);
+  assert.equal(toEthiopianDate("2026-02-30"), null);
 });
 
 test("number and ETB helpers use Ethiopian display locales", () => {

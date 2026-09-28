@@ -1,5 +1,6 @@
 "use client";
 
+import {OperationDateInput} from "@/components/operation-date-input";
 import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -932,13 +933,13 @@ export default function DailyRecordsPage() {
             </select>
           </label>
           {dateFilterMode === "single" ? (
-            <label className={filterLabelClass}>Date<input className={inputClass} type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} /></label>
+            <label className={filterLabelClass}>Date<OperationDateInput className={inputClass} value={filterDate} onChange={(event) => setFilterDate(event.target.value)} /></label>
           ) : null}
           {dateFilterMode === "range" ? (
-            <label className={filterLabelClass}>From<input className={inputClass} type="date" value={filterDateFrom} onChange={(event) => setFilterDateFrom(event.target.value)} /></label>
+            <label className={filterLabelClass}>From<OperationDateInput className={inputClass} value={filterDateFrom} onChange={(event) => setFilterDateFrom(event.target.value)} /></label>
           ) : null}
           {dateFilterMode === "range" ? (
-            <label className={filterLabelClass}>To<input className={inputClass} type="date" value={filterDateTo} onChange={(event) => setFilterDateTo(event.target.value)} /></label>
+            <label className={filterLabelClass}>To<OperationDateInput className={inputClass} value={filterDateTo} onChange={(event) => setFilterDateTo(event.target.value)} /></label>
           ) : null}
           <div className={filterLabelClass}>Reset
             <ResetPageFilters />
@@ -997,9 +998,8 @@ export default function DailyRecordsPage() {
                 <div className="md:col-span-4"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-forest-500">02 · Record identity</p><h4 className="mt-1 font-display text-lg font-semibold text-forest-900">Fix the record to one flock and date</h4></div>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Record Date
-                  <input
+                  <OperationDateInput
                     name="record_date"
-                    type="date"
                     required
                     value={newRecordDate}
                     onChange={(event) => setNewRecordDate(event.target.value)}
@@ -1244,9 +1244,8 @@ export default function DailyRecordsPage() {
                 <div className="md:col-span-4"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-forest-500">02 · Record identity</p><h4 className="mt-1 font-display text-lg font-semibold text-forest-900">Confirm flock, date and calculated age</h4></div>
                 <label className="grid gap-2 text-sm text-forest-700">
                   Record Date
-                  <input
+                  <OperationDateInput
                     name="record_date"
-                    type="date"
                     required
                     readOnly={closedFeedDayKeys.has(feedDayKey(editingRow.flock_id, editingRow.record_date))}
                     value={editRecordDate || editingRow.record_date}

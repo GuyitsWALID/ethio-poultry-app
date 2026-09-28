@@ -1,5 +1,6 @@
 "use client";
 
+import {OperationDateInput} from "@/components/operation-date-input";
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, X, Plus, Eye, EyeOff, Copy, RefreshCw, Check } from "lucide-react";
@@ -287,7 +288,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-forest-700">Branch Name</label>
-                  <input
+                  <OperationDateInput
                     required
                     className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
                     value={formData.branch?.name}
@@ -325,7 +326,6 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
                   <label className="text-sm font-medium text-forest-700">Placement Date</label>
                   <input
                     required
-                    type="date"
                     className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
                     value={formData.intakeBatch?.placement_date}
                     onChange={(e) => updateIntake("placement_date", e.target.value)}

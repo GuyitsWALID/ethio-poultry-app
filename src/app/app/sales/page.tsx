@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+import {OperationDateInput} from "@/components/operation-date-input";
 import { usePageFilter } from "@/components/page-filter-controls";
 import { FarmScopeFilters } from "@/components/farm-scope-filters";
 
@@ -479,7 +480,7 @@ export default function SalesPage() {
           <div className="flex flex-wrap gap-2">{[7, 30, 90].map((days) => <button key={days} type="button" onClick={() => setQuickRange(days)} disabled={role !== "farm_manager"} className="h-9 rounded-lg border border-sand-200 px-3 text-xs font-semibold text-forest-700 transition hover:bg-sand-50 disabled:cursor-not-allowed disabled:opacity-40">{days} days</button>)}</div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {role === "farm_manager" ? <><label className="grid gap-1 text-xs font-medium text-forest-600">From<input className="h-10 rounded-lg border border-sand-200 px-3 text-sm text-forest-900" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label><label className="grid gap-1 text-xs font-medium text-forest-600">To<input className="h-10 rounded-lg border border-sand-200 px-3 text-sm text-forest-900" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label></> : <div className="flex items-center gap-2 rounded-lg bg-sand-50 px-3 py-2 text-sm text-forest-600 md:col-span-2"><CalendarDays className="h-4 w-4" aria-hidden="true" />Executive scope period: {dateFrom} to {dateTo}</div>}
+          {role === "farm_manager" ? <><label className="grid gap-1 text-xs font-medium text-forest-600">From<OperationDateInput className="h-10 rounded-lg border border-sand-200 px-3 text-sm text-forest-900" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label><label className="grid gap-1 text-xs font-medium text-forest-600">To<OperationDateInput className="h-10 rounded-lg border border-sand-200 px-3 text-sm text-forest-900" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label></> : <div className="flex items-center gap-2 rounded-lg bg-sand-50 px-3 py-2 text-sm text-forest-600 md:col-span-2"><CalendarDays className="h-4 w-4" aria-hidden="true" />Executive scope period: {dateFrom} to {dateTo}</div>}
           <label className="grid gap-1 text-xs font-medium text-forest-600">Product<select className="h-10 rounded-lg border border-sand-200 px-3 text-sm text-forest-900" value={productCategory} onChange={(event) => setProductCategory(event.target.value)}><option value="">All products</option><option value="egg">Eggs</option><option value="bird">Birds</option><option value="training">Training</option><option value="equipment_medicine">Equipment &amp; medicine</option><option value="consultancy">Consultancy</option><option value="package">Packages</option></select></label>
         </div>
       </section>
@@ -578,7 +579,7 @@ export default function SalesPage() {
             <div className="grid gap-4 p-5 sm:p-6 md:grid-cols-3">
               <label className="grid gap-1 text-xs text-forest-600">
                 Date
-                <input className="h-10 rounded-lg border border-sand-200 px-3 text-sm" type="date" value={form.sale_date} onChange={(event) => setForm((prev) => ({ ...prev, sale_date: event.target.value }))} />
+                <OperationDateInput className="h-10 rounded-lg border border-sand-200 px-3 text-sm" value={form.sale_date} onChange={(event) => setForm((prev) => ({ ...prev, sale_date: event.target.value }))} />
               </label>
               <label className="grid gap-1 text-xs text-forest-600">
                 Category

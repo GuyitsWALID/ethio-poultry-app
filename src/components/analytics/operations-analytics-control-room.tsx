@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
+import {OperationDateInput} from "@/components/operation-date-input";
 import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
 
 import Link from "next/link";
@@ -175,8 +176,8 @@ function ScopeFilters({ dateFrom, dateTo, setDateFrom, setDateTo, onRefresh, loa
           </div>
         </div>
         <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2 xl:max-w-5xl xl:grid-cols-6">
-          <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-sand-200">From<input type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} className="h-10 min-w-0 rounded-xl border border-white/15 bg-white px-3 text-sm font-normal tracking-normal text-forest-900" /></label>
-          <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-sand-200">To<input type="date" value={dateTo} min={dateFrom} max={today} onChange={(event) => setDateTo(event.target.value)} className="h-10 min-w-0 rounded-xl border border-white/15 bg-white px-3 text-sm font-normal tracking-normal text-forest-900" /></label>
+          <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-sand-200">From<OperationDateInput value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} className="h-10 min-w-0 rounded-xl border border-white/15 bg-white px-3 text-sm font-normal tracking-normal text-forest-900" /></label>
+          <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-sand-200">To<OperationDateInput value={dateTo} min={dateFrom} max={today} onChange={(event) => setDateTo(event.target.value)} className="h-10 min-w-0 rounded-xl border border-white/15 bg-white px-3 text-sm font-normal tracking-normal text-forest-900" /></label>
           {role === "ceo" ? <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-sand-200">Branch<select value={scope.branchId} onChange={(event) => setScope((current) => ({ ...current, branchId: event.target.value, farmId: "", houseId: "", flockId: "", batchId: "" }))} className="h-10 min-w-0 rounded-xl border border-white/15 bg-white px-3 text-sm font-normal tracking-normal text-forest-900"><option value="">All branches</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label> : null}
           <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-sand-200">Farm<select value={scope.farmId} onChange={(event) => setScope((current) => ({ ...current, farmId: event.target.value, houseId: "", flockId: "", batchId: "" }))} className="h-10 min-w-0 rounded-xl border border-white/15 bg-white px-3 text-sm font-normal tracking-normal text-forest-900"><option value="">All farms</option>{filteredFarms.map((farm) => <option key={farm.id} value={farm.id}>{farm.name}</option>)}</select></label>
           <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-sand-200">House<select value={scope.houseId} onChange={(event) => setScope((current) => ({ ...current, houseId: event.target.value, flockId: "", batchId: "" }))} className="h-10 min-w-0 rounded-xl border border-white/15 bg-white px-3 text-sm font-normal tracking-normal text-forest-900"><option value="">All houses</option>{filteredHouses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}</select></label>

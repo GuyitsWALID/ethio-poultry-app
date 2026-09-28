@@ -390,7 +390,7 @@ export async function loadTodayWorkspace(
         feedClosed: closure?.status === "closed",
         feedActualKg: closure?.status === "closed" ? asNumber(closure.actual_feed_kg) : null,
         feedRevision: feedRevisions.get(id) ?? "",
-        hasHealthOrDeathActivity: mortalityFlocks.has(id) || healthFlocks.has(id) || Number(record?.deaths ?? 0) > 0,
+        hasHealthOrDeathActivity: mortalityFlocks.has(id) || healthFlocks.has(id) || Number(record?.deaths ?? 0) > 0 || Number(record?.culls ?? 0) > 0,
         hasRoutineSupplyUsage: supplyFlocks.has(id),
         healthFingerprint: fingerprints.get(`${id}:health_deaths`) ?? "",
         suppliesFingerprint: fingerprints.get(`${id}:routine_supplies`) ?? "",

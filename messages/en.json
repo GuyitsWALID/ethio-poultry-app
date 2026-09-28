@@ -1,4 +1,11 @@
 {
+  "Calendar": {
+    "ethiopian": "Ethiopian calendar",
+    "day": "Day",
+    "month": "Month",
+    "year": "Year",
+    "invalid": "Choose a valid date within the allowed range."
+  },
   "Common": {
     "language": "Language",
     "english": "English",
@@ -478,7 +485,7 @@
     "noActiveFlockHelp": "You can still record stock, sales, expenses, and finish the farm day.",
     "birdCheck": {
       "title": "Check birds",
-      "help": "Count the flock and record every bird movement. Water is recorded in the next step.",
+      "help": "See today's live bird count. Record deaths and culls in Health; the count updates automatically.",
       "opening": "Birds at the start of the day",
       "sources": {
         "daily_record": "Saved on today’s record",
@@ -500,6 +507,8 @@
       "missingOpening": "The opening count is missing. Review the source record before continuing.",
       "openRecord": "Open Daily Records",
       "save": "Save bird check",
+      "healthEntry": "Birds at the end = birds at the start − deaths − culls. Enter any deaths or culls in Record health and deaths.",
+      "legacyMovements": "This record has older movements or a count that needs review. Use Daily Records for the exact correction.",
       "saving": "Saving…",
       "saved": "Bird check saved.",
       "offlineHelp": "Keep this page open. Offline draft storage will be enabled in the next offline-work task; reconnect before saving."
@@ -514,7 +523,11 @@
       "saved": "Saved. Moving to the next unfinished step.", "saving": "Saving…", "saveContinue": "Save and continue",
       "sessionSaved": "Feeding session saved.", "feedingSessions":"Today’s feeding sessions", "feedClosed": "Feeding is complete and stock was updated once.", "feedAlreadyClosed": "Today’s feeding is closed and complete.", "done": "Done", "pending": "Pending",
       "sessionName": "Feeding time", "sessionTime": "Time", "feeders": "Number of feeders", "plannedKg": "Planned feed (kg)", "actualKg": "Feed used (kg)", "status": "Result", "planned": "Not recorded yet", "completed": "Fed as recorded", "missed": "Missed", "feedType": "Feed type", "feedTypes":{"starter":"Starter feed","grower":"Grower / pullet feed","layer":"Layer feed","broiler":"Broiler feed","medicated":"Medicated feed"}, "feedItem": "Feed item", "warehouse": "Warehouse", "choose": "Choose", "notesOrMissedReason": "Notes or reason feeding was missed", "missedReason":"Why was this feeding missed?", "missedReasonRequired": "Explain why this feeding session was missed.", "saveSession": "Save feeding", "closeFeedDay": "Finish feeding for today",
-      "healthModes": {"none": "No health problem or deaths", "death": "A bird died", "health": "Health issue or treatment", "vaccination": "Complete a scheduled vaccination"},
+      "healthModes": {"none": "No health problem, deaths, or culls", "death": "A bird died", "cull": "A bird was culled", "health": "Health issue or treatment", "vaccination": "Complete a scheduled vaccination"},
+      "healthChoicesHelp": "Tick what happened today. You can tick more than one; save each section shown below.",
+      "recordedLosses": "Already recorded today: {deaths} deaths, {culls} culled.",
+      "cullCount": "Number culled", "cullReason": "Why were they culled?", "saveLoss": "Save deaths and culls", "lossSaved": "Deaths, culls, and live bird count saved together.", "startBirdCheckFirst": "Start today's bird record in Check birds before recording deaths or culls.",
+      "deathCauses": {"natural": "Natural death", "illness": "Illness", "unknown": "Unknown cause"},
       "vaccination": "Scheduled vaccination", "vaccine": "Vaccine item", "vaccinationSaved": "Vaccination completed and vaccine stock updated.",
       "confirmedNone": "Confirmed: nothing to report today.", "healthSaved": "Health information saved.", "deathCount": "Number of deaths", "cause": "Cause", "time": "Time (optional)", "diagnosis": "Diagnosis (optional)", "notes": "Notes (optional)", "eventType": "What happened?", "observation": "Observation", "disease": "Disease", "treatment": "Treatment", "description": "What did you see?", "medicine": "Medicine used (optional)", "noneUsed": "No medicine used", "quantity": "Quantity", "confirmNone": "Confirm none today",
       "nothingUsed": "Nothing used today", "recordSupply": "Record supplies used", "item": "Item", "confirmedNothing": "Confirmed: no routine supplies used.", "suppliesSaved": "Supply use saved and stock updated.", "confirmNothing": "Confirm nothing used", "addSupply": "Add another supply", "remove": "Remove",

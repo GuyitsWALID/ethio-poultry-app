@@ -6,6 +6,7 @@ const route = await readFile(new URL("../src/app/api/farm-manager/today/tasks/[t
 const loader = await readFile(new URL("../src/lib/today-workspace/task-details.ts", import.meta.url), "utf8");
 const contracts = await readFile(new URL("../src/lib/today-workspace/contracts.ts", import.meta.url), "utf8");
 const card = await readFile(new URL("../src/components/today/embedded-task-card.tsx", import.meta.url), "utf8");
+const healthCard = await readFile(new URL("../src/components/today/health-task-form.tsx", import.meta.url), "utf8");
 
 test("task details use a thin private, assignment-safe server boundary", () => {
   assert.match(route, /loadTodayTaskDetail/);
@@ -29,7 +30,7 @@ test("every embedded task receives trusted choices, revisions, and a correction 
 });
 
 test("Today embeds operational mutations instead of linking to entry pages", () => {
-  assert.match(card, /complete_vaccination/);
+  assert.match(healthCard, /complete_vaccination/);
   assert.match(card, /record_stock_receipt/);
   assert.match(card, /record_stock_count/);
   assert.match(loader, /inventory_count_sessions/);
