@@ -5,7 +5,7 @@ import {TodayWorkspaceError} from "@/lib/today-workspace/workspace";
 const headers = {"Cache-Control": "private, no-store, max-age=0", "CDN-Cache-Control": "no-store", Vary: "Cookie, Authorization"};
 const json = (body: unknown, status = 200) => Response.json(body, {status, headers});
 
-export async function GET(request: Request, context: RouteContext<"/api/farm-manager/today/tasks/[task]">) {
+export async function GET(request: Request, context: {params: Promise<{task: string}>}) {
   const access = await getAccessContext({tenant: true});
   if (isAccessResponse(access)) return access;
   const {task} = await context.params;
