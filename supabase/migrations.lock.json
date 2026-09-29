@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 69,
-  "latest": "20260928000000_today_bird_loss_handoff.sql",
-  "aggregateSha256": "d0ae9d84239c6e15a7b68f891b7323ba8501a616b73dda4ced5dacf35b4712a2",
+  "count": 70,
+  "latest": "20260929000000_today_dynamic_feeding.sql",
+  "aggregateSha256": "a89894336c7d19281a2c2ef1628652e7e9f70dc793f0b9e74daff6efe5010b49",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -149,6 +149,7 @@
     "20260922001000_today_command_api_boundary.sql": "bb1c27936c81579210b8941052544cce02a0e231e7cbebe1a2941e6d020815a5",
     "20260926000000_today_daily_record_partial_updates.sql": "5c80355057dc35060bdd9ffbfad3ae3c84a74c47945a797cb8f1f96f72928ad5",
     "20260927000000_today_stock_count_command.sql": "85d097ab2f73c7a1d0162e3b2c6bf52468462d2304572b18f340a291f149661f",
-    "20260928000000_today_bird_loss_handoff.sql": "2eed5a680e535d9dca1d3a6e89d081960fc4efb21d3c1e6f60cb4f406c2a8b56"
+    "20260928000000_today_bird_loss_handoff.sql": "2eed5a680e535d9dca1d3a6e89d081960fc4efb21d3c1e6f60cb4f406c2a8b56",
+    "20260929000000_today_dynamic_feeding.sql": "4560f1608d17e48931a0d7f311b44a5ac41cb09f2c2d7bab282f5f189dd7ba2c"
   }
 }

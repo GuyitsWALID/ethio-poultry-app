@@ -124,17 +124,14 @@ export async function loadTodayTaskDetail(
     const [sessionsResult, closureResult, scheduleResult] = await Promise.all([
       governanceAdmin.from("feeding_session_records").select("id,session_name,session_time,feeders_count,planned_feed_kg,actual_feed_kg,notes,feed_item_id,warehouse_id,feed_type,status").eq("org_id", context.orgId).eq("flock_id", input.flockId!).eq("record_date", input.workDate).is("voided_at", null).order("session_time"),
       governanceAdmin.from("feed_day_closures").select("id,status,updated_at").eq("org_id", context.orgId).eq("flock_id", input.flockId!).eq("record_date", input.workDate).maybeSingle(),
-      governanceAdmin.from("feeding_schedules").select("planned_feed_kg,feed_type").eq("org_id", context.orgId).eq("batch_id", String(flock!.batch_id)).eq("schedule_date", input.workDate).maybeSingle(),
+      governanceAdmin.from("feeding_schedules").select("feed_type").eq("org_id", context.orgId).eq("batch_id", String(flock!.batch_id)).eq("schedule_date", input.workDate).maybeSingle(),
     ]);
     if (closureResult.error || scheduleResult.error) throw new TodayWorkspaceError("INTERNAL_ERROR", closureResult.error?.message ?? scheduleResult.error!.message, 500);
     const sessions = rows(sessionsResult, "Feed sessions");
-    const planned = number(scheduleResult.data?.planned_feed_kg);
     return {...base, task, resourceRevision: await resourceRevision("feed_day", input.flockId!, input.workDate), data: {
       closed: closureResult.data?.status === "closed",
-      sessions: sessions.length ? sessions : [
-        {id: null, session_name: "Morning", session_time: "07:00", feeders_count: 1, planned_feed_kg: planned ? planned / 2 : 0, actual_feed_kg: null, feed_item_id: null, warehouse_id: null, feed_type: scheduleResult.data?.feed_type ?? "layer_feed", status: "planned", notes: null},
-        {id: null, session_name: "Afternoon", session_time: "15:30", feeders_count: 1, planned_feed_kg: planned ? planned / 2 : 0, actual_feed_kg: null, feed_item_id: null, warehouse_id: null, feed_type: scheduleResult.data?.feed_type ?? "layer_feed", status: "planned", notes: null},
-      ],
+      sessions,
+      scheduledFeedType: scheduleResult.data?.feed_type ?? "layer_feed",
     }};
   }
 

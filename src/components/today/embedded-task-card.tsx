@@ -4,7 +4,7 @@ import Link from "next/link";
 import {useSearchParams} from "next/navigation";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {useTranslations} from "next-intl";
-import {AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Save} from "lucide-react";
+import {AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Info, Plus, Save} from "lucide-react";
 
 import type {TodayFlockContext, TodayTask, TodayTaskDetail} from "@/lib/today-workspace/contracts";
 import {todayErrorMessageKeys} from "@/i18n/today-copy";
@@ -45,8 +45,8 @@ function TaskMessage({message}: {message: SubmitState}) {
   return <p role={message.tone === "error" ? "alert" : "status"} className={`rounded-xl p-3 text-sm ${message.tone === "error" ? "bg-red-50 text-red-800" : "bg-leaf-500/10 text-leaf-700"}`}>{message.text}</p>;
 }
 
-function Field({label, name, type = "text", defaultValue, required = false, step, min}: {label: string; name: string; type?: string; defaultValue?: string | number | null; required?: boolean; step?: string; min?: string}) {
-  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<input name={name} type={type} required={required} step={step} min={min} defaultValue={defaultValue ?? ""} inputMode={type === "number" ? "decimal" : undefined} className={inputClass}/></label>;
+function Field({label, name, type = "text", defaultValue, required = false, step, min, readOnly = false}: {label: string; name: string; type?: string; defaultValue?: string | number | null; required?: boolean; step?: string; min?: string; readOnly?: boolean}) {
+  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<input name={name} type={type} required={required} step={step} min={min} readOnly={readOnly} defaultValue={defaultValue ?? ""} inputMode={type === "number" ? "decimal" : undefined} className={inputClass}/></label>;
 }
 
 function SelectField({label, name, children, required = false, defaultValue}: {label: string; name: string; children: React.ReactNode; required?: boolean; defaultValue?: string}) {
@@ -92,25 +92,90 @@ function EggsWaterForm({detail, flock, onSaved}: {detail: TodayTaskDetail; flock
 function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDetail; flock: TodayFlockContext; onChanged: () => void; onSaved: () => void}) {
   const t = useTranslations("Today.embedded");
   const {saving, message, submit} = useTaskSubmit();
-  const sessions = rows(detail.data.sessions); const closed = detail.data.closed === true;
-  const [selected, setSelected] = useState(() => Math.max(0, sessions.findIndex((row) => row.status !== "completed")));
-  const session = sessions[selected] ?? sessions[0] ?? {};
+  const sessions = rows(detail.data.sessions);
+  const closed = detail.data.closed === true;
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const session = sessions.find((row) => String(row.id) === editingId) ?? {};
   const feedItems = detail.inventory.filter((item) => item.category === "feed");
-  const [status, setStatus] = useState<"completed"|"missed">(session.status === "missed" ? "missed" : "completed");
+  const [status, setStatus] = useState<"completed" | "missed">("completed");
   const [revision, setRevision] = useState(detail.resourceRevision);
   const [sessionDependencies, setSessionDependencies] = useState<string[]>([]);
-  async function saveSession(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const formElement=event.currentTarget; const form = new FormData(formElement); const notes=text(form.get("notes"));
-    const notesInput=formElement.elements.namedItem("notes") as HTMLInputElement|null;
-    notesInput?.setCustomValidity(status==="missed"&&!notes?t("missedReasonRequired"):"");
-    if(!formElement.reportValidity())return;
-    const commandId=crypto.randomUUID();
-    const result=await submit({schema_version:1,command_id:commandId,type:"save_feed_session",farm_id:detail.farmId,flock_id:flock.id,work_date:detail.workDate,expected_resource_revision:revision,payload:{session_id:session.id?String(session.id):null,session:{session_name:text(form.get("session_name")),session_time:text(form.get("session_time"))||null,feeders_count:number(form.get("feeders")),planned_feed_kg:number(form.get("planned")),actual_feed_kg:status==="completed"?number(form.get("actual")):null,feed_item_id:status==="completed"?text(form.get("feed_item"))||null:null,warehouse_id:status==="completed"?text(form.get("warehouse"))||null:null,feed_type:text(form.get("feed_type")) as "starter_feed"|"grower_pullet_feed"|"layer_feed"|"broiler_feed"|"medicated_feed",status,notes:notes||null}}},t("sessionSaved"),()=>{});
-    if(result){setRevision(result.resource_revision??revision);setSessionDependencies((current)=>[...new Set([...current,commandId])]);onChanged();}
+  const mayClose = sessions.length > 0 && sessions.every((row) => row.status === "completed" || row.status === "missed") && editingId === null;
+  function editSession(row: Row) {
+    setEditingId(String(row.id));
+    setStatus(row.status === "missed" ? "missed" : "completed");
   }
-  async function closeDay() { if (!revision) return; await submit({schema_version:1,command_id:crypto.randomUUID(),type:"close_feed_day",farm_id:detail.farmId,flock_id:flock.id,work_date:detail.workDate,expected_resource_revision:revision,depends_on:sessionDependencies.length?sessionDependencies:undefined,payload:{}},t("feedClosed"),onSaved); }
+  function addSession() {
+    setEditingId("new");
+    setStatus("completed");
+  }
+  async function saveSession(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const commandId = crypto.randomUUID();
+    const result = await submit({
+      schema_version: 1, command_id: commandId, type: "save_feed_session",
+      farm_id: detail.farmId, flock_id: flock.id, work_date: detail.workDate,
+      expected_resource_revision: revision,
+      payload: {session_id: session.id ? String(session.id) : null, session: {
+        session_name: text(form.get("session_name")),
+        session_time: text(form.get("session_time")) || null,
+        feeders_count: number(form.get("feeders")),
+        planned_feed_kg: number(form.get("planned")),
+        actual_feed_kg: status === "completed" ? number(form.get("actual")) : null,
+        feed_item_id: status === "completed" ? text(form.get("feed_item")) || null : null,
+        warehouse_id: status === "completed" ? text(form.get("warehouse")) || null : null,
+        feed_type: text(form.get("feed_type")) as "starter_feed" | "grower_pullet_feed" | "layer_feed" | "broiler_feed" | "medicated_feed",
+        status, notes: text(form.get("notes")) || null,
+      }},
+    }, t("sessionSaved"), () => {});
+    if (result?.status === "applied") {
+      setRevision(result.resource_revision ?? revision);
+      setSessionDependencies((current) => [...new Set([...current, commandId])]);
+      setEditingId(null);
+      onChanged();
+    }
+  }
+  async function closeDay() {
+    if (!revision || !mayClose) return;
+    await submit({schema_version: 1, command_id: crypto.randomUUID(), type: "close_feed_day", farm_id: detail.farmId, flock_id: flock.id, work_date: detail.workDate, expected_resource_revision: revision, depends_on: sessionDependencies.length ? sessionDependencies : undefined, payload: {}}, t("feedClosed"), onSaved);
+  }
   if (closed) return <div className="rounded-xl bg-leaf-500/10 p-4 text-sm font-semibold text-leaf-700"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{t("feedAlreadyClosed")}</div>;
-  return <div className="grid gap-4"><div className="flex flex-wrap gap-2" role="tablist" aria-label={t("feedingSessions")}>{sessions.map((row,index)=><button type="button" role="tab" aria-selected={index===selected} key={`${row.session_name}:${index}`} onClick={()=>{setSelected(index);setStatus(row.status === "missed" ? "missed" : "completed");}} className={index===selected?primaryClass:secondaryClass}>{String(row.session_name)} · {row.status === "completed" ? t("done") : row.status === "missed" ? t("missed") : t("pending")}</button>)}</div><form key={`${selected}:${String(session.id ?? "new")}`} onSubmit={saveSession} className="grid gap-4"><div className="grid gap-2 sm:grid-cols-2"><button type="button" onClick={()=>setStatus("completed")} className={status==="completed"?primaryClass:secondaryClass}>{t("completed")}</button><button type="button" onClick={()=>setStatus("missed")} className={status==="missed"?primaryClass:secondaryClass}>{t("missed")}</button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><Field label={t("sessionName")} name="session_name" required defaultValue={String(session.session_name??"")}/><Field label={t("sessionTime")} name="session_time" type="time" defaultValue={String(session.session_time??"").slice(0,5)}/><Field label={t("feeders")} name="feeders" type="number" min="1" step="1" required defaultValue={number(String(session.feeders_count??1))}/><Field label={t("plannedKg")} name="planned" type="number" min="0.01" step="0.01" required defaultValue={number(String(session.planned_feed_kg??0))}/>{status==="completed"?<><Field label={t("actualKg")} name="actual" type="number" min="0" step="0.01" required defaultValue={(session.actual_feed_kg??session.planned_feed_kg) as number}/><SelectField label={t("feedItem")} name="feed_item" required defaultValue={String(session.feed_item_id??"")}><option value="">{t("choose")}</option>{feedItems.map((item)=><option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</SelectField><SelectField label={t("warehouse")} name="warehouse" required defaultValue={String(session.warehouse_id??"")}><option value="">{t("choose")}</option>{detail.warehouses.map((warehouse)=><option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectField></>:null}<SelectField label={t("feedType")} name="feed_type" required defaultValue={String(session.feed_type??"layer_feed")}><option value="starter_feed">{t("feedTypes.starter")}</option><option value="grower_pullet_feed">{t("feedTypes.grower")}</option><option value="layer_feed">{t("feedTypes.layer")}</option><option value="broiler_feed">{t("feedTypes.broiler")}</option><option value="medicated_feed">{t("feedTypes.medicated")}</option></SelectField></div><Field label={status==="missed"?t("missedReason"):t("notes")} name="notes" required={status==="missed"} defaultValue={String(session.notes??"")}/><TaskMessage message={message}/><div className="flex flex-wrap justify-end gap-2"><button disabled={saving} className={primaryClass}><Save className="h-4 w-4"/>{t("saveSession")}</button><button type="button" disabled={saving || sessions.some((row)=>row.status==="planned")} onClick={()=>void closeDay()} className={primaryClass}>{t("closeFeedDay")}</button></div></form></div>;
+  return <div className="grid gap-4">
+    <div className="grid gap-2" aria-label={t("feedingSessions")}>
+      {sessions.map((row, index) => <div key={String(row.id)} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-sand-200 px-3 py-2 text-sm">
+        <span><span className="font-semibold">{String(row.session_name || t("feedingNumber", {number: index + 1}))}</span><span className="ml-2 text-forest-600">{String(row.session_time ?? "").slice(0, 5)} · {row.status === "completed" ? t("done") : row.status === "missed" ? t("missed") : t("pending")}</span></span>
+        <button type="button" onClick={() => editSession(row)} className="min-h-11 rounded-lg px-3 font-semibold text-forest-800 underline">{t("editFeeding")}</button>
+      </div>)}
+    </div>
+    <button type="button" onClick={addSession} className={`${secondaryClass} w-fit`}><Plus className="h-5 w-5"/>{t("addFeeding")}</button>
+    {editingId ? <form key={editingId} onSubmit={saveSession} className="grid gap-4 rounded-xl border border-sand-200 p-4">
+      <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-semibold text-forest-900">{t("feedingResult")}</legend>
+        {(["completed", "missed"] as const).map((choice) => <label key={choice} className="flex min-h-12 items-center gap-3 text-sm text-forest-900">
+          <input type="checkbox" checked={status === choice} onChange={() => setStatus(choice)} className="h-5 w-5 accent-forest-900"/>
+          <span>{t(choice)}</span>
+          <span tabIndex={0} title={t(choice === "completed" ? "fedHelp" : "missedHelp")} aria-label={t(choice === "completed" ? "fedHelp" : "missedHelp")} className="cursor-help text-forest-600"><Info className="h-4 w-4"/></span>
+        </label>)}
+      </fieldset>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label={t("sessionName")} name="session_name" required readOnly={Boolean(session.id)} defaultValue={String(session.session_name ?? t("feedingNumber", {number: sessions.length + 1}))}/>
+        <Field label={t("sessionTime")} name="session_time" type="time" required defaultValue={String(session.session_time ?? "").slice(0, 5)}/>
+        <Field label={t("feeders")} name="feeders" type="number" min="1" step="1" required defaultValue={Number(session.feeders_count ?? 1)}/>
+        <Field label={t("plannedKg")} name="planned" type="number" min="0.01" step="0.01" required defaultValue={session.planned_feed_kg as number | null}/>
+        {status === "completed" ? <>
+          <Field label={t("actualKg")} name="actual" type="number" min="0" step="0.01" required defaultValue={(session.actual_feed_kg ?? session.planned_feed_kg) as number | null}/>
+          <SelectField label={t("feedItem")} name="feed_item" required defaultValue={String(session.feed_item_id ?? "")}><option value="">{t("choose")}</option>{feedItems.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</SelectField>
+          <SelectField label={t("warehouse")} name="warehouse" required defaultValue={String(session.warehouse_id ?? "")}><option value="">{t("choose")}</option>{detail.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectField>
+        </> : null}
+        <SelectField label={t("feedType")} name="feed_type" required defaultValue={String(session.feed_type ?? detail.data.scheduledFeedType ?? "layer_feed")}><option value="starter_feed">{t("feedTypes.starter")}</option><option value="grower_pullet_feed">{t("feedTypes.grower")}</option><option value="layer_feed">{t("feedTypes.layer")}</option><option value="broiler_feed">{t("feedTypes.broiler")}</option><option value="medicated_feed">{t("feedTypes.medicated")}</option></SelectField>
+      </div>
+      <Field label={status === "missed" ? t("missedReason") : t("notes")} name="notes" required={status === "missed"} defaultValue={String(session.notes ?? "")}/>
+      <TaskMessage message={message}/>
+      <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setEditingId(null)} className={secondaryClass}>{t("cancelFeeding")}</button><button disabled={saving} className={primaryClass}><Save className="h-4 w-4"/>{t("saveSession")}</button></div>
+    </form> : null}
+    {!editingId ? <div className="flex justify-end"><button type="button" disabled={saving || !mayClose} onClick={() => void closeDay()} className={primaryClass}>{t("closeFeedDay")}</button></div> : null}
+    <TaskMessage message={message}/>
+  </div>;
 }
 
 

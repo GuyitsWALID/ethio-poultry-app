@@ -87,6 +87,13 @@ export const managerTodayMessageKeys = [
   "Today.embedded.feedAlreadyClosed",
   "Today.embedded.done",
   "Today.embedded.pending",
+  "Today.embedded.addFeeding",
+  "Today.embedded.editFeeding",
+  "Today.embedded.cancelFeeding",
+  "Today.embedded.feedingNumber",
+  "Today.embedded.feedingResult",
+  "Today.embedded.fedHelp",
+  "Today.embedded.missedHelp",
   "Today.embedded.sessionName",
   "Today.embedded.sessionTime",
   "Today.embedded.feeders",
@@ -290,6 +297,13 @@ export const managerTodayMessageKeys = [
 ] as const;
 
 export const pendingTerminologyReviewKeys = [
+  "Today.embedded.addFeeding",
+  "Today.embedded.editFeeding",
+  "Today.embedded.cancelFeeding",
+  "Today.embedded.feedingNumber",
+  "Today.embedded.feedingResult",
+  "Today.embedded.fedHelp",
+  "Today.embedded.missedHelp",
   "Today.birdCheck.help",
   "Today.birdCheck.healthEntry",
   "Today.birdCheck.legacyMovements",

@@ -172,11 +172,39 @@ begin
     'layer_feed', 'completed', now(), v_manager, v_manager
   );
 
+  -- A documented missed feeding resolves the session without consuming stock.
+  insert into public.feeding_session_records(
+    org_id, batch_id, flock_id, record_date, session_name, session_time,
+    feeders_count, planned_feed_kg, actual_feed_kg, feed_type, status, notes, recorded_by
+  ) values (
+    v_org, v_batch, v_flock, v_day, 'Later feeding', time '14:00',
+    10, 5, null, 'layer_feed', 'missed', null, v_manager
+  );
+  begin
+    perform public.close_feed_day(v_manager, v_flock, v_day, null);
+    raise exception 'A missed feeding without a reason was allowed to close.';
+  exception when sqlstate '22023' then
+    if sqlerrm not like 'Complete each feeding%' then raise; end if;
+  end;
+  update public.feeding_session_records set notes = 'Feed was not delivered'
+  where org_id = v_org and flock_id = v_flock and record_date = v_day and session_name = 'Later feeding';
+
+  -- Session count is not capped at morning and afternoon.
+  insert into public.feeding_session_records(
+    org_id, batch_id, flock_id, record_date, session_name, session_time,
+    feeders_count, planned_feed_kg, actual_feed_kg, feed_item_id, warehouse_id,
+    feed_type, status, completed_at, completed_by, recorded_by
+  ) values (
+    v_org, v_batch, v_flock, v_day, 'Third feeding', time '17:00',
+    10, 2, 2, v_feed_item, v_warehouse,
+    'layer_feed', 'completed', now(), v_manager, v_manager
+  );
+
   -- Feed Control claims the day and synchronizes its total without replacing
   -- eggs, mortality, leftovers, water, or Daily Records health usage.
   perform public.close_feed_day(v_manager, v_flock, v_day, null);
   select feed_intake_grams into v_number from public.daily_farm_records where id = v_daily;
-  if v_number <> 12000 then raise exception 'Expected synchronized feed of 12000 g, found %.', v_number; end if;
+  if v_number <> 14000 then raise exception 'Expected synchronized feed of 14000 g, found %.', v_number; end if;
   if not exists (
     select 1 from public.daily_farm_records
     where id = v_daily and synced and total_eggs = 865 and deaths = 2
@@ -212,7 +240,7 @@ begin
     ),
     null
   );
-  if not exists (select 1 from public.daily_farm_records where id = v_daily and feed_intake_grams = 12000 and synced)
+  if not exists (select 1 from public.daily_farm_records where id = v_daily and feed_intake_grams = 14000 and synced)
     then raise exception 'Daily Record edit overwrote Feed Control fields.'; end if;
   if not exists (
     select 1 from public.stock_ledger
