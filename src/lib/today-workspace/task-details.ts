@@ -4,6 +4,7 @@ import {canAccessFarm, governanceAdmin, type AccessContext} from "@/lib/access-c
 
 import type {TodayTaskCode, TodayTaskDetail} from "./contracts";
 import {TodayWorkspaceError} from "./workspace";
+import {isTodayWarehouseEligible} from "./warehouse-choices";
 
 type Row = Record<string, unknown>;
 
@@ -33,25 +34,32 @@ async function resourceRevision(resourceType: "daily_record" | "feed_day" | "ope
   return String(result.data);
 }
 
-async function assignedWarehouses(context: AccessContext, farmId: string) {
-  const now = new Date().toISOString();
-  const access = await governanceAdmin.from("user_warehouse_access")
-    .select("warehouse_id")
-    .eq("org_id", context.orgId)
-    .eq("profile_id", context.userId)
-    .is("revoked_at", null)
-    .lte("starts_at", now)
-    .or(`expires_at.is.null,expires_at.gt.${now}`);
-  const ids = rows(access, "Warehouse assignments").map((row) => String(row.warehouse_id));
-  if (!ids.length) return [];
+async function assignedWarehouses(context: AccessContext, farmId: string, task: TodayTaskCode) {
+  const farmResult = await governanceAdmin.from("farms").select("branch_id").eq("org_id", context.orgId).eq("id", farmId).maybeSingle();
+  if (farmResult.error) throw new TodayWorkspaceError("INTERNAL_ERROR", farmResult.error.message, 500);
+  if (!farmResult.data) throw new TodayWorkspaceError("SOURCE_NOT_FOUND", "The selected farm is unavailable.", 404);
+  const branchId = farmResult.data.branch_id ? String(farmResult.data.branch_id) : null;
+  const assignedIds = new Set<string>();
+  if (task !== "feeding") {
+    const now = new Date().toISOString();
+    const access = await governanceAdmin.from("user_warehouse_access")
+      .select("warehouse_id").eq("org_id", context.orgId).eq("profile_id", context.userId)
+      .is("revoked_at", null).lte("starts_at", now)
+      .or(`expires_at.is.null,expires_at.gt.${now}`);
+    for (const assignment of rows(access, "Warehouse assignments")) assignedIds.add(String(assignment.warehouse_id));
+    if (!assignedIds.size) return [];
+  }
   const result = await governanceAdmin.from("warehouses")
     .select("id,name,farm_id,branch_id,type")
     .eq("org_id", context.orgId)
     .eq("status", "active")
-    .in("id", ids)
     .or(`farm_id.eq.${farmId},farm_id.is.null`)
     .order("name");
-  return rows(result, "Warehouses");
+  return rows(result, "Warehouses").filter((warehouse) => isTodayWarehouseEligible(task, farmId, branchId, {
+    id: String(warehouse.id),
+    farmId: warehouse.farm_id ? String(warehouse.farm_id) : null,
+    branchId: warehouse.branch_id ? String(warehouse.branch_id) : null,
+  }, assignedIds));
 }
 
 async function inventoryOptions(context: AccessContext, warehouses: Row[]) {
@@ -106,7 +114,7 @@ export async function loadTodayTaskDetail(
     flock = result.data as Row;
   }
 
-  const warehouses = await assignedWarehouses(context, input.farmId);
+  const warehouses = await assignedWarehouses(context, input.farmId, task);
   const inventory = await inventoryOptions(context, warehouses);
   const correctionBase = `/app/today?farm_id=${input.farmId}&date=${input.workDate}${input.flockId ? `&flock_id=${input.flockId}` : ""}`;
   const base = {
