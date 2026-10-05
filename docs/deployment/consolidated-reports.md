@@ -24,7 +24,7 @@ Missing or non-finite values remain unavailable, not zero. Estimates are labelle
 - The Record Check correction banner remains on the route.
 - Today-enabled managers see a scoped Reports handoff in place of analytics on Production, Feed, Mortality, Stock, and Sales pages. Readable history and exceptional editors remain on those pages.
 - CEO and disabled-manager analytics remain unchanged. Exact correction targets, `view=advanced`, and explicit `feed_target=feed_history` links keep their original evidence view. Feed template management stays outside the analytics handoff.
-- No migration, feature-setting change, staging deployment, or production deployment is included.
+- No migration or feature-setting change is included. The staging release below is separate from the local implementation; production is unchanged.
 
 ## Verification boundaries
 
@@ -60,3 +60,16 @@ The new report catalogue wording is implementation copy; broader translation and
 - The earlier authenticated Next-development browser specification remains unverified as a full suite: portrait previously timed out during compilation and the real-reader comparison was not completed. The new presentation runner does not replace authenticated/live database validation.
 - No persistent test server was started in this continuation. Staging and production were not changed; no migration was added or applied.
 - Cloudflare preview, populated live-source comparisons, and authenticated staging end-to-end verification remain pending. Task 7.5 stays unchecked until that acceptance evidence exists.
+
+## Staging release — 2026-10-05
+
+- Application commit: `446dc621ad7cad284012c9e9956a9d6e17a1d1f6`; read-only staging test runner commit: `b4cbeda63fb34709a4049ec2d49fff853b46785b`.
+- Staging-only OpenNext build and Wrangler dry run passed. Build settings explicitly selected `staging` and Supabase project `uzmhpecehmlwojdmitgj`. No secret file was changed.
+- Deployed to `ethio-poultry-app-staging.walidmurad65.workers.dev`, Worker version `6c91180c-2d89-493f-910f-f070cefb330c`, preserving existing runtime variables and secrets. Previous staging version: `231ce6eb-bcbd-4ef7-a7cd-2e0b2f247a53`.
+- Sign-in smoke: HTTP 200. Anonymous `/api/me/context` and `/api/reports/evidence`: HTTP 401 with private/no-store headers.
+- `notmain` pushed; GitHub Quality gate run `37357008852` passed. TypeScript and focused lint also passed after adding the live staging specification.
+- Dedicated staging CEO/manager credentials remain in GitHub's protected staging environment. The existing Staging release gate now supports an explicitly labelled `reports_only` mode; this does not certify or replace the full release gate.
+- Populated Reports comparisons in run `37357052107` failed. CEO comparison timed out on an English-only language-control selector while the dedicated account used Amharic. Manager comparison reported no authorized warehouses. No business records, account credentials/roles, assignments, rollout flags, or database migrations were changed; tests use the normal language preference control.
+- Test-only commit `fef126f` fixes the bilingual selector and removes retries so fixture failures do not repeat unnecessarily. It exercises the other report sections before requiring populated warehouse acceptance; it never grants access or weakens authorization. Pushed to `notmain`.
+- Corrected run `37360039957` also failed. Its assertion log could not be retrieved after repeated GitHub API connection timeouts; do not assume the CEO comparison passed or attribute all failures to the missing manager warehouse. The dedicated staging manager's warehouse assignment needs an explicit operator choice before full stock acceptance. Task 7.5 remains unchecked until the corrected failures are reviewed and populated CEO/manager comparisons pass.
+- Production application and database were not changed.
