@@ -46,6 +46,15 @@ The CEO primary workspace SHALL not be reorganized until the Farm Manager pilot 
 - **WHEN** the manager pilot passes and the CEO feature flag is enabled
 - **THEN** the CEO receives the simplified primary workspace while advanced analytics, reports, access, Governance, and audit history remain available
 
+#### Scenario: Premature acceptance or activation
+- **WHEN** a browser or service-role operation tries to set a pilot acceptance timestamp or enable the CEO flag during the manager pilot
+- **THEN** the database rejects the write, including when both values are supplied together or on organization creation
+- **AND** the current CEO destinations and manager rollout controls remain unchanged
+
+#### Scenario: Post-pilot release is reviewed separately
+- **WHEN** the silent usability test and seven unassisted operating days pass with documented integrity and recovery evidence
+- **THEN** Task 8.7 creates a separate reviewed OpenSpec change and evidenced acceptance/release boundary before the CEO guard can be replaced
+
 ### Requirement: Authorized rollout management and evidence
 Today rollout changes SHALL be limited to the tenant's active CEO or a credentialed system release operation. Every actual state change SHALL atomically record its reason, timestamp, before/after values, and CEO identity or release reference in the immutable audit ledger. Browser administrators and Farm Managers SHALL not change rollout state. The CEO control SHALL show readable, tenant-scoped recent changes without exposing database identifiers.
 
