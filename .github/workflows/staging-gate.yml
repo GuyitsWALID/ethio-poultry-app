@@ -7,6 +7,10 @@ on:
         description: HTTPS URL of the immutable staging deployment
         required: true
         type: string
+      reports_only:
+        description: Run read-only populated Reports comparisons only (not the full release gate)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,6 +21,7 @@ concurrency:
 
 jobs:
   verify:
+    if: ${{ !inputs.reports_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: staging
@@ -63,3 +68,25 @@ jobs:
           test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$APP_BASE_URL/api/me/context")" = "401"
       - name: Record release evidence
         run: npm run release:manifest
+
+  reports:
+    if: ${{ inputs.reports_only && github.ref == 'refs/heads/notmain' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      APP_BASE_URL: ${{ inputs.staging_url }}
+      E2E_CEO_EMAIL: ${{ secrets.STAGING_E2E_CEO_EMAIL }}
+      E2E_CEO_PASSWORD: ${{ secrets.STAGING_E2E_CEO_PASSWORD }}
+      E2E_FARM_MANAGER_EMAIL: ${{ secrets.STAGING_E2E_FARM_MANAGER_EMAIL }}
+      E2E_FARM_MANAGER_PASSWORD: ${{ secrets.STAGING_E2E_FARM_MANAGER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.16.0
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Compare populated CEO and assigned-manager Reports with source readers
+        run: npx playwright test tests/browser/report-staging.spec.ts --workers=1 --trace=off
