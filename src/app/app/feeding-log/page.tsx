@@ -4,6 +4,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import {useRouter} from "next/navigation";
+import {ReportAnalyticsHandoff} from "@/components/reports/report-analytics-handoff";
+import {buildReportHref} from "@/lib/report-workspace";
 import { AlertTriangle, Check, ChevronDown, Clock3, PackageOpen, RefreshCw, Scale, Wheat, X } from "lucide-react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
@@ -62,11 +65,13 @@ function KpiCard({ title, metric, icon }: { title: string; metric: Metric; icon:
 export default function FeedControlPage() {
   const { scope, setScope, period, batches, flocks, loading: scopeLoading } = useFarmScope();
   const {enabled: todayEntryEnabled} = useTodayEntryMode();
+  const router = useRouter();
   const [data, setData] = useState<FeedData | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const [templateOpen, setTemplateOpen] = useState(false); const [weightTask, setWeightTask] = useState<Task | null>(null);
   const deepLinkHandled = useRef(false);
 
   const openFeedAction = useCallback((target: NonNullable<FeedData["exceptions"][number]["actionTarget"]>) => {
+    if (todayEntryEnabled && target === "feed_history" && new URLSearchParams(window.location.search).get("feed_target") !== "feed_history") {router.push(buildReportHref("feed", {...period, ...scope})); return;}
     if (target === "template_management") setTemplateOpen(true);
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
       const targetId = target === "template_management" ? "feed-template-management" : target === "today_sessions" ? "today-feed-sessions" : "feed-history";
@@ -75,7 +80,7 @@ export default function FeedControlPage() {
       section?.scrollIntoView({ behavior: "smooth", block: "start" });
       section?.focus({ preventScroll: true });
     }));
-  }, []);
+  }, [todayEntryEnabled, router, scope, period]);
 
   const activeBatches = useMemo(() => {
     const scopedFlock = scope.flockId ? flocks.find((flock) => flock.id === scope.flockId) : null;
@@ -138,8 +143,10 @@ export default function FeedControlPage() {
       <section aria-labelledby="feed-actions-title"><div className="mb-3 flex items-end justify-between"><div><h2 id="feed-actions-title" className="text-xl font-semibold text-[#173225]">Action queue</h2><p className="mt-1 text-sm text-[#647267]">Only exceptions with a precise cause and recovery action.</p></div><Status tone={data.exceptions.length ? "warning" : "good"}>{data.exceptions.length ? `${data.exceptions.length} open` : "Clear"}</Status></div>
         {data.exceptions.length ? <div className="grid gap-3 lg:grid-cols-2">{data.exceptions.map((item) => <article key={`${item.title}-${item.reason}`} className="rounded-2xl border border-[#e5d9c4] bg-white p-4"><div className="flex gap-3"><AlertTriangle className={`mt-0.5 size-5 shrink-0 ${item.severity === "critical" ? "text-red-600" : "text-amber-600"}`} /><div><h3 className="font-semibold text-[#193426]">{item.title}</h3><p className="mt-1 text-sm leading-6 text-[#637167]">{item.reason}</p>{item.actionTarget ? <button type="button" onClick={() => openFeedAction(item.actionTarget!)} className="mt-2 min-h-11 rounded-lg text-left text-xs font-semibold uppercase tracking-wide text-[#8a6735] underline decoration-[#cbb98f] underline-offset-4 hover:text-[#173225] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#244b35]">{item.action}</button> : <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-[#8a6735]">{item.action}</p>}</div></div></article>)}</div> : <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">No feed-control exceptions in this scope.</div>}
       </section>
+      <ReportAnalyticsHandoff section="feed">
       <section aria-labelledby="feed-kpis-title"><h2 id="feed-kpis-title" className="mb-3 text-xl font-semibold text-[#173225]">Control metrics</h2><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"><KpiCard title="Plan completion" metric={data.kpis.planCompletion} icon={<Check className="size-4" />} /><KpiCard title="Feed variance" metric={data.kpis.feedVariance} icon={<Wheat className="size-4" />} /><KpiCard title="Feed / bird / day" metric={data.kpis.feedPerBirdDay} icon={<Clock3 className="size-4" />} /><KpiCard title="Stock cover" metric={data.kpis.stockCover} icon={<PackageOpen className="size-4" />} /><KpiCard title="Weight response" metric={data.kpis.weight} icon={<Scale className="size-4" />} /><KpiCard title={data.kpis.fcr.kind ?? "Applicable FCR"} metric={data.kpis.fcr} icon={<span className="text-xs font-bold">FCR</span>} /></div></section>
       <div className="grid gap-6 xl:grid-cols-[1.55fr_1fr]"><FeedTrend data={data} /><InventoryPanel data={data} /></div>
+      </ReportAnalyticsHandoff>
       <WeightTasks data={data} onRecord={setWeightTask} />
       <MilestoneTimeline data={data} reload={load} announce={setMessage} />
       <TemplateManager data={data} open={templateOpen} setOpen={setTemplateOpen} reload={load} announce={setMessage} batchId={scope.batchId} />

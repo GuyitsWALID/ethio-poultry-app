@@ -1,4 +1,25 @@
 {
+  "ReportWorkspace": {
+    "title": "Reports",
+    "ceoScope": "See results across your organization. Choose a farm to narrow the report.",
+    "managerScope": "See results for your assigned farms. Record daily work in Today.",
+    "sectionsLabel": "Report sections",
+    "sections": {"production": "Production", "feed": "Feed and FCR", "health": "Health and deaths", "stock": "Stock and usage", "finance": "Sales and finance"},
+    "filters": "Report filters", "from": "From", "to": "To", "branch": "Branch", "allBranches": "All branches", "farm": "Farm", "house": "House", "flock": "Flock", "batch": "Batch", "month": "Stock month (Gregorian)", "warehouse": "Warehouse",
+    "allFarms": "All available farms", "allHouses": "All houses", "allFlocks": "All flocks", "allBatches": "All batches", "chooseBatch": "Choose a batch to see feed results.", "chooseWarehouse": "Choose a warehouse",
+    "refresh": "Refresh report", "loading": "Loading report…", "unavailable": "Not available", "empty": "No matching records in this report.", "loadFailed": "Could not load this report. Check the filters and refresh.", "accessDenied": "Reports are available to CEOs and assigned Farm Managers.", "advanced": "Detailed reports and saved reports", "sourceNote": "Read-only results from the existing records. Missing values are not treated as zero.",
+    "notices": {"batchScope":"Feed results cover the whole selected batch. FCR is not averaged across batches.","fcrHelp":"FCR means feed conversion ratio: kilograms of feed used for one kilogram of eggs or bird growth. Missing production weights or feed records can make it unavailable.","estimated":"Some results are estimates. Review the source records before relying on profit or feed comparisons.","stockPeriod":"Receipts and usage cover the selected Gregorian month. Stock remaining is the current balance, not a historical month-end balance. Different item units are not added together. Expenses here belong to this warehouse; farm costs are in Sales and finance.","financeScope":"Recorded expenses are separate from estimated sales profit. Overlapping close periods are not added together. Managers see assigned-farm costs only."},
+    "evidenceTitle": "Supporting records",
+    "organizationScope": "No farm assigned to this cost",
+    "absorbedCost": "Period absorbed cost",
+    "unallocatedCost": "Cost not yet assigned",
+    "periodWarnings": "{count} period warnings",
+    "kinds": {"disease":"Health issue","treatment":"Treatment","observation":"Health observation","vaccination":"Vaccination completed","expense":"Expense","period":"Financial close period"},
+    "periodStatus": {"draft":"Draft — not closed","reconciled":"Reviewed — not locked","locked":"Locked"},
+    "analyticsMoved": "Results and charts are now in Reports. This page keeps history and corrections.",
+    "openReport": "Open {section} report",
+    "metrics": {"eggs":"Eggs collected","productionRate":"Egg production (%)","marketable":"Saleable eggs (%)","coverage":"Record coverage (%)","feedKg":"Feed used","planCompletion":"Feeding plan completed (%)","feedPerBird":"Feed per bird per day","fcr":"Feed conversion ratio (FCR)","feedCost":"Feed cost","deaths":"Recorded deaths","deathRate":"Deaths per 1,000 bird-days","unexplained":"Deaths without an explained cause","revenue":"Sales value","paid":"Money received","balanceDue":"Money still owed","estimatedProfit":"Estimated sales profit","currentStock":"Stock remaining now","received":"Stock received","feedUsage":"Used for feeding","dailyUsage":"Routine supplies used","healthUsage":"Used for treatment","vaccineUsage":"Vaccines used","stockValue":"Current stock value","healthEvents":"Health events","vaccinations":"Vaccinations completed","expenses":"Recorded expenses"}
+  },
   "TodayRollout": {
     "title": "Today workspace",
     "description": "Enable Today for Farm Managers in this organization. Managers will use one place to record daily work.",

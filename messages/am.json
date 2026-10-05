@@ -1,4 +1,25 @@
 {
+  "ReportWorkspace": {
+    "title": "ሪፖርቶች",
+    "ceoScope": "የድርጅቱን ውጤቶች ይመልከቱ። ሪፖርቱን ለማጥበብ እርሻ ይምረጡ።",
+    "managerScope": "የተመደቡባቸውን እርሻዎች ውጤት ይመልከቱ። የዕለት ሥራን በዛሬ ገጽ ይመዝግቡ።",
+    "sectionsLabel": "የሪፖርት ክፍሎች",
+    "sections": {"production": "ምርት", "feed": "መኖ እና FCR", "health": "ጤና እና ሞት", "stock": "ክምችት እና አጠቃቀም", "finance": "ሽያጭ እና ፋይናንስ"},
+    "filters": "የሪፖርት ማጣሪያዎች", "from": "ከ", "to": "እስከ", "branch": "ቅርንጫፍ", "allBranches": "ሁሉም ቅርንጫፎች", "farm": "እርሻ", "house": "ቤት", "flock": "መንጋ", "batch": "ባች", "month": "የክምችት ወር (እ.ኤ.አ.)", "warehouse": "መጋዘን",
+    "allFarms": "ሁሉም የሚፈቀዱ እርሻዎች", "allHouses": "ሁሉም ቤቶች", "allFlocks": "ሁሉም መንጋዎች", "allBatches": "ሁሉም ባቾች", "chooseBatch": "የመኖ ውጤትን ለማየት ባች ይምረጡ።", "chooseWarehouse": "መጋዘን ይምረጡ",
+    "refresh": "ሪፖርቱን ያድሱ", "loading": "ሪፖርቱ እየተጫነ ነው…", "unavailable": "አይገኝም", "empty": "በዚህ ሪፖርት ውስጥ የሚዛመድ መዝገብ የለም።", "loadFailed": "ሪፖርቱን መጫን አልተቻለም። ማጣሪያዎቹን ያረጋግጡና ያድሱ።", "accessDenied": "ሪፖርቶች ለዋና ሥራ አስፈጻሚዎችና ለተመደቡ የእርሻ ኃላፊዎች ይገኛሉ።", "advanced": "ዝርዝር እና የተቀመጡ ሪፖርቶች", "sourceNote": "ውጤቶቹ ከነባር መዝገቦች ለንባብ ብቻ ቀርበዋል። የጎደሉ እሴቶች እንደ ዜሮ አይቆጠሩም።",
+    "notices": {"batchScope":"የመኖ ውጤቶቹ የተመረጠውን ባች በሙሉ ያካትታሉ። FCR በተለያዩ ባቾች መካከል አማካይ አይደረግም።","fcrHelp":"FCR ማለት የመኖ ልወጣ መጠን ነው፤ አንድ ኪሎ ግራም እንቁላል ወይም የወፍ ክብደት ጭማሪ ለማግኘት የተጠቀሙት መኖ በኪሎ ግራም ይለካል። የክብደት ወይም የመኖ መዝገብ ሲጎድል ላይገኝ ይችላል።","estimated":"አንዳንድ ውጤቶች ግምቶች ናቸው። በትርፍ ወይም በመኖ ንጽጽር ከመመርኮዝዎ በፊት መዝገቦቹን ይመልከቱ።","stockPeriod":"የገባውና የተጠቀሙት ክምችት የተመረጠውን የእ.ኤ.አ. ወር ያካትታሉ። የቀረው ክምችት የአሁኑ ነው፣ የወሩ መጨረሻ ታሪካዊ መጠን አይደለም። የተለያዩ መለኪያዎች አይደመሩም። እዚህ ያሉ ወጪዎች የተመረጠው መጋዘን ወጪዎች ናቸው፤ የእርሻ ወጪዎች በሽያጭና ፋይናንስ ሪፖርት ይታያሉ።","financeScope":"ወጪዎች ከግምታዊ የሽያጭ ትርፍ ተለይተዋል። የሚደራረቡ የመዝጊያ ወቅቶች አይደመሩም። ኃላፊዎች የተመደቡባቸውን እርሻዎች ወጪ ብቻ ያያሉ።"},
+    "evidenceTitle": "ደጋፊ መዝገቦች",
+    "organizationScope": "ለዚህ ወጪ እርሻ አልተመደበም",
+    "absorbedCost": "የወቅቱ የተመደበ ወጪ",
+    "unallocatedCost": "ያልተመደበ ወጪ",
+    "periodWarnings": "{count} የወቅቱ ማስጠንቀቂያዎች",
+    "kinds": {"disease":"የጤና ችግር","treatment":"ሕክምና","observation":"የጤና ምልከታ","vaccination":"የተጠናቀቀ ክትባት","expense":"ወጪ","period":"የፋይናንስ መዝጊያ ወቅት"},
+    "periodStatus": {"draft":"ረቂቅ — አልተዘጋም","reconciled":"ተገምግሟል — አልተቆለፈም","locked":"ተቆልፏል"},
+    "analyticsMoved": "ውጤቶችና ገበታዎች በሪፖርቶች ገጽ ይገኛሉ። ይህ ገጽ ታሪክና እርማቶችን ያሳያል።",
+    "openReport": "የ{section} ሪፖርትን ክፈት",
+    "metrics": {"eggs":"የተሰበሰቡ እንቁላሎች","productionRate":"የእንቁላል ምርት (%)","marketable":"ለሽያጭ የሚሆኑ እንቁላሎች (%)","coverage":"የመዝገብ ሽፋን (%)","feedKg":"የተጠቀሙት መኖ","planCompletion":"የመኖ ዕቅድ ማጠናቀቅ (%)","feedPerBird":"በወፍ በቀን የመኖ መጠን","fcr":"የመኖ ልወጣ መጠን (FCR)","feedCost":"የመኖ ወጪ","deaths":"የተመዘገቡ ሞቶች","deathRate":"በ1,000 ወፍ-ቀናት ሞት","unexplained":"ምክንያታቸው ያልተገለጸ ሞት","revenue":"የሽያጭ ዋጋ","paid":"የተቀበሉት ገንዘብ","balanceDue":"ያልተከፈለ ገንዘብ","estimatedProfit":"ግምታዊ የሽያጭ ትርፍ","currentStock":"አሁን የቀረው ክምችት","received":"የገባ ክምችት","feedUsage":"ለመኖ የተጠቀሙት","dailyUsage":"የተጠቀሙት መደበኛ ቁሳቁሶች","healthUsage":"ለሕክምና የተጠቀሙት","vaccineUsage":"የተጠቀሙት ክትባቶች","stockValue":"የአሁኑ ክምችት ዋጋ","healthEvents":"የጤና መዝገቦች","vaccinations":"የተጠናቀቁ ክትባቶች","expenses":"የተመዘገቡ ወጪዎች"}
+  },
   "TodayRollout": {
     "title": "የዛሬ ሥራ ገጽ",
     "description": "በዚህ ድርጅት ለሚሠሩ የእርሻ አስተዳዳሪዎች የዛሬ ሥራ ገጽን ያብሩ። የዕለት ሥራቸውን በአንድ ቦታ ይመዘግባሉ።",
