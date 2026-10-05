@@ -89,4 +89,4 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Compare populated CEO and assigned-manager Reports with source readers
-        run: npx playwright test tests/browser/report-staging.spec.ts --workers=1 --trace=off
+        run: npx playwright test tests/browser/report-staging.spec.ts --workers=1 --retries=0 --trace=off

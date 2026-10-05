@@ -38,8 +38,7 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
       return response.json();
     };
     const stock = await read(`/api/inventory/workspace?month=${input.month}`);
-    expect(stock.warehouses.length, "Assigned warehouse required").toBeGreaterThan(0);
-    input.warehouseId = stock.warehouses[0].id;
+    input.warehouseId = stock.warehouses[0]?.id;
     const batches = options.batches.filter((batch: {farm_id: string}) => !farmId || batch.farm_id === farmId);
     expect(batches.length, "Populated feed batch required").toBeGreaterThan(0);
     // Select existing consumption evidence, not an arbitrary empty new batch.
@@ -49,7 +48,7 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
       if ((feed?.metrics.find(metric => metric.key === "feedKg")?.value || 0) > 0) break;
     }
     await page.goto(buildReportHref("production", {...input, batchId: undefined}));
-    await page.getByRole("group", {name: "Language"}).getByRole("button", {name: "EN", exact: true}).click();
+    await page.getByRole("group", {name: /^(Language|ቋንቋ)$/}).getByRole("button", {name: "EN", exact: true}).click({timeout: 30_000});
     for (const section of reportSections) {
       const selected = {...input, batchId: section === "feed" ? input.batchId : undefined};
       const expected = await loadReport(section, selected, read);
@@ -65,7 +64,8 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
       }
       if (section === "production") expect(expected!.metrics.find(metric => metric.key === "eggs")!.value).toBeGreaterThan(0);
       if (section === "feed") expect(expected!.metrics.find(metric => metric.key === "feedKg")!.value).toBeGreaterThan(0);
-      if (section === "stock") expect(expected!.rows.length).toBeGreaterThan(0);
+      if (section === "stock" && input.warehouseId) expect(expected!.rows.length).toBeGreaterThan(0);
+      if (section === "stock" && !input.warehouseId) expect(expected!.rows).toHaveLength(0);
       if (section === "finance") expect(expected!.metrics.find(metric => metric.key === "revenue")!.value).toBeGreaterThan(0);
     }
     // Unknown targets cannot act as grants. No assignments are changed here.
@@ -75,5 +75,8 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
       expect(denied.status()).toBe(403);
       expect(denied.headers()["cache-control"]).toContain("no-store");
     }
+    // Report an incomplete staging fixture after exercising the other sections;
+    // never grant a warehouse assignment or weaken authorization to pass.
+    expect(stock.warehouses.length, "Dedicated staging manager needs an existing authorized warehouse for populated stock acceptance").toBeGreaterThan(0);
   });
 }
