@@ -46,6 +46,29 @@ The CEO primary workspace SHALL not be reorganized until the Farm Manager pilot 
 - **WHEN** the manager pilot passes and the CEO feature flag is enabled
 - **THEN** the CEO receives the simplified primary workspace while advanced analytics, reports, access, Governance, and audit history remain available
 
+### Requirement: Authorized rollout management and evidence
+Today rollout changes SHALL be limited to the tenant's active CEO or a credentialed system release operation. Every actual state change SHALL atomically record its reason, timestamp, before/after values, and CEO identity or release reference in the immutable audit ledger. Browser administrators and Farm Managers SHALL not change rollout state. The CEO control SHALL show readable, tenant-scoped recent changes without exposing database identifiers.
+
+#### Scenario: CEO enables or disables Today
+- **WHEN** the active CEO submits a valid reason
+- **THEN** only that CEO's organization changes, the new state and evidence are refreshed, and duplicate requests for the same state do not duplicate audit events
+
+#### Scenario: Credentialed release rolls back Today
+- **WHEN** an authorized service-role release operation supplies the verified organization, reason and release reference
+- **THEN** rollout is changed atomically and the release evidence is recorded without impersonating a CEO
+
+#### Scenario: Unauthorized direct update
+- **WHEN** a browser user or a release credential attempts to bypass the authorized rollout functions
+- **THEN** the state cannot change through that update
+
+#### Scenario: Rollout request fails
+- **WHEN** a save fails or its result is unknown
+- **THEN** the reason is preserved and a fresh status load is required before another change can be submitted
+
+#### Scenario: Production pilot prerequisites remain unmet
+- **WHEN** rollout controls are implemented but the backup, staging, restore or pilot gates remain incomplete
+- **THEN** implementation completion is not treated as production pilot approval
+
 ### Requirement: Accessible responsive navigation
 Primary navigation SHALL support keyboard use, screen readers, portrait and landscape tablet layouts, and touch targets of at least 44 CSS pixels.
 

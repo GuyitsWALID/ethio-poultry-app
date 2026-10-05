@@ -6,7 +6,7 @@ import { Archive, Building2, CheckCircle2, Layers3, Loader2, MapPin, Plus, Refre
 import type { LucideIcon } from "lucide-react";
 
 import { SetupModal } from "@/components/ceo/setup-modal";
-import { canSubmitTodayRollout } from "@/lib/today-rollout";
+import { TodayRolloutControl } from "@/components/ceo/today-rollout-control";
 
 type HierarchyRow = { key:string; branchId:string; farmId:string|null; houseId:string|null; flockId:string|null; batchId:string|null; branchName:string; branchLocation:string; farmName:string; houseName:string; flockCode:string; batchCode:string; batchStatus:string };
 type BranchSummary = { id:string; name:string; location:string; farms:Set<string>; houses:Set<string>; flocks:Set<string>; batches:Map<string,string> };
@@ -17,14 +17,8 @@ export default function BranchListPage() {
   const [error,setError]=useState("");
   const [modalOpen,setModalOpen]=useState(false);
   const [query,setQuery]=useState("");
-  const [todayEnabled,setTodayEnabled]=useState<boolean|null>(null);
-  const [toggleReason,setToggleReason]=useState("");
-  const [toggleSaving,setToggleSaving]=useState(false);
-  const [toggleError,setToggleError]=useState("");
   const load=async()=>{setLoading(true);setError("");try{const response=await fetch("/api/ceo/branch-hierarchy");const data=await response.json();if(!response.ok)throw new Error(data?.error??"Could not load branch network.");setRows((data?.rows??[]) as HierarchyRow[])}catch(value){setError(value instanceof Error?value.message:"Could not load branch network.")}finally{setLoading(false)}};
-  const loadTodayFlag=async()=>{setToggleError("");try{const response=await fetch("/api/me/context");const data=await response.json();if(!response.ok||typeof data?.todayWorkspaceEnabled!=="boolean")throw new Error(data?.error??"Could not load the Today workspace flag.");setTodayEnabled(data.todayWorkspaceEnabled)}catch(value){setToggleError(value instanceof Error?value.message:"Could not load the Today workspace flag.")}};
-  useEffect(()=>{void load();void loadTodayFlag()},[]);
-  const toggleTodayWorkspace=async(enabled:boolean)=>{if(!canSubmitTodayRollout(todayEnabled,toggleSaving,toggleReason))return;setToggleSaving(true);setToggleError("");try{const response=await fetch("/api/ceo/feature-flags/today-workspace",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled,reason:toggleReason.trim()})});const data=await response.json();if(!response.ok)throw new Error(data?.error??"Could not update the Today workspace flag.");setTodayEnabled(Boolean(data?.today_workspace_enabled));setToggleReason("")}catch(value){setToggleError(value instanceof Error?value.message:"Could not update the Today workspace flag.")}finally{setToggleSaving(false)}};
+  useEffect(()=>{void load()},[]);
 
   const branches=useMemo(()=>{
     const needle=query.trim().toLowerCase();
@@ -41,28 +35,7 @@ export default function BranchListPage() {
     {error?<div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>:null}
     <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><div className="grid divide-y divide-sand-200 sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-5">{([["Branches",branches.length,Building2],["Farms",totals.farms,MapPin],["Houses",totals.houses,Warehouse],["Active flocks",totals.flocks,CheckCircle2],["Active batches",totals.batches,Archive]] as Array<[string,number,LucideIcon]>).map(([label,value,Icon])=><div key={label} className="p-5"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">{label}</p><Icon className="h-4 w-4 text-forest-500"/></div><p className="mt-2 font-display text-3xl font-semibold text-forest-900">{loading?"—":value.toLocaleString()}</p></div>)}</div></section>
     {incomplete?<div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>{incomplete} branch{incomplete===1?"":"es"} need hierarchy completion.</strong> A branch needs a farm, house, and flock before it can produce reliable operational comparisons.</div>:null}
-    <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-4 p-5 sm:p-6">
-        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.2em] text-forest-500"><CheckCircle2 className="h-4 w-4"/>Feature rollout</div>
-        <h2 className="font-display text-2xl font-semibold text-forest-900">Today workspace</h2>
-        <p className="text-sm text-forest-600">Enable the simplified Today workspace for Farm Managers in this organization. When enabled, managers land on Today after sign-in and use the guided daily workflow.</p>
-        <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${todayEnabled?"bg-leaf-500/10 text-leaf-700":"bg-sand-100 text-forest-600"}`}>
-          <span className={`h-2 w-2 rounded-full ${todayEnabled?"bg-leaf-500":"bg-sand-400"}`}/>
-          {todayEnabled===null?(toggleError?"Status unavailable":"Loading..."):todayEnabled?"Enabled":"Disabled"}
-        </span>
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-          <label className="grid gap-1.5 text-xs font-semibold text-forest-700">Reason for change
-            <input value={toggleReason} onChange={(event)=>setToggleReason(event.target.value)} maxLength={2000} aria-describedby="today-rollout-reason-help" placeholder="e.g. Pilot ready for Farm Manager daily use" disabled={toggleSaving} className="min-h-11 rounded-xl border border-sand-300 bg-white px-3 text-sm text-forest-900 disabled:bg-sand-50"/>
-            <span id="today-rollout-reason-help" className="font-normal">Required: 4 to 2000 characters. This reason is saved in the audit history.</span>
-          </label>
-          <button type="button" disabled={!canSubmitTodayRollout(todayEnabled,toggleSaving,toggleReason)} onClick={()=>void toggleTodayWorkspace(!todayEnabled)} className="inline-flex min-h-11 items-center justify-center self-start gap-2 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:mt-5">
-            {toggleSaving?"Saving...":todayEnabled?"Disable Today":"Enable Today"}
-          </button>
-        </div>
-        {toggleError?<p role="alert" className="text-sm text-red-700">{toggleError}</p>:null}
-        {todayEnabled===null&&toggleError?<button type="button" onClick={()=>void loadTodayFlag()} className="min-h-11 self-start rounded-xl border border-sand-300 px-4 text-sm font-semibold text-forest-900">Retry loading status</button>:null}
-      </div>
-    </section>
+    <TodayRolloutControl />
     <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><div className="flex flex-col gap-4 border-b border-sand-200 p-5 sm:flex-row sm:items-end sm:justify-between sm:p-6"><div><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-forest-500">Network register</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">Branch operating structure</h2><p className="mt-1 text-sm text-forest-600">Coverage from branch to active production cycle.</p></div><label className="relative"><span className="sr-only">Search branch network</span><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-forest-500"/><input value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search network" className="h-11 w-full rounded-xl border border-sand-200 pl-9 pr-3 text-sm sm:w-72"/></label></div>
       {loading?<div className="grid place-items-center py-20"><Loader2 className="h-7 w-7 animate-spin text-forest-600"/></div>:branches.length?<div className="overflow-x-auto"><table className="min-w-[850px] w-full text-sm"><thead><tr className="bg-sand-50 text-left text-[10px] uppercase tracking-[.16em] text-forest-600"><th className="px-5 py-3">Branch</th><th className="px-4 py-3">Location</th><th className="px-4 py-3">Farms</th><th className="px-4 py-3">Houses</th><th className="px-4 py-3">Flocks</th><th className="px-5 py-3">Batch cycles</th></tr></thead><tbody>{branches.map((row)=><tr key={row.id} className="border-t border-sand-100 hover:bg-sand-50/60"><td className="px-5 py-4"><strong className="text-forest-900">{row.name}</strong><span className={`mt-1 block text-xs ${row.farms.size&&row.houses.size&&row.flocks.size?"text-forest-500":"text-amber-700"}`}>{row.farms.size&&row.houses.size&&row.flocks.size?"Operational hierarchy present":"Setup incomplete"}</span></td><td className="px-4 py-4 text-forest-700"><span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5"/>{row.location}</span></td><td className="px-4 py-4 font-semibold">{row.farms.size}</td><td className="px-4 py-4 font-semibold">{row.houses.size}</td><td className="px-4 py-4 font-semibold">{row.flocks.size}</td><td className="px-5 py-4">{row.batches.size?<div className="flex flex-wrap gap-2">{[...row.batches].map(([code,status])=>{const active=status.toLowerCase()==="active";return <span key={code} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${active?"border-leaf-400/40 bg-green-50 text-forest-700":"border-sand-200 text-forest-600"}`}>{active?<span className="h-2 w-2 rounded-full bg-leaf-500"/>:<Archive className="h-3 w-3"/>}{code}</span>})}</div>:<span className="text-forest-500">No batch cycle</span>}</td></tr>)}</tbody></table></div>:<div className="p-10 text-center text-sm text-forest-600">No branch structure matches this search. Clear the search or add a branch.</div>}
     </section>

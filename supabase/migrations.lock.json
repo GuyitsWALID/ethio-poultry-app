@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 72,
-  "latest": "20260930001000_fix_feed_session_warehouse_scope.sql",
-  "aggregateSha256": "42c9848b77696b8e7327618e3829be9e1f41ccb8e9827ac605dbd8cb96967f48",
+  "count": 73,
+  "latest": "20261005000000_today_rollout_authorization.sql",
+  "aggregateSha256": "73bba9d795ed66f81568d0944b8fcd4364a8092497866912f14059471275c6fd",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -152,6 +152,7 @@
     "20260928000000_today_bird_loss_handoff.sql": "2eed5a680e535d9dca1d3a6e89d081960fc4efb21d3c1e6f60cb4f406c2a8b56",
     "20260929000000_today_dynamic_feeding.sql": "4560f1608d17e48931a0d7f311b44a5ac41cb09f2c2d7bab282f5f189dd7ba2c",
     "20260930000000_ceo_today_workspace_toggle.sql": "26473c1ab0bccc255320982491ee295716832811089d1637cd374d30191306e5",
-    "20260930001000_fix_feed_session_warehouse_scope.sql": "d2c8c77df4e2c8f7cdb3594ae52cc25afda728e344c9dd6d5024177bedcc9864"
+    "20260930001000_fix_feed_session_warehouse_scope.sql": "d2c8c77df4e2c8f7cdb3594ae52cc25afda728e344c9dd6d5024177bedcc9864",
+    "20261005000000_today_rollout_authorization.sql": "2dfc423f1912724af910cdcec6fce88f8b4d426d55bc9b20c9273af35fbffdca"
   }
 }

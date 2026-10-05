@@ -1,4 +1,26 @@
 {
+  "TodayRollout": {
+    "title": "Today workspace",
+    "description": "Enable Today for Farm Managers in this organization. Managers will use one place to record daily work.",
+    "rollbackHelp": "Disabling Today restores the previous manager pages. Saved records and audit history are kept. This does not approve the production pilot.",
+    "loading": "Loading rollout status…",
+    "unavailable": "Status unavailable",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "reason": "Reason for change",
+    "reasonHelp": "Required: 4 to 2000 characters. Saved in the audit history.",
+    "enable": "Enable Today",
+    "disable": "Disable Today",
+    "saving": "Saving…",
+    "saved": "Rollout saved. Managers will see the change when they refresh or sign in again.",
+    "loadFailed": "Could not load rollout status or history. Refresh and try again.",
+    "saveFailed": "Could not change rollout. Your reason is kept. Refresh status before trying again.",
+    "refresh": "Refresh rollout status",
+    "history": "Recent rollout changes",
+    "empty": "No rollout changes recorded yet.",
+    "systemRelease": "System release",
+    "release": "Release: {reference}"
+  },
   "Calendar": {
     "ethiopian": "Ethiopian calendar",
     "day": "Day",
