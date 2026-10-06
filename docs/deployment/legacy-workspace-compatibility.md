@@ -25,4 +25,4 @@ After an authorized operator disables Today, managers refresh or sign in again. 
 
 Live staging feature-disable verification, supported-browser coverage and full release acceptance remain under Tasks 8.2–8.3. This change adds no migration and does not change staging or production assignments, feature flags or deployments.
 
-Production/Cloudflare builds were not repeated for this local compatibility change; rerun them before deployment. Work remains uncommitted until the next release instruction.
+This work was preserved in commit `4ada05e` and pushed to `notmain` with the warehouse-access upgrade on 2026-10-06. Production/Cloudflare compilation was repeated successfully for that release, and staging's Cloudflare build/deployment passed. Production was not deployed. Live feature-disable acceptance remains under Task 8.3; disabling Today must retain the new warehouse authorization model.

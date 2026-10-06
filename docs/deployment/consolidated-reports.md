@@ -42,10 +42,10 @@ Stable pagination loads complete evidence up to a bounded 20,000-row limit. Exce
 
 ## Remaining release acceptance
 
-- Deploy the reviewed code to staging, then compare populated CEO organization and assigned-manager source totals across all five sections, including batch FCR, warehouse usage/expenses, clinical evidence, and financial close.
+- Populated CEO and assigned-manager source comparisons passed across all five sections in protected run `37488388925` (2026-10-06), including the populated stock prerequisite. See the acceptance evidence below.
 - Run authenticated staging tenant-isolation, revoked-assignment, deep-link, and feature-disable rollback checks. Complete supported-browser and broader accessibility validation under Tasks 8.2–8.3.
 
-The new report catalogue wording is implementation copy; broader translation and poultry-partner review remain part of Task 4.6. Task 7.5 stays unchecked until its remaining coverage and verification are complete.
+The new report catalogue wording is implementation copy; broader translation and poultry-partner review remain part of Task 4.6. Task 7.5 is complete; broader release acceptance remains under Tasks 8.2–8.3.
 
 ## Local verification — 2026-10-05
 
@@ -73,3 +73,11 @@ The new report catalogue wording is implementation copy; broader translation and
 - Test-only commit `fef126f` fixes the bilingual selector and removes retries so fixture failures do not repeat unnecessarily. It exercises the other report sections before requiring populated warehouse acceptance; it never grants access or weakens authorization. Pushed to `notmain`.
 - Corrected run `37360039957` logs recovered on 2026-10-06. CEO comparisons passed all five sections. Manager comparisons and empty unauthorized-stock checks passed; the only failure was the final populated-stock prerequisite: `Dedicated staging manager needs an existing authorized warehouse for populated stock acceptance` (zero authorized warehouses). The dedicated staging manager's warehouse assignment needs an explicit operator choice before full stock acceptance. No access grant was added or authorization weakened. Task 7.5 remains unchecked until populated manager stock comparisons pass.
 - Production application and database were not changed.
+
+## Populated staging acceptance — 2026-10-06
+
+- The operator explicitly approved keeping DEMO Addis Central Farm Store shared and granting the single active staging Farm Manager permission. Ownership was not guessed or changed. The separate `inherit-farm-warehouse-access` release records the grant, audit, migration and stock-invariance evidence in `farm-warehouse-access.md`.
+- Protected workflow `37488388925`, test commit `14292b0`, passed both CEO and Farm Manager comparisons using GitHub staging credentials. All five report sections matched existing source readers; populated stock, effective warehouse access, private/no-store responses and unauthorized targets were checked. Farm Managers were denied the CEO handover endpoint.
+- Application access upgrade `1a029f8` passed GitHub Quality and Cloudflare staging deployment. Test follow-up `14292b0` passed GitHub Quality and Cloudflare staging build. All 299 unit tests, TypeScript, full lint and nine staging transactional database integration files passed.
+- The preceding run hit a connection reset and exposed a staging test-session cookie in the transport error. Approved cleanup removed that session/refresh tokens and deleted the failed logs. Subsequent authenticated read errors are sanitized. No production credentials were involved.
+- Task 7.5 is now checked. This read-only Reports acceptance does not certify offline synchronization, live feature-disable rollback, revocation races, cross-browser coverage or the real-farm pilot.

@@ -41,9 +41,10 @@ Application commit `1a029f8` was pushed to `notmain`. GitHub Quality gate `37482
 
 Protected Reports comparison `37484876937` passed the CEO comparison but hit a connection reset before the manager comparison began. Playwright included a staging test-session cookie in that transport error. With explicit cleanup approval, the matching staging session and cascading refresh tokens were removed and that failed run's logs deleted. Issued JWTs may remain valid until expiry. No production credentials were involved. Authenticated read transport errors are now sanitized without printing their underlying request headers; the manager comparison must still pass on a new run.
 
+The follow-up passed: protected run `37488388925` on test commit `14292b0` verified populated CEO and Farm Manager totals, stock/effective-access reader agreement, no-store headers, unknown-target rejection and manager handover denial. Task 7.5 is complete. GitHub Quality gate `37488356871` and the Cloudflare staging build also passed for `14292b0`.
+
 ## Remaining gates
 
-- Rerun protected-account populated Reports comparisons, including manager stock and effective-access reader agreement, after the transport-log fix is pushed.
 - Complete broader authenticated staging revocation, offline queued-command and live feature-disable fallback checks under Task 8.3; the presentation tests above do not replace them.
 - Review new Amharic permission/handover wording with the poultry partner. No new copy is represented as partner-approved.
 - Real-farm pilot, backup/restore acceptance and production approval remain separate. Do not deploy an old application that directly grants farm-owned stores; reviewed rollback must retain the new authorization model.
