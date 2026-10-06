@@ -1,5 +1,6 @@
 \set ON_ERROR_STOP on
 begin;
+select set_config('request.jwt.claims', '{}', true);
 
 insert into public.organizations(id, name) values
   ('15000000-0000-4000-8000-000000000001', 'Rollout tenant A'),

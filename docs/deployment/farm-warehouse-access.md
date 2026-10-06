@@ -35,9 +35,15 @@ Both migrations passed a rollback-only dry run against staging before deployment
 
 Locked deployment and database preflight passed. Post-deployment history has 76 versions, zero pending migrations and zero unknown versions.
 
+All nine transactional database integration files also passed against staging. The two direct-psql rollout fixtures now initialize `request.jwt.claims` to valid empty JSON (hosted Supabase can otherwise leave an empty string); both passed again in local Docker. This is fixture setup, not relaxed application authorization.
+
+Application commit `1a029f8` was pushed to `notmain`. GitHub Quality gate `37482390527` and Cloudflare staging build `86651c20-d6cc-4944-821e-149cbbe7c8be` passed; staging version `e318e2a9-0efb-455e-b3d4-2096d0b2661a` deployed at 100%.
+
+Protected Reports comparison `37484876937` passed the CEO comparison but hit a connection reset before the manager comparison began. Playwright included a staging test-session cookie in that transport error. With explicit cleanup approval, the matching staging session and cascading refresh tokens were removed and that failed run's logs deleted. Issued JWTs may remain valid until expiry. No production credentials were involved. Authenticated read transport errors are now sanitized without printing their underlying request headers; the manager comparison must still pass on a new run.
+
 ## Remaining gates
 
-- Confirm the `notmain` application build is deployed to staging and run the protected-account populated Reports comparisons, including manager stock and effective-access reader agreement.
+- Rerun protected-account populated Reports comparisons, including manager stock and effective-access reader agreement, after the transport-log fix is pushed.
 - Complete broader authenticated staging revocation, offline queued-command and live feature-disable fallback checks under Task 8.3; the presentation tests above do not replace them.
 - Review new Amharic permission/handover wording with the poultry partner. No new copy is represented as partner-approved.
 - Real-farm pilot, backup/restore acceptance and production approval remain separate. Do not deploy an old application that directly grants farm-owned stores; reviewed rollback must retain the new authorization model.

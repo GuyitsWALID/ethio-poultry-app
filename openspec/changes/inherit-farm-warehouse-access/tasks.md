@@ -8,6 +8,6 @@
 - [x] 6. Add unit, SQL/RLS/single-manager exclusion/stale-handover and tablet browser regressions.
 - [x] 7. Pass Docker migration dry run, full tests, lint, TypeScript and production/Cloudflare builds.
 - [ ] 8. Resolve staging preflight conflicts explicitly; migrate staging, validate populated Reports and authenticated rollback compatibility.
-- [ ] 9. Commit and push reviewed changes to notmain; document exact evidence and remaining pilot gates.
+- [x] 9. Commit and push reviewed changes to notmain; document exact evidence and remaining pilot gates.
 
-Evidence: `docs/deployment/farm-warehouse-access.md`. Task 8 staging migrations passed; authenticated application acceptance is pending. Production unchanged.
+Evidence: `docs/deployment/farm-warehouse-access.md`. Task 8 staging migrations and all nine database integration files passed; `1a029f8` passed GitHub and Cloudflare staging builds. Protected CEO Reports passed; manager comparison needs a rerun after a transport failure. Broader authenticated rollback/revocation acceptance remains pending. Production unchanged.

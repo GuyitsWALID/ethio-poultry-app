@@ -1,5 +1,8 @@
 \set ON_ERROR_STOP on
 begin;
+-- Hosted Supabase can initialize request.jwt.claims to an empty string.
+-- A direct psql test needs a valid JSON envelope just like PostgREST supplies.
+select set_config('request.jwt.claims', '{}', true);
 insert into public.organizations(id, name) values
   ('17000000-0000-4000-8000-000000000001', 'Rollout boundary A'),
   ('17000000-0000-4000-8000-000000000002', 'Rollout boundary B');

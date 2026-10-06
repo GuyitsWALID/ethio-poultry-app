@@ -9,6 +9,12 @@ test.skip(new URL(process.env.APP_BASE_URL || "http://localhost:3000").hostname 
 for (const role of ["CEO", "FARM_MANAGER"] as const) {
   test(`Populated staging Reports preserve ${role} source totals`, async ({page}) => {
     test.setTimeout(240_000);
+    // Playwright transport errors can include authenticated Cookie headers.
+    // Keep failures explicit without writing session credentials to CI logs.
+    const get=async(url:string)=>{
+      try{return await page.request.get(url);}
+      catch{throw new Error(`Staging read transport failed: ${url.split("?")[0]}`);}
+    };
     const email = process.env[`E2E_${role}_EMAIL`];
     const password = process.env[`E2E_${role}_PASSWORD`];
     expect(Boolean(email && password), "Dedicated staging credentials must exist").toBe(true);
@@ -17,12 +23,12 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     await page.locator('input[name="password"]').fill(password!);
     await page.locator('form button[type="submit"]').click();
     await expect(page).toHaveURL(/\/app\/(ceo|farm-manager|today)/);
-    const contextResponse = await page.request.get("/api/me/context");
+    const contextResponse = await get("/api/me/context");
     expect(contextResponse.status()).toBe(200);
     const context = await contextResponse.json();
     expect(context.role).toBe(role === "CEO" ? "ceo" : "farm_manager");
     if (role === "FARM_MANAGER") expect(context.todayWorkspaceEnabled, "Do not enable rollout automatically to pass a test").toBe(true);
-    const optionsResponse = await page.request.get("/api/scope/options");
+    const optionsResponse = await get("/api/scope/options");
     expect(optionsResponse.status()).toBe(200);
     const options = await optionsResponse.json();
     expect(options.farms.length, "Populated assigned-farm scope required").toBeGreaterThan(0);
@@ -32,14 +38,14 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     start.setUTCDate(start.getUTCDate() - 89);
     const input: ReportInput = {dateFrom: start.toISOString().slice(0, 10), dateTo: to, farmId, month: to.slice(0, 7)};
     const read = async (url: string) => {
-      const response = await page.request.get(url);
+      const response = await get(url);
       expect(response.status(), `Authorized source ${url.split("?")[0]}`).toBe(200);
       if (url.startsWith("/api/reports/evidence")) expect(response.headers()["cache-control"]).toContain("no-store");
       return response.json();
     };
     const stock = await read(`/api/inventory/workspace?month=${input.month}`);
     if (role === "FARM_MANAGER") {
-      const accessResponse=await page.request.get("/api/me/warehouse-access");
+      const accessResponse=await get("/api/me/warehouse-access");
       expect(accessResponse.status()).toBe(200);
       expect(accessResponse.headers()["cache-control"]).toContain("no-store");
       const access=await accessResponse.json();
@@ -48,7 +54,7 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
         expect(effective, "Stock and effective-access readers must agree").toBeTruthy();
         expect(effective.access_source).toBe(warehouse.farm_id?"farm_assignment":"warehouse_assignment");
       }
-      const denied=await page.request.get(`/api/governance/assignments/handover?farm_id=${farmId}&replacement_id=${context.userId}`);
+      const denied=await get(`/api/governance/assignments/handover?farm_id=${farmId}&replacement_id=${context.userId}`);
       expect(denied.status(), "Farm Managers cannot initiate CEO handover").toBe(403);
     }
     input.warehouseId = stock.warehouses[0]?.id;
@@ -84,7 +90,7 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     // Unknown targets cannot act as grants. No assignments are changed here.
     const unknown = "ffffffff-ffff-4fff-8fff-ffffffffffff";
     for (const section of ["health", "finance"]) {
-      const denied = await page.request.get(`/api/reports/evidence?section=${section}&date_from=${input.dateFrom}&date_to=${to}&farm_id=${unknown}`);
+      const denied = await get(`/api/reports/evidence?section=${section}&date_from=${input.dateFrom}&date_to=${to}&farm_id=${unknown}`);
       expect(denied.status()).toBe(403);
       expect(denied.headers()["cache-control"]).toContain("no-store");
     }
