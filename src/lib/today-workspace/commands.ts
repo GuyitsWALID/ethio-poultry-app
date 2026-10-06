@@ -1,6 +1,7 @@
 import "server-only";
 
-import type {AccessContext} from "@/lib/access-context";
+import {governanceAdmin,type AccessContext} from "@/lib/access-context";
+import {managerHasWarehouseAccess} from "@/lib/warehouse-access";
 import {createClient as createAuthedClient} from "@/utils/supabase/server";
 
 import {
@@ -63,6 +64,20 @@ export async function executeTodayCommand(context: AccessContext, input: unknown
       : "INVALID_COMMAND");
   }
   if (context.role !== "farm_manager") return rejected(command.command_id, "ROLE_NOT_ALLOWED");
+  // Readable early errors; SQL repeats authorization inside the transaction.
+  const payload=command.payload as Record<string,unknown>;
+  const session=payload.session as Record<string,unknown>|undefined;
+  const usage=payload.inventory_usage as Record<string,unknown>|undefined;
+  const ids=new Set<string>();
+  for(const value of [payload.warehouse_id,session?.warehouse_id,usage?.warehouse_id])if(typeof value==="string")ids.add(value);
+  if(Array.isArray(payload.usages))for(const row of payload.usages){if(row&&typeof row.warehouse_id==="string")ids.add(row.warehouse_id);}
+  for(const id of ids){
+    if(!uuidPattern.test(id))return rejected(command.command_id,"INVALID_PAYLOAD");
+    const {data:warehouse,error:scopeError}=await governanceAdmin.from("warehouses").select("id,farm_id").eq("org_id",context.orgId).eq("id",id).eq("status","active").maybeSingle();
+    if(scopeError)return rejected(command.command_id,"INTERNAL_ERROR");
+    if(!warehouse)return rejected(command.command_id,"ASSIGNMENT_REQUIRED");
+    if(!await managerHasWarehouseAccess(context.userId,id))return rejected(command.command_id,warehouse.farm_id?"FARM_ACCESS_REQUIRED":"SHARED_WAREHOUSE_PERMISSION_REQUIRED");
+  }
   const auth = await createAuthedClient();
   const {data, error} = await auth.rpc("dispatch_today_command_v1", {
     p_actor_id: context.userId,

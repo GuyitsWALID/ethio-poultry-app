@@ -4,7 +4,7 @@ import "server-only";
 
 import {z} from "zod";
 
-import {canAccessFarm, governanceAdmin, type AccessContext} from "@/lib/access-context";
+import {canAccessFarm, canAccessWarehouse, governanceAdmin, type AccessContext} from "@/lib/access-context";
 import {recordAuditEvent} from "@/lib/audit-ledger";
 import {hasManualFeedInput} from "@/lib/daily-record-input";
 import {feedAdmin, resolveFeedBatch, type FeedContext} from "@/lib/feed-control";
@@ -190,9 +190,7 @@ export async function recordExpense(context: SalesContext, input: unknown) {
   let farmId = value.farm_id ?? null;
   if (value.warehouse_id) {
     if (!context.supportSessionId) {
-      const now = new Date().toISOString();
-      const {data: assignment} = await governanceAdmin.from("user_warehouse_access").select("id").eq("org_id", context.orgId).eq("profile_id", context.userId).eq("warehouse_id", value.warehouse_id).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`).maybeSingle();
-      if (!assignment) throw new FarmOperationError("An active assignment to the selected warehouse is required.", 403);
+      if (!await canAccessWarehouse(context, value.warehouse_id)) throw new FarmOperationError("Farm access or explicit shared-store permission is required.", 403);
     }
     const {data: warehouse} = await governanceAdmin.from("warehouses").select("branch_id,farm_id").eq("id", value.warehouse_id).eq("org_id", context.orgId).eq("status", "active").maybeSingle();
     if (!warehouse) throw new FarmOperationError("Select an active warehouse in this organization.");
@@ -263,11 +261,7 @@ export async function saveFeedSession(context: FeedContext, input: unknown) {
   const warehouseId = String(body.warehouseId ?? "");
   if (status === "completed" && (!feedItemId || !warehouseId)) throw new FarmOperationError("Completed sessions require a feed item and warehouse.");
   if (feedItemId || warehouseId) {
-    const now = new Date().toISOString();
-    const {data: warehouseAccess} = context.supportSessionId
-      ? {data: {id: context.supportSessionId}}
-      : await governanceAdmin.from("user_warehouse_access").select("id").eq("org_id", context.orgId).eq("profile_id", context.userId).eq("warehouse_id", warehouseId).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`).maybeSingle();
-    if (!warehouseAccess) throw new FarmOperationError("An active assignment to the selected warehouse is required.", 403);
+    if (!await canAccessWarehouse(context, warehouseId)) throw new FarmOperationError("Farm access or explicit shared-store permission is required.", 403);
     const [{data: item}, {data: warehouse}] = await Promise.all([
       feedAdmin.from("inventory_items").select("id,unit").eq("id", feedItemId).eq("org_id", context.orgId).eq("category", "feed").maybeSingle(),
       feedAdmin.from("warehouses").select("id,branch_id").eq("id", warehouseId).eq("org_id", context.orgId).eq("branch_id", resolved.batch.branch_id).maybeSingle(),

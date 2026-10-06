@@ -24,6 +24,8 @@ export const todayErrorCodes = [
   "AUTH_REQUIRED",
   "ROLE_NOT_ALLOWED",
   "ASSIGNMENT_REQUIRED",
+  "FARM_ACCESS_REQUIRED",
+  "SHARED_WAREHOUSE_PERMISSION_REQUIRED",
   "FEATURE_DISABLED",
   "INVALID_COMMAND",
   "INVALID_PAYLOAD",
@@ -349,7 +351,7 @@ export type TodayTaskDetail = {
   farmId: string;
   flockId: string | null;
   workDate: string;
-  warehouses: Array<{id: string; name: string}>;
+  warehouses: Array<{id: string; name: string; access_source?: "farm_assignment" | "warehouse_assignment"}>;
   inventory: Array<{
     id: string;
     name: string;

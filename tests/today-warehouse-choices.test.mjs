@@ -9,15 +9,17 @@ const otherBranch = {id: "other-branch", farmId: null, branchId: "other"};
 const otherFarm = {id: "other-farm", farmId: "other", branchId: "branch"};
 const allowed = (task, warehouse, assignments = []) => isTodayWarehouseEligible(task, "farm", "branch", warehouse, new Set(assignments));
 
-test("feeding uses the selected farm or its branch store without a separate warehouse assignment", () => {
-  assert.equal(allowed("feeding", farmStore), true);
-  assert.equal(allowed("feeding", branchStore), true);
+test("feeding requires effective access and retains farm/branch compatibility", () => {
+  assert.equal(allowed("feeding", farmStore), false);
+  assert.equal(allowed("feeding", branchStore), false);
+  assert.equal(allowed("feeding", farmStore, [farmStore.id]), true);
+  assert.equal(allowed("feeding", branchStore, [branchStore.id]), true);
   assert.equal(allowed("feeding", otherBranch, [otherBranch.id]), false);
   assert.equal(allowed("feeding", otherFarm, [otherFarm.id]), false);
   assert.equal(isTodayWarehouseEligible("feeding", "farm", null, branchStore, new Set()), false);
 });
 
-test("stock, health, supplies, and expenses keep independent warehouse assignments", () => {
+test("all tasks use the effective warehouse scope without expanding task-specific eligibility", () => {
   for (const task of ["stock", "health_deaths", "routine_supplies", "expenses"]) {
     assert.equal(allowed(task, farmStore), false);
     assert.equal(allowed(task, branchStore), false);
@@ -31,11 +33,8 @@ test("stock, health, supplies, and expenses keep independent warehouse assignmen
 test("warehouse choices load only tenant-scoped, active, current assignments", async () => {
   const loader = await readFile(new URL("../src/lib/today-workspace/task-details.ts", import.meta.url), "utf8");
   const scope = loader.slice(loader.indexOf("async function assignedWarehouses"), loader.indexOf("async function inventoryOptions"));
-  assert.match(scope, /task !== "feeding"/);
-  assert.match(scope, /user_warehouse_access/);
-  assert.match(scope, /eq\("profile_id", context\.userId\)/);
-  assert.match(scope, /is\("revoked_at", null\)\.lte\("starts_at", now\)/);
-  assert.match(scope, /expires_at\.is\.null,expires_at\.gt/);
+  assert.match(scope, /effectiveWarehouseIds\(context\)/);
+  assert.doesNotMatch(scope, /user_warehouse_access|task !== "feeding"/);
   assert.match(scope, /eq\("org_id", context\.orgId\)/);
   assert.match(scope, /eq\("status", "active"\)/);
   assert.match(scope, /isTodayWarehouseEligible/);

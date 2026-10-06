@@ -25,6 +25,8 @@ export const todayErrorMessageKeys = {
   AUTH_REQUIRED: "unauthorized",
   ROLE_NOT_ALLOWED: "unauthorized",
   ASSIGNMENT_REQUIRED: "assignmentChanged",
+  FARM_ACCESS_REQUIRED: "farmAccess",
+  SHARED_WAREHOUSE_PERMISSION_REQUIRED: "sharedStorePermission",
   FEATURE_DISABLED: "unknown",
   INVALID_COMMAND: "validation",
   INVALID_PAYLOAD: "validation",

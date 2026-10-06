@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import {warehouseAssignmentScope, managerWarehouseAccess, managerHasWarehouseAccess} from "@/lib/warehouse-access";
 import "server-only";
 
 import { z } from "zod";
@@ -65,14 +66,13 @@ async function scope(ctx: AccessContext) {
   const now = new Date().toISOString();
   const [farms, warehouses] = await Promise.all([
     db.from("user_farm_access").select("farm_id").eq("org_id", ctx.orgId).eq("profile_id", ctx.userId).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`),
-    db.from("user_warehouse_access").select("warehouse_id").eq("org_id", ctx.orgId).eq("profile_id", ctx.userId).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`),
+    warehouseAssignmentScope(ctx),
   ]);
   return { farms: new Set<string>((farms.data ?? []).map((row: Row) => text(row.farm_id))), warehouses: new Set<string>((warehouses.data ?? []).map((row: Row) => text(row.warehouse_id))) };
 }
 
 function visible(row: Row, ctx: AccessContext, ids: Awaited<ReturnType<typeof scope>>) {
   if (ids.farms === null) return true;
-  if (text(row.owner_id) === ctx.userId) return true;
   const farmId = text(row.farm_id), warehouseId = text(row.warehouse_id);
   return Boolean((farmId && ids.farms.has(farmId)) || (warehouseId && ids.warehouses?.has(warehouseId)));
 }
@@ -165,7 +165,7 @@ async function ownerOptions(ctx: AccessContext): Promise<ActionOwner[]> {
   if (!ids.length) return [];
   const [farmAccess, warehouseAccess] = await Promise.all([
     db.from("user_farm_access").select("profile_id,farm_id,farms(name)").eq("org_id", ctx.orgId).in("profile_id", ids).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`),
-    db.from("user_warehouse_access").select("profile_id,warehouse_id,warehouses(name)").eq("org_id", ctx.orgId).in("profile_id", ids).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`),
+    Promise.all(ids.map(async (id: string) => (await managerWarehouseAccess(id, ctx.orgId)).map(row => ({profile_id: id, warehouses: {name: row.name}})))).then(groups => ({data: groups.flat()})),
   ]);
   return (people ?? []).map((person: Row) => {
     const farms = (farmAccess.data ?? []).filter((row: Row) => text(row.profile_id) === text(person.id)).map((row: Row) => text((row.farms as Row | null)?.name)).filter(Boolean);
@@ -242,7 +242,6 @@ export async function assignReconciliationFinding(ctx: AccessContext, findingId:
 
 async function assertScope(ctx: AccessContext, row: Row) {
   if (ctx.role === "ceo" || ctx.supportSessionId) return;
-  if (text(row.owner_id) === ctx.userId) return;
   if (row.farm_id && await canAccessFarm(ctx, text(row.farm_id))) return;
   if (row.warehouse_id && await canAccessWarehouse(ctx, text(row.warehouse_id))) return;
   throw new Error("This action is outside your active assignment.");
@@ -257,8 +256,7 @@ async function assertAssignableOwner(ctx: AccessContext, row: Row, ownerId: stri
     if (!data) throw new Error("That Farm Manager is not assigned to the affected farm.");
   }
   if (row.warehouse_id) {
-    const { data } = await db.from("user_warehouse_access").select("id").eq("profile_id", ownerId).eq("warehouse_id", row.warehouse_id).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`).maybeSingle();
-    if (!data) throw new Error("That Farm Manager is not assigned to the affected warehouse.");
+    if (!await managerHasWarehouseAccess(ownerId, text(row.warehouse_id))) throw new Error("That Farm Manager has no farm or shared-store access to the affected warehouse.");
   }
 }
 

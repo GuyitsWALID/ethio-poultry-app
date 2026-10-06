@@ -3,6 +3,8 @@
 import { usePageFilter, ResetPageFilters, PageSelectFilter } from "@/components/page-filter-controls";
 
 import { useEffect, useMemo, useState } from "react";
+import {useTranslations} from "next-intl";
+import {FarmManagerHandover} from "@/components/farm-manager-handover";
 
 import type { Database } from "@/types/supabase";
 
@@ -37,7 +39,7 @@ type FarmAccessRow = {
   revocation_reason?: string | null;
   assignment_status?: string;
 };
-type WarehouseRow={id:string;name:string};
+type WarehouseRow={id:string;name:string;farm_id:string|null;status:string};
 type WarehouseAccessRow={id:string;profile_id:string;warehouse_id:string;starts_at:string;expires_at:string|null;revoked_at:string|null;revocation_reason?:string|null;assignment_status?:string};
 
 const roleOptions: Array<{ value: AppRole; label: string }> = [
@@ -46,6 +48,7 @@ const roleOptions: Array<{ value: AppRole; label: string }> = [
 ];
 
 export default function UsersPage() {
+  const accessText=useTranslations("WarehouseAccess");
   const [userSearch,setUserSearch]=usePageFilter<string>("search","");
   const [roleFilter,setRoleFilter]=usePageFilter<string>("role","");
   const [farmFilter,setFarmFilter]=usePageFilter<string>("farm","");
@@ -160,6 +163,9 @@ export default function UsersPage() {
   const revokeAssignment=async(scopeType:"farm"|"warehouse",assignmentId:string,label:string)=>{if(!canManage)return;const reason=window.prompt(`Why should access to ${label} end?` )?.trim();if(!reason)return;if(reason.length<8){setError("Revocation reason must be at least eight characters.");return}setSaving(true);setError(null);const response=await fetch("/api/governance/assignments",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({scope_type:scopeType,assignment_id:assignmentId,reason})});const payload=await response.json();if(!response.ok)setError(payload.error??"Assignment could not be revoked.");else setSuccess(`${label} access revoked and retained in history.`);setSaving(false);await load()};
   const assignmentStatus=(row:{assignment_status?:string})=>row.assignment_status??"Unknown";
   const activeAssignment=(row:{assignment_status?:string})=>assignmentStatus(row)==="Active";
+  const hasWarehouseAccess=(profile:ProfileRow,warehouse:WarehouseRow)=>profile.is_active&&profile.role==="farm_manager"&&warehouse.status==="active"&&(warehouse.farm_id
+    ?farmAccess.some(a=>a.profile_id===profile.id&&a.farm_id===warehouse.farm_id&&activeAssignment(a))
+    :warehouseAccess.some(a=>a.profile_id===profile.id&&a.warehouse_id===warehouse.id&&activeAssignment(a)));
 
   return (
     <div className="space-y-6">
@@ -193,7 +199,7 @@ export default function UsersPage() {
           <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={selectedProfileId} onChange={(event) => setSelectedProfileId(event.target.value)}>
             <option value="">Select user</option>
             {profiles.filter((profile)=>profile.role==="farm_manager"&&profile.is_active).map((profile) => (
-              <option key={profile.id} value={profile.id}>{profile.full_name ?? profile.id} · {profile.role}</option>
+              <option key={profile.id} value={profile.id}>{profile.full_name ?? "Farm Manager"} · {profile.role}</option>
             ))}
           </select>
           <select disabled className="h-11 rounded-xl border border-sand-200 px-3 text-sm opacity-60" value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)}>
@@ -214,10 +220,13 @@ export default function UsersPage() {
           <button type="button" disabled={saving || !canManage || !selectedProfileId || !selectedFarmId} onClick={() => void addAssignment("farm")} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">
             Add Farm Access
           </button>
-          <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={selectedWarehouseId} onChange={(event)=>setSelectedWarehouseId(event.target.value)}><option value="">Select warehouse</option>{warehouses.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select>
+          <select className="h-11 rounded-xl border border-sand-200 px-3 text-sm" value={selectedWarehouseId} onChange={(event)=>setSelectedWarehouseId(event.target.value)}><option value="">{accessText("sharedStore")}</option>{warehouses.filter(row=>!row.farm_id).map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select>
           <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-600"><span>Access expiry (optional)</span><input type="datetime-local" aria-label="Assignment expiry" className="h-8 rounded-xl border border-sand-200 px-3 text-sm font-normal normal-case tracking-normal text-forest-900" value={expiresAt} onChange={(event)=>setExpiresAt(event.target.value)}/></label>
           <button type="button" disabled={saving||!canManage||!selectedProfileId||!selectedWarehouseId} onClick={()=>void addAssignment("warehouse")} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60">{saving?"Granting access…":"Add Warehouse Access"}</button>
         </div>
+        <p className="mt-3 text-sm text-forest-600">{accessText("includesStores")}</p>
+        {canManage&&<FarmManagerHandover key={`${selectedFarmId}:${selectedProfileId}`} farmId={selectedFarmId} replacementId={selectedProfileId} onChanged={()=>void load()}/>}
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">{warehouses.map(w=><div key={w.id} className="rounded-xl bg-sand-50 p-3 text-sm"><strong>{w.name}</strong><p>{w.farm_id?accessText("inherited"):accessText("explicit")}: {(w.farm_id?farmAccess.filter(a=>a.farm_id===w.farm_id&&activeAssignment(a)):warehouseAccess.filter(a=>a.warehouse_id===w.id&&activeAssignment(a))).map(a=>profileNameMap.get(a.profile_id)??"—").join(", ")||accessText("noManager")}</p></div>)}</div>
       </section>
 
       <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
@@ -240,12 +249,12 @@ export default function UsersPage() {
                 <tr><td className="px-2 py-4 text-forest-600" colSpan={7}>Loading users...</td></tr>
               ) : profiles.length === 0 ? (
                 <tr><td className="px-2 py-4 text-forest-600" colSpan={7}>No users found.</td></tr>
-              ) : profiles.filter(profile=>(!userSearch||(profile.full_name??"").toLowerCase().includes(userSearch.toLowerCase()))&&(!roleFilter||profile.role===roleFilter)&&(!farmFilter||farmAccess.some(access=>access.profile_id===profile.id&&access.farm_id===farmFilter&&access.assignment_status==="active"))&&(!warehouseFilter||warehouseAccess.some(access=>access.profile_id===profile.id&&access.warehouse_id===warehouseFilter&&access.assignment_status==="active"))).map((profile) => {
-                const userFarms = farmAccess.filter((access) => access.profile_id === profile.id&&activeAssignment(access)).map((access) => farmNameMap.get(access.farm_id) ?? access.farm_id);
-                const userWarehouses=warehouseAccess.filter(access=>access.profile_id===profile.id&&activeAssignment(access)).map(access=>warehouses.find(row=>row.id===access.warehouse_id)?.name??access.warehouse_id);
+              ) : profiles.filter(profile=>(!userSearch||(profile.full_name??"").toLowerCase().includes(userSearch.toLowerCase()))&&(!roleFilter||profile.role===roleFilter)&&(!farmFilter||farmAccess.some(access=>access.profile_id===profile.id&&access.farm_id===farmFilter&&activeAssignment(access)))&&(!warehouseFilter||warehouses.some(w=>w.id===warehouseFilter&&hasWarehouseAccess(profile,w)))).map((profile) => {
+                const userFarms = farmAccess.filter((access) => access.profile_id === profile.id&&activeAssignment(access)).map((access) => farmNameMap.get(access.farm_id) ?? "Unknown farm");
+                const userWarehouses=warehouses.filter(w=>hasWarehouseAccess(profile,w)).map(w=>w.name);
                 return (
                   <tr key={profile.id} className="border-b border-sand-100 align-top">
-                    <td className="px-2 py-2 font-medium text-forest-900">{profile.full_name ?? profile.id}</td>
+                    <td className="px-2 py-2 font-medium text-forest-900">{profile.full_name ?? "Unnamed user"}</td>
                     <td className="px-2 py-2 text-forest-700">{profile.phone ?? "-"}</td>
                     <td className="px-2 py-2">
                       <select
@@ -280,7 +289,7 @@ export default function UsersPage() {
 
       <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
         <div className="border-b border-sand-200 p-5"><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Custody timeline</p><h3 className="mt-1 font-display text-2xl font-semibold text-forest-900">Assignment history</h3><p className="mt-1 text-sm text-forest-600">Current, scheduled, expired, and revoked access stays visible for review.</p></div>
-        <div className="divide-y divide-sand-100">{[...farmAccess.map(row=>({kind:"farm" as const,row,label:farmNameMap.get(row.farm_id)??row.farm_id})),...warehouseAccess.map(row=>({kind:"warehouse" as const,row,label:warehouses.find(item=>item.id===row.warehouse_id)?.name??row.warehouse_id}))].length===0?<p className="p-5 text-sm text-forest-600">No assignment history exists.</p>:[...farmAccess.map(row=>({kind:"farm" as const,row,label:farmNameMap.get(row.farm_id)??row.farm_id})),...warehouseAccess.map(row=>({kind:"warehouse" as const,row,label:warehouses.find(item=>item.id===row.warehouse_id)?.name??row.warehouse_id}))].map(item=>{const profile=profiles.find(row=>row.id===item.row.profile_id);const status=assignmentStatus(item.row);return <article key={`${item.kind}-${item.row.id}`} className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-forest-900">{item.label}</strong><span className="rounded-full bg-sand-100 px-2 py-1 text-[9px] font-semibold uppercase text-forest-700">{item.kind}</span><span className={`rounded-full px-2 py-1 text-[9px] font-semibold uppercase ${status==="Active"?"bg-leaf-500/15 text-forest-800":status==="Scheduled"?"bg-sky-500/10 text-sky-700":status==="Revoked"?"bg-ember-500/10 text-ember-700":"bg-sand-100 text-forest-500"}`}>{status}</span></div><p className="mt-1 text-xs text-forest-600">{profile?.full_name??item.row.profile_id} · starts {new Date(item.row.starts_at).toLocaleString()}{item.row.expires_at?` · expires ${new Date(item.row.expires_at).toLocaleString()}`:" · no expiry"}</p>{item.row.revocation_reason?<p className="mt-1 text-xs text-ember-700">Reason: {item.row.revocation_reason}</p>:null}</div>{status==="Active"&&canManage?<button type="button" disabled={saving} onClick={()=>void revokeAssignment(item.kind,item.row.id,item.label)} className="min-h-10 rounded-xl border border-ember-300 px-4 text-xs font-semibold text-ember-700 hover:bg-ember-50 disabled:opacity-50">Revoke access</button>:null}</article>})}</div>
+        <div className="divide-y divide-sand-100">{[...farmAccess.map(row=>({kind:"farm" as const,row,label:farmNameMap.get(row.farm_id)??"Unknown farm"})),...warehouseAccess.map(row=>({kind:"warehouse" as const,row,label:warehouses.find(item=>item.id===row.warehouse_id)?.name??"Unknown warehouse"}))].length===0?<p className="p-5 text-sm text-forest-600">No assignment history exists.</p>:[...farmAccess.map(row=>({kind:"farm" as const,row,label:farmNameMap.get(row.farm_id)??"Unknown farm"})),...warehouseAccess.map(row=>({kind:"warehouse" as const,row,label:warehouses.find(item=>item.id===row.warehouse_id)?.name??"Unknown warehouse"}))].map(item=>{const profile=profiles.find(row=>row.id===item.row.profile_id);const status=assignmentStatus(item.row);return <article key={`${item.kind}-${item.row.id}`} className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"><div><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-forest-900">{item.label}</strong><span className="rounded-full bg-sand-100 px-2 py-1 text-[9px] font-semibold uppercase text-forest-700">{item.kind}</span><span className={`rounded-full px-2 py-1 text-[9px] font-semibold uppercase ${status==="Active"?"bg-leaf-500/15 text-forest-800":status==="Scheduled"?"bg-sky-500/10 text-sky-700":status==="Revoked"?"bg-ember-500/10 text-ember-700":"bg-sand-100 text-forest-500"}`}>{status}</span></div><p className="mt-1 text-xs text-forest-600">{profile?.full_name??"Unnamed user"} · starts {new Date(item.row.starts_at).toLocaleString()}{item.row.expires_at?` · expires ${new Date(item.row.expires_at).toLocaleString()}`:" · no expiry"}</p>{item.row.revocation_reason?<p className="mt-1 text-xs text-ember-700">Reason: {item.row.revocation_reason}</p>:null}</div>{status==="Active"&&canManage?<button type="button" disabled={saving} onClick={()=>void revokeAssignment(item.kind,item.row.id,item.label)} className="min-h-10 rounded-xl border border-ember-300 px-4 text-xs font-semibold text-ember-700 hover:bg-ember-50 disabled:opacity-50">Revoke access</button>:null}</article>})}</div>
       </section>
     </div>
   );

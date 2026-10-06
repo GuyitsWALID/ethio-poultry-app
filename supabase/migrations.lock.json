@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 74,
-  "latest": "20261005001000_ceo_workspace_pilot_gate.sql",
-  "aggregateSha256": "7684c4683bcef0fc99f8377b337203d2eccc99f7119deb93846df19e67a5a59b",
+  "count": 76,
+  "latest": "20261006001000_atomic_farm_manager_handover.sql",
+  "aggregateSha256": "2d69f903f47d51a5807f76566232a2257783751bcb295ce1febb2e8a3d333180",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -154,6 +154,8 @@
     "20260930000000_ceo_today_workspace_toggle.sql": "26473c1ab0bccc255320982491ee295716832811089d1637cd374d30191306e5",
     "20260930001000_fix_feed_session_warehouse_scope.sql": "d2c8c77df4e2c8f7cdb3594ae52cc25afda728e344c9dd6d5024177bedcc9864",
     "20261005000000_today_rollout_authorization.sql": "2dfc423f1912724af910cdcec6fce88f8b4d426d55bc9b20c9273af35fbffdca",
-    "20261005001000_ceo_workspace_pilot_gate.sql": "b608111a33c73de31a8acd38c84653d8016713bf714eeddfedec7d9e2b9aaea5"
+    "20261005001000_ceo_workspace_pilot_gate.sql": "b608111a33c73de31a8acd38c84653d8016713bf714eeddfedec7d9e2b9aaea5",
+    "20261006000000_effective_farm_warehouse_access.sql": "d04a6a452c98974c118a9ed7e23ab00ef41dfed9ba847a551648848cbdbd6fd3",
+    "20261006001000_atomic_farm_manager_handover.sql": "19c92fa8e82e4602441734d1e6c74ebe138d0fa3450dde20bdf6f22c461004ad"
   }
 }

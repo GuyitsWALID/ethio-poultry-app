@@ -13,7 +13,7 @@ import {ReportAnalyticsHandoff} from "@/components/reports/report-analytics-hand
 import { formatEtb, formatNumber } from "@/i18n/formats";
 import type { AppLocale } from "@/i18n/locale";
 
-type WarehouseRow={id:string;name:string;branch_name:string;farm_name:string|null;farm_id:string|null;type:string;status:string};
+type WarehouseRow={id:string;name:string;branch_name:string;farm_name:string|null;farm_id:string|null;type:string;status:string;access_source?:"farm_assignment"|"warehouse_assignment";manager_names?:string[]};
 type CatalogItem={id:string;name:string;category:string;unit:string;reorder_level:number|null;unit_cost:number|null};
 type StockItem=CatalogItem&{carriedOpening:number;received:number;feedUsage:number;dailyUsage:number;healthUsage:number;vaccineUsage:number;transfersAndAdjustments:number;currentBalance:number;latestCount:{date:string;quantity:number;variance:number}|null;reorderStatus:"out"|"reorder"|"healthy";stockValue:number};
 type Movement={item_id:string;itemName:string;transaction_date:string;sourceLabel:string;displayQuantity:number;unit_cost:number|null;reference_doc:string|null};
@@ -34,6 +34,7 @@ async function jsonRequest(url:string,init?:RequestInit){const response=await fe
 export default function InventoryPage(){
   const locale=useLocale() as AppLocale;const t=useTranslations("Inventory");
   const {enabled:todayEntryEnabled,todayHref}=useTodayEntryMode();
+  const accessText=useTranslations("WarehouseAccess");
   const router=useRouter();
   const [month,setMonth]=usePageFilter<string>("month", currentMonth());const [warehouseId,setWarehouseId]=usePageFilter<string>("warehouseId", "");const [data,setData]=useState<Workspace|null>(null);const [view,setView]=useState<View>("stock");
   const [loading,setLoading]=useState(true);const [saving,setSaving]=useState(false);const [error,setError]=useState<string|null>(null);const [success,setSuccess]=useState<string|null>(null);
@@ -88,6 +89,7 @@ export default function InventoryPage(){
     {error?<div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>:null}{success?<div role="status" className="flex items-center gap-2 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-800"><CheckCircle2 className="h-4 w-4"/>{success}</div>:null}
     <section className="rounded-2xl border border-sand-200 bg-white p-4 shadow-sm"><div className="grid gap-4 lg:grid-cols-[minmax(260px,1fr)_220px_auto] lg:items-end"><label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("selector.warehouse")}<select className={input} value={warehouseId} onChange={event=>chooseWarehouse(event.target.value)}><option value="">{t("selector.choose")}</option>{data?.warehouses.map(row=><option key={row.id} value={row.id}>{row.name}{row.farm_name?` · ${row.farm_name}`:` · ${t("selector.central")}`}</option>)}</select></label><label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("selector.month")}<input className={input} type="month" value={month} onChange={event=>setMonth(event.target.value)}/></label><div className="rounded-xl bg-sand-50 px-4 py-3 text-xs text-forest-600"><strong className="block text-sm text-forest-900">{selected?.branch_name??t("selector.none")}</strong>{selected?.farm_name??t("selector.begin")}</div></div></section>
     {!loading&&!data?.warehouses.length?<section className="rounded-3xl border border-dashed border-amber-400 bg-amber-50 p-8 text-center"><Warehouse className="mx-auto h-8 w-8 text-amber-700"/><h2 className="mt-3 font-display text-2xl font-semibold text-forest-900">{t("noWarehouse.title")}</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-forest-700">{t("noWarehouse.copy")}</p><a href="/app/governance" className="mt-4 inline-flex min-h-11 items-center rounded-xl bg-forest-900 px-5 py-3 text-sm font-semibold text-white">{t("noWarehouse.action")}</a></section>:null}
+    {selected?.access_source?<p className="rounded-xl bg-sand-50 p-4 text-sm text-forest-700">{accessText(selected.access_source==="farm_assignment"?"inherited":"explicit")}: {selected.manager_names?.join(", ")||accessText("noManager")}</p>:null}
     {selected&&!data?.initialization&&data?.meta.canOperate?<OpeningSetup rows={openingRows} setRows={setOpeningRows} onSubmit={submitOpening} saving={saving}/>:null}
     {selected&&data?.initialization?<>
       <ReportAnalyticsHandoff section="stock" input={{warehouseId, month}}>

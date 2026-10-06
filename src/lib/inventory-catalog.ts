@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { type AccessContext, governanceAdmin } from "@/lib/access-context";
 import { recordAuditEvent } from "@/lib/audit-ledger";
+import {effectiveWarehouseIds} from "@/lib/warehouse-access";
 
 const inventoryCategories = [
   "feed",
@@ -33,17 +34,7 @@ export class InventoryCatalogError extends Error {
 
 async function assignedWarehouseIds(ctx: AccessContext) {
   if (ctx.role !== "farm_manager") return null;
-  const now = new Date().toISOString();
-  const { data, error } = await governanceAdmin
-    .from("user_warehouse_access")
-    .select("warehouse_id")
-    .eq("org_id", ctx.orgId)
-    .eq("profile_id", ctx.userId)
-    .is("revoked_at", null)
-    .lte("starts_at", now)
-    .or(`expires_at.is.null,expires_at.gt.${now}`);
-  if (error) throw new InventoryCatalogError(error.message, 500);
-  return [...new Set((data ?? []).map((row) => String(row.warehouse_id)))];
+  return effectiveWarehouseIds(ctx);
 }
 
 export async function getInventoryCatalog(ctx: AccessContext) {

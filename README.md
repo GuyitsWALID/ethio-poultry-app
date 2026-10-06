@@ -82,7 +82,8 @@ Unknown, missing, inactive, and retired roles are denied. Branch membership is a
 
 - Create the organization structure from branch to farm, house, flock, and batch cycle.
 - Track active and historical flock/batch lineage.
-- Assign Farm Managers directly to farms and warehouses with start, expiry, revocation, and reason history.
+- Assign one active Farm Manager per farm. Farm access includes every active warehouse with that farm's `farm_id`; shared stores require a separate explicit grant, including for feeding. Start, expiry, revocation, and reason history remain available.
+- Use the CEO handover preview to replace a manager immediately. It transfers unfinished farm/store work with its deadlines and evidence, requires the replacement to acknowledge it, and leaves work awaiting CEO verification unchanged. Shared-only work and shared-store grants do not transfer.
 - Keep CEO authority separate from routine operational entry.
 
 ### Executive command center
@@ -211,7 +212,7 @@ Requests show readable source context, current and proposed values, the submitti
 1. A System Administrator onboards the organization and initial CEO.
 2. The CEO creates the branch, farm, house, flock, and initial batch structure.
 3. The CEO creates warehouses where physical stock belongs.
-4. The CEO assigns each Farm Manager to the farms and warehouses they operate.
+4. The CEO assigns each Farm Manager to their farms once, then explicitly grants any shared stores they need. Farm-owned stores inherit access automatically.
 5. The Farm Manager opens the warehouse, registers initial stock once, and begins daily operations.
 
 ### Complete a normal farm day

@@ -46,8 +46,7 @@ begin
     (v_org, v_manager, v_locked_farm, now() - interval '1 day');
   insert into public.warehouses(id, org_id, branch_id, farm_id, name, type, status)
   values (v_warehouse, v_org, v_branch, v_farm, 'Today command store', 'farm_store', 'active');
-  insert into public.user_warehouse_access(org_id, profile_id, warehouse_id, starts_at)
-  values (v_org, v_manager, v_warehouse, now() - interval '1 day');
+  -- Farm assignment is the sole authority for this farm-owned store.
   insert into public.inventory_items(id, org_id, name, category, unit, reorder_level, unit_cost) values
     ('13000000-0000-4000-8000-000000000011', v_org, 'Today command vitamin', 'vitamin', 'bottle', 0, 10),
     ('13000000-0000-4000-8000-000000000012', v_org, 'Today command medicine', 'medicine', 'bottle', 0, 10);

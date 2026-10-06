@@ -2,7 +2,7 @@
 
 import {OperationDateInput} from "@/components/operation-date-input";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {useSearchParams} from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -25,7 +25,7 @@ import type { AppLocale } from "@/i18n/locale";
 import type { TodayTask, TodayWorkspace } from "@/lib/today-workspace/contracts";
 import type {FinishIssue, ReviewTask} from "@/lib/today-workspace/finish-review";
 
-type WorkspaceError = "FEATURE_DISABLED" | "ROLE_NOT_ALLOWED" | "ASSIGNMENT_REQUIRED" | "LOAD_FAILED";
+type WorkspaceError = "FEATURE_DISABLED" | "ROLE_NOT_ALLOWED" | "ASSIGNMENT_REQUIRED" | "ACCESS_CHANGED" | "LOAD_FAILED";
 type AssignedFarm = {id: string; name: string; branch_id: string};
 
 function addisToday() {
@@ -65,6 +65,25 @@ export function TodayWorkspaceScreen() {
   const [advanceFrom, setAdvanceFrom] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [finishIssues, setFinishIssues] = useState<FinishIssue[]>([]);
+  const accessRevision=useRef<string|null>(null);
+  const accessText=useTranslations("WarehouseAccess");
+  useEffect(()=>{
+    if(role!=="farm_manager")return;
+    const controller=new AbortController();let checking=false;
+    const check=async()=>{
+      if(!navigator.onLine||checking)return;checking=true;
+      try{
+        const response=await fetch("/api/me/warehouse-access",{cache:"no-store",signal:controller.signal});
+        if(!response.ok){if(response.status===401||response.status===403)setError("ACCESS_CHANGED");return;}
+        const body=await response.json();
+        if(accessRevision.current&&accessRevision.current!==body.revision)setError("ACCESS_CHANGED");
+        accessRevision.current=body.revision;
+      }catch{/* Preserve drafts on a network failure. Server authorization still runs on save. */}finally{checking=false;}
+    };
+    void check();window.addEventListener("focus",check);window.addEventListener("online",check);window.addEventListener("ethiopoultry:access-changed",check);
+    const timer=window.setInterval(()=>{if(document.visibilityState==="visible")void check();},60000);
+    return()=>{controller.abort();window.clearInterval(timer);window.removeEventListener("focus",check);window.removeEventListener("online",check);window.removeEventListener("ethiopoultry:access-changed",check);};
+  },[role]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setGuideOpen(window.localStorage.getItem("ethiopoultry.today.guide.dismissed.v1") !== "true"), 0);
@@ -176,7 +195,7 @@ export function TodayWorkspaceScreen() {
         const code = body.error_code;
         if (code === "FEATURE_DISABLED" || code === "ROLE_NOT_ALLOWED" || code === "ASSIGNMENT_REQUIRED") setError(code);
         else setError("LOAD_FAILED");
-        setWorkspace(null);
+        if(code!=="ASSIGNMENT_REQUIRED")setWorkspace(null);
         return;
       }
       const next = body as TodayWorkspace;
@@ -279,13 +298,13 @@ export function TodayWorkspaceScreen() {
     </section>
 
     {error === "FEATURE_DISABLED" ? <section className="rounded-3xl border border-amber-300 bg-amber-50 p-7 text-center"><h2 className="font-display text-2xl font-semibold text-forest-900">{t("featureDisabled")}</h2><p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-forest-700">{t("featureDisabledHelp")}</p><Link href="/app/farm-manager" className="mt-5 inline-flex min-h-12 items-center rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white">{t("openDashboard")}</Link></section>:null}
-    {error && error !== "FEATURE_DISABLED" ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><span>{error === "ROLE_NOT_ALLOWED"?t("wrongRole"):error === "ASSIGNMENT_REQUIRED"?t("noFarms"):t("loadFailed")}</span><button type="button" onClick={reload} className="min-h-11 rounded-xl border border-red-300 px-4 font-semibold">{t("refresh")}</button></div>:null}
+    {error && error !== "FEATURE_DISABLED" ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><span>{error === "ACCESS_CHANGED"?accessText("changed"):error === "ROLE_NOT_ALLOWED"?t("wrongRole"):error === "ASSIGNMENT_REQUIRED"?accessText("missingFarm"):t("loadFailed")}</span><button type="button" onClick={reload} className="min-h-11 rounded-xl border border-red-300 px-4 font-semibold">{t("refresh")}</button></div>:null}
     {(loading || (farmId && !workspace && !error)) ? <div className="grid gap-3 sm:grid-cols-2"><div className="h-40 animate-pulse rounded-2xl bg-sand-100 motion-reduce:animate-none"/><div className="h-40 animate-pulse rounded-2xl bg-sand-100 motion-reduce:animate-none"/></div>:null}
 
-    {workspace && !error ? <>
+    {workspace && (!error||error==="ACCESS_CHANGED"||error==="ASSIGNMENT_REQUIRED") ? <fieldset disabled={Boolean(error)} className="min-w-0 space-y-6 border-0 p-0">
       {!workspace.flocks.length ? <section className="rounded-3xl border border-dashed border-sand-300 bg-white p-8 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-leaf-600"/><h2 className="mt-3 font-display text-2xl font-semibold text-forest-900">{t("noActiveFlock")}</h2><p className="mt-2 text-sm text-forest-600">{t("noActiveFlockHelp")}</p></section> : null}
       {visibleFlocks.map((flock)=><section key={flock.id} className="overflow-hidden rounded-3xl border border-sand-200 bg-sand-50 shadow-sm"><header className="grid gap-4 border-b border-sand-200 bg-white p-5 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-display text-2xl font-semibold text-forest-900">{flock.code}</h2><span className="rounded-full bg-forest-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white">{flock.type.replaceAll("_"," ")}</span></div><p className="mt-1 text-sm text-forest-600">{flock.houseLabel}{flock.batchLabel?` · ${flock.batchLabel}`:""} · {t("age",{days:flock.ageDays})}</p></div><div className="grid grid-cols-2 gap-2 text-xs"><div className="rounded-xl bg-sand-50 px-3 py-2"><span className="block text-forest-500">{t("openingBirds")}</span><strong className="mt-1 block text-base text-forest-900">{flock.openingBirds===null?"—":formatNumber(flock.openingBirds,locale)}</strong></div><div className="rounded-xl bg-sand-50 px-3 py-2"><span className="block text-forest-500">{t("previousClose")}</span><strong className="mt-1 block text-base text-forest-900">{flock.previousClosingBirds===null?"—":formatNumber(flock.previousClosingBirds,locale)}</strong></div></div></header><div className="grid gap-3 p-4">{flock.tasks.filter((task)=>task.applicable).map((task)=>task.code === "birds" ? <BirdCheckCard key={`${flock.id}:${flock.birdCheck.resourceRevision ?? "new"}`} flock={flock} task={task} farmId={workspace.farm.id} workDate={workspace.workDate} online={online} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onSaved={()=>saved(task)}/> : <EmbeddedTaskCard key={task.code} task={task} flock={flock} farmId={workspace.farm.id} workDate={workspace.workDate} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onChanged={reload} onSaved={()=>saved(task)}/>)}</div></section>)}
       <section><div className="mb-3 flex items-center gap-2"><HeartPulse className="h-5 w-5 text-forest-600"/><h2 className="font-display text-xl font-semibold text-forest-900">{t("additional")}</h2></div><div className="grid gap-3">{workspace.farmTasks.filter((task)=>task.applicable).map((task)=><EmbeddedTaskCard key={task.code} task={task} flock={visibleFlocks[0]} farmId={workspace.farm.id} workDate={workspace.workDate} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onChanged={reload} onSaved={()=>saved(task)} dayRevision={workspace.operatingDay.revision} reviewTasks={reviewTasks} finishIssues={finishIssues} online={online} canFinish={workspace.capabilities.canFinish}/>)}</div></section>
-    </>:null}
+    </fieldset>:null}
   </main>;
 }

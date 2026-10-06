@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import {warehouseAssignmentScope} from "@/lib/warehouse-access";
 import "server-only";
 
 import type { AccessContext } from "@/lib/access-context";
@@ -38,7 +39,7 @@ async function profileSnapshot(ctx:AccessContext){
   const now=new Date().toISOString();
   const [farmAssignments,warehouseAssignments]=await Promise.all([
     governanceAdmin.from("user_farm_access").select("farm_id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`),
-    governanceAdmin.from("user_warehouse_access").select("warehouse_id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`),
+    warehouseAssignmentScope(ctx),
   ]);
   const farmIds=(farmAssignments.data??[]).map(row=>String(row.farm_id));
   const warehouseIds=(warehouseAssignments.data??[]).map(row=>String(row.warehouse_id));
@@ -124,7 +125,7 @@ export async function loadGovernanceDesk(ctx:AccessContext){
   if(ctx.role==="farm_manager"&&!ctx.supportSessionId){
     const now=new Date().toISOString();const [farms,warehouses]=await Promise.all([
       governanceAdmin.from("user_farm_access").select("farm_id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`),
-      governanceAdmin.from("user_warehouse_access").select("warehouse_id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`),
+      warehouseAssignmentScope(ctx),
     ]);const farmIds=new Set((farms.data??[]).map(row=>String(row.farm_id)));const warehouseIds=new Set((warehouses.data??[]).map(row=>String(row.warehouse_id)));
     rows=rows.filter((row:Row)=>row.requested_by===ctx.userId||(row.status==="approved"&&(farmIds.has(String(row.farm_id))||warehouseIds.has(String(row.warehouse_id)))));
   }

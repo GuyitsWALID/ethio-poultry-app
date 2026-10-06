@@ -294,9 +294,13 @@ export const managerTodayMessageKeys = [
   "Errors.validation",
   "Errors.offlineFinish",
   "Errors.unknown",
+  "Errors.farmAccess",
+  "Errors.sharedStorePermission",
 ] as const;
 
 export const pendingTerminologyReviewKeys = [
+  "Errors.farmAccess",
+  "Errors.sharedStorePermission",
   "Today.embedded.addFeeding",
   "Today.embedded.editFeeding",
   "Today.embedded.cancelFeeding",

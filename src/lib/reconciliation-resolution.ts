@@ -2,6 +2,7 @@
 import "server-only";
 
 import { canAccessFarm, canAccessWarehouse, governanceAdmin, type AccessContext } from "@/lib/access-context";
+import {managerWarehouseAccess} from "@/lib/warehouse-access";
 import { formatReconciliationNumber } from "@/lib/reconciliation-presentation";
 import { reconciliationWorkflow } from "@/lib/reconciliation-workflow";
 import { resolutionHref, resolutionRules, type ReconciliationResolution, type ResolutionAction, type ResolutionOwner, type ResolutionSourceRecord } from "@/lib/reconciliation-resolution-contract";
@@ -36,8 +37,8 @@ async function eligibleOwners(ctx: AccessContext, finding: Row): Promise<Resolut
       allowed = Boolean(data); if (data?.farms?.name) scopes.push(text(data.farms.name));
     }
     if (allowed && finding.warehouse_id) {
-      const { data } = await db.from("user_warehouse_access").select("warehouses(name)").eq("org_id", ctx.orgId).eq("profile_id", person.id).eq("warehouse_id", finding.warehouse_id).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`).maybeSingle();
-      allowed = Boolean(data); if (data?.warehouses?.name) scopes.push(text(data.warehouses.name));
+      const store = (await managerWarehouseAccess(text(person.id), ctx.orgId)).find(row => row.id === finding.warehouse_id);
+      allowed = Boolean(store); if (store) scopes.push(store.name);
     }
     if (allowed) owners.push({ id: text(person.id), name: text(person.full_name) || "Farm Manager", scope: scopes.join(" · ") || "Organization assignment" });
   }

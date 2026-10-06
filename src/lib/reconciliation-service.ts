@@ -1,3 +1,4 @@
+import {warehouseAssignmentScope} from "@/lib/warehouse-access";
 import "server-only";
 
 import {
@@ -680,14 +681,7 @@ async function scopeIds(ctx: AccessContext) {
       .is("revoked_at", null)
       .lte("starts_at", now)
       .or(`expires_at.is.null,expires_at.gt.${now}`),
-    governanceAdmin
-      .from("user_warehouse_access")
-      .select("warehouse_id")
-      .eq("org_id", ctx.orgId)
-      .eq("profile_id", ctx.userId)
-      .is("revoked_at", null)
-      .lte("starts_at", now)
-      .or(`expires_at.is.null,expires_at.gt.${now}`),
+    warehouseAssignmentScope(ctx),
   ]);
   return {
     farmIds: new Set((farms.data ?? []).map((row) => String(row.farm_id))),

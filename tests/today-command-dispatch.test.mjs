@@ -44,7 +44,8 @@ test("the service delegates each command to a server-only atomic function", () =
   assert.match(service, /import "server-only"/);
   assert.match(service, /dispatch_today_command_v1/);
   assert.match(service, /mapDatabaseError/);
-  assert.doesNotMatch(service, /governanceAdmin/);
+  assert.match(service, /auth\.rpc\("dispatch_today_command_v1"/);
+  assert.doesNotMatch(service, /governanceAdmin[\s\S]{0,150}\.(insert|update|upsert|delete)\(/);
 });
 
 test("the POST endpoint is thin, private, and returns structured statuses", () => {

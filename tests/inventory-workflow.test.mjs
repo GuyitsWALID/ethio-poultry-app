@@ -62,7 +62,8 @@ test("inventory catalogue and ledger loading use the governed server boundary", 
   assert.doesNotMatch(page, /\.from\("inventory_items"\)/);
   assert.doesNotMatch(page, /\.from\("stock_ledger"\)/);
   assert.match(catalogRoute, /getAccessContext\(\{ tenant: true \}\)/);
-  assert.match(catalog, /user_warehouse_access/);
+  assert.match(catalog, /effectiveWarehouseIds\(ctx\)/);
+  assert.doesNotMatch(catalog, /user_warehouse_access/);
   assert.match(catalog, /inventory\.catalogue_item\.created/);
   assert.match(catalog, /Only a Farm Manager with an assigned warehouse/);
 });

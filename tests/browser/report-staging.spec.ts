@@ -38,6 +38,19 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
       return response.json();
     };
     const stock = await read(`/api/inventory/workspace?month=${input.month}`);
+    if (role === "FARM_MANAGER") {
+      const accessResponse=await page.request.get("/api/me/warehouse-access");
+      expect(accessResponse.status()).toBe(200);
+      expect(accessResponse.headers()["cache-control"]).toContain("no-store");
+      const access=await accessResponse.json();
+      for (const warehouse of stock.warehouses) {
+        const effective=access.warehouses.find((row: {id:string})=>row.id===warehouse.id);
+        expect(effective, "Stock and effective-access readers must agree").toBeTruthy();
+        expect(effective.access_source).toBe(warehouse.farm_id?"farm_assignment":"warehouse_assignment");
+      }
+      const denied=await page.request.get(`/api/governance/assignments/handover?farm_id=${farmId}&replacement_id=${context.userId}`);
+      expect(denied.status(), "Farm Managers cannot initiate CEO handover").toBe(403);
+    }
     input.warehouseId = stock.warehouses[0]?.id;
     const batches = options.batches.filter((batch: {farm_id: string}) => !farmId || batch.farm_id === farmId);
     expect(batches.length, "Populated feed batch required").toBeGreaterThan(0);

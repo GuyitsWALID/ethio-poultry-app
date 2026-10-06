@@ -45,8 +45,7 @@ begin
   values (v_org, v_manager, v_farm, now() - interval '1 day');
   insert into public.warehouses(id, org_id, branch_id, farm_id, name, type, status)
   values (v_warehouse, v_org, v_branch, v_farm, 'Integration Store', 'farm_store', 'active');
-  insert into public.user_warehouse_access(org_id, profile_id, warehouse_id, starts_at)
-  values (v_org, v_manager, v_warehouse, now() - interval '1 day');
+  -- Farm assignment is the sole authority for this farm-owned store.
   insert into public.inventory_items(id, org_id, name, category, unit, unit_cost)
   values
     (v_feed_item, v_org, 'Integration Layer Feed', 'feed', 'kg', 20),

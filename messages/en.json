@@ -792,7 +792,29 @@
       "finish": "Finish day"
     }
   },
+  "WarehouseAccess": {
+    "includesStores": "Includes all warehouses belonging to this farm.",
+    "sharedStore": "Choose a shared warehouse",
+    "inherited": "Manager inherited from farm",
+    "explicit": "Managers with shared-store permission",
+    "noManager": "No active manager",
+    "missingFarm": "Ask the CEO to assign you to this farm before using its stores.",
+    "missingShared": "Ask the CEO for permission to use this shared warehouse, including for feeding.",
+    "changed": "Your assignment changed. Refresh access before continuing. Your draft is preserved.",
+    "handover": "Replace the farm manager",
+    "handoverHelp": "Select the farm and replacement above. Review who will receive its stores and unfinished work.",
+    "preview": "Review handover",
+    "previewFailed": "Handover could not be reviewed. Check the selected farm and replacement, then refresh.",
+    "applyFailed": "Handover was not applied. Refresh and review the current assignment.",
+    "unfinished": "Unfinished jobs to transfer: {count}",
+    "preserved": "Deadlines, evidence and overdue warnings stay unchanged. Submitted work stays with the CEO. Shared-store permissions do not transfer.",
+    "reason": "Why are you replacing the manager?",
+    "confirm": "I confirm the current manager and this immediate handover.",
+    "replace": "Confirm and replace manager"
+  },
   "Errors": {
+    "farmAccess": "Ask the CEO to assign you to this farm before using its stores.",
+    "sharedStorePermission": "Ask the CEO for permission to use this shared warehouse, including for feeding.",
     "unauthorized": "You do not have access to this work.",
     "assignmentChanged": "Your farm assignment changed. Connect and refresh before continuing.",
     "staleRevision": "This record changed after you opened it. Review the latest values and try again.",

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import {managerHasWarehouseAccess} from "./warehouse-access";
 
 import { capabilitiesFor, parseActiveRole, type ActiveRole, type Capability } from "@/lib/permissions";
 import { createClient as createAuthedClient } from "@/utils/supabase/server";
@@ -19,7 +20,7 @@ export type AccessContext = {
   supportSessionId:string|null; supportExpiresAt:string|null;
 };
 
-export function accessJson(value:unknown,status=200){return Response.json(value,{status});}
+export function accessJson(value:unknown,status=200){return Response.json(value,{status,headers:{"Cache-Control":"private, no-store"}});}
 
 export async function getAccessContext(options:{tenant?:boolean}={}):Promise<AccessContext|Response>{
   if(serverConfigurationError)return accessJson({error:serverConfigurationError,code:"SERVER_CONFIGURATION_ERROR"},503);
@@ -45,9 +46,9 @@ export async function canAccessFarm(ctx:AccessContext,farmId:string){
   const now=new Date().toISOString();const {data}=await admin.from("user_farm_access").select("id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).eq("farm_id",farmId).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`).limit(1).maybeSingle();return Boolean(data);
 }
 
-export async function canAccessWarehouse(ctx:AccessContext,warehouseId:string){
+export async function canAccessWarehouse(ctx:Pick<AccessContext,"role"|"supportSessionId"|"userId">,warehouseId:string){
   if(ctx.supportSessionId)return true;if(ctx.role!=="farm_manager")return false;
-  const now=new Date().toISOString();const {data}=await admin.from("user_warehouse_access").select("id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).eq("warehouse_id",warehouseId).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`).limit(1).maybeSingle();return Boolean(data);
+  return managerHasWarehouseAccess(ctx.userId,warehouseId);
 }
 
 export {admin as governanceAdmin};

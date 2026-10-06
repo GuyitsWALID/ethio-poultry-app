@@ -27,7 +27,8 @@ begin
   -- Deliberately no user_warehouse_access rows: feeding uses the assigned farm.
   insert into public.warehouses(id, org_id, branch_id, farm_id, name, type, status) values
     (v_store, v_org, v_branch, v_farm, 'Farm feed store', 'farm_store', 'active'),
-    ('16000000-0000-4000-8000-000000000011', v_org, '16000000-0000-4000-8000-000000000010', null, 'Other branch store', 'central_warehouse', 'active');
+    ('16000000-0000-4000-8000-000000000011', v_org, '16000000-0000-4000-8000-000000000010', null, 'Other branch store', 'central_warehouse', 'active'),
+    ('16000000-0000-4000-8000-000000000012', v_org, v_branch, null, 'Same branch shared store', 'central_warehouse', 'active');
   insert into public.inventory_items(id, org_id, name, category, unit, unit_cost, reorder_level) values (v_feed, v_org, 'Feed kg', 'feed', 'kg', 10, 0);
   insert into public.stock_ledger(org_id, item_id, warehouse_id, transaction_type, quantity, unit_cost, transaction_date, branch_id, farm_id, recorded_by)
     values (v_org, v_feed, v_store, 'receipt', 100, 10, current_date, v_branch, v_farm, v_actor);
@@ -68,6 +69,15 @@ begin
 
   begin
     perform public.dispatch_today_command_v1(v_actor,
+      jsonb_set(jsonb_set(jsonb_set(v_command, '{command_id}', '"16000000-0000-4000-8000-000000000105"'),
+        '{expected_resource_revision}', to_jsonb(v_revision)),
+        '{payload,session,warehouse_id}', '"16000000-0000-4000-8000-000000000012"'));
+    raise exception 'Same-branch shared feeding without permission was accepted.';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    perform public.dispatch_today_command_v1(v_actor,
       jsonb_set(jsonb_set(jsonb_set(v_command, '{command_id}', '"16000000-0000-4000-8000-000000000102"'),
         '{expected_resource_revision}', to_jsonb(v_revision)),
         '{payload,session,warehouse_id}', '"16000000-0000-4000-8000-000000000011"'));
@@ -83,15 +93,12 @@ begin
     raise exception 'Feed close or replay failed.';
   end if;
 
-  begin
-    perform public.dispatch_today_command_v1(v_actor, jsonb_build_object('schema_version', 1,
+    v_result:=public.dispatch_today_command_v1(v_actor, jsonb_build_object('schema_version', 1,
       'command_id', '16000000-0000-4000-8000-000000000104', 'type', 'record_stock_receipt',
       'farm_id', v_farm, 'work_date', current_date, 'payload', jsonb_build_object(
         'warehouse_id', v_store, 'item_id', v_feed, 'quantity', 10, 'unit_cost', 10,
         'details', jsonb_build_object('procurement_type', 'miscellaneous'))));
-    raise exception 'Stock receipt bypassed independent warehouse assignment.';
-  exception when insufficient_privilege then null;
-  end;
+  if v_result->>'status'<>'applied' then raise exception 'Farm-owned stock receipt did not inherit access.'; end if;
 end $$;
 reset role;
 
@@ -108,9 +115,9 @@ begin
     raise exception 'Feed close did not synchronize the Daily Record.';
   end if;
   if exists(select 1 from public.client_operation_receipts where command_id in (
-      '16000000-0000-4000-8000-000000000102', '16000000-0000-4000-8000-000000000104')) then
+      '16000000-0000-4000-8000-000000000102','16000000-0000-4000-8000-000000000105')) then
     raise exception 'Rejected warehouse commands left a receipt.';
   end if;
-  raise notice 'Feed save, close, replay, stock deduction, and independent warehouse authorization checks passed.';
+  raise notice 'Feed save, close, replay, stock deduction, and inherited warehouse authorization checks passed.';
 end $$;
 rollback;

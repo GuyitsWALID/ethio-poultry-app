@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 
 import { getSalesContext, json, supabaseAdmin } from "@/lib/sales";
 import { governanceAdmin } from "@/lib/access-context";
+import {managerHasWarehouseAccess} from "@/lib/warehouse-access";
 
 const VALID_TRANSACTION_TYPES = new Set(["issue", "return", "adjustment", "transfer"]);
 
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (!warehouseId) return json({ error: "Select a source warehouse." }, 400);
     const activeWarehouse=async(id:string)=>{const {data}=await governanceAdmin.from("warehouses").select("id").eq("id",id).eq("org_id",ctx.orgId).eq("status","active").maybeSingle();return Boolean(data)};
     if(!await activeWarehouse(warehouseId))return json({error:"The source warehouse is inactive or outside this organization."},400);
-    const now=new Date().toISOString();const assigned=async(id:string)=>{if(ctx.supportSessionId)return true;const {data}=await governanceAdmin.from("user_warehouse_access").select("id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).eq("warehouse_id",id).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`).maybeSingle();return Boolean(data)};
+    const assigned=async(id:string)=>ctx.supportSessionId ? true : managerHasWarehouseAccess(ctx.userId,id);
     if(!await assigned(warehouseId))return json({error:"An active assignment to the source warehouse is required."},403);
     if (!transactionType || !VALID_TRANSACTION_TYPES.has(transactionType)) {
       return json({ error: "Select a valid stock transaction type." }, 400);

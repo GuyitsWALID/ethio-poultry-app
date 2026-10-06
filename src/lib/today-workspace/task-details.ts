@@ -5,6 +5,7 @@ import {canAccessFarm, governanceAdmin, type AccessContext} from "@/lib/access-c
 import type {TodayTaskCode, TodayTaskDetail} from "./contracts";
 import {TodayWorkspaceError} from "./workspace";
 import {isTodayWarehouseEligible} from "./warehouse-choices";
+import {effectiveWarehouseIds} from "@/lib/warehouse-access";
 
 type Row = Record<string, unknown>;
 
@@ -39,16 +40,8 @@ async function assignedWarehouses(context: AccessContext, farmId: string, task: 
   if (farmResult.error) throw new TodayWorkspaceError("INTERNAL_ERROR", farmResult.error.message, 500);
   if (!farmResult.data) throw new TodayWorkspaceError("SOURCE_NOT_FOUND", "The selected farm is unavailable.", 404);
   const branchId = farmResult.data.branch_id ? String(farmResult.data.branch_id) : null;
-  const assignedIds = new Set<string>();
-  if (task !== "feeding") {
-    const now = new Date().toISOString();
-    const access = await governanceAdmin.from("user_warehouse_access")
-      .select("warehouse_id").eq("org_id", context.orgId).eq("profile_id", context.userId)
-      .is("revoked_at", null).lte("starts_at", now)
-      .or(`expires_at.is.null,expires_at.gt.${now}`);
-    for (const assignment of rows(access, "Warehouse assignments")) assignedIds.add(String(assignment.warehouse_id));
-    if (!assignedIds.size) return [];
-  }
+  const assignedIds = new Set(await effectiveWarehouseIds(context));
+  if (!assignedIds.size) return [];
   const result = await governanceAdmin.from("warehouses")
     .select("id,name,farm_id,branch_id,type")
     .eq("org_id", context.orgId)
@@ -122,7 +115,7 @@ export async function loadTodayTaskDetail(
     farmId: input.farmId,
     flockId: input.flockId ?? null,
     workDate: input.workDate,
-    warehouses: warehouses.map((row) => ({id: String(row.id), name: String(row.name)})),
+    warehouses: warehouses.map((row) => ({id: String(row.id), name: String(row.name), access_source: row.farm_id ? "farm_assignment" as const : "warehouse_assignment" as const})),
     inventory,
     correctionDestination: `${correctionBase}&task=${task}`,
     dependencies: [],

@@ -50,7 +50,7 @@ test("CEO can discover the access page and load assignable farm managers through
   assert.match(usersPage, /profile\.role==="farm_manager"&&profile\.is_active/);
   assert.match(usersPage, /now has active access to/);
   assert.match(usersPage, /if \(!response\.ok\)[\s\S]*setError[\s\S]*return/);
-  assert.match(assignmentsRoute, /assignment_status:"Active"/);
+  assert.match(assignmentsRoute, /assignment_status:Date\.parse\(startsAt\)>Date\.now\(\)\?"Scheduled":"Active"/);
   assert.match(assignmentsRoute, /Access can only be granted to an active warehouse/);
   assert.doesNotMatch(usersPage, /\.from\("profiles"\)/);
 });
