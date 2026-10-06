@@ -4,7 +4,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import {useRouter} from "next/navigation";
+import {useRouter, useSearchParams} from "next/navigation";
+import {feedBatchChoices} from "@/lib/feed-navigation";
 import {ReportAnalyticsHandoff} from "@/components/reports/report-analytics-handoff";
 import {buildReportHref} from "@/lib/report-workspace";
 import { AlertTriangle, Check, ChevronDown, Clock3, PackageOpen, RefreshCw, Scale, Wheat, X } from "lucide-react";
@@ -66,6 +67,7 @@ export default function FeedControlPage() {
   const { scope, setScope, period, batches, flocks, loading: scopeLoading } = useFarmScope();
   const {enabled: todayEntryEnabled} = useTodayEntryMode();
   const router = useRouter();
+  const queryString = useSearchParams().toString();
   const [data, setData] = useState<FeedData | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
   const [templateOpen, setTemplateOpen] = useState(false); const [weightTask, setWeightTask] = useState<Task | null>(null);
   const deepLinkHandled = useRef(false);
@@ -84,14 +86,14 @@ export default function FeedControlPage() {
 
   const activeBatches = useMemo(() => {
     const scopedFlock = scope.flockId ? flocks.find((flock) => flock.id === scope.flockId) : null;
-    return batches
-      .filter((batch) => batch.status === "active")
+    const eligible = batches
       .filter((batch) => !scope.branchId || batch.branch_id === scope.branchId)
       .filter((batch) => !scope.farmId || batch.farm_id === scope.farmId)
       .filter((batch) => !scope.houseId || batch.house_id === scope.houseId)
       .filter((batch) => !scopedFlock || scopedFlock.batch_id === batch.id)
       .sort((left, right) => String(right.placement_date ?? "").localeCompare(String(left.placement_date ?? "")));
-  }, [batches, flocks, scope.branchId, scope.farmId, scope.flockId, scope.houseId]);
+    return feedBatchChoices(eligible, scope.batchId, new URLSearchParams(queryString));
+  }, [batches, flocks, scope.branchId, scope.farmId, scope.flockId, scope.houseId, scope.batchId, queryString]);
 
   useEffect(() => {
     if (scopeLoading || activeBatches.length === 0) return;
