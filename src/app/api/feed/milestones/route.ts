@@ -7,6 +7,6 @@ export async function POST(request: Request) {
   if (!body) return feedJson({ error: "Invalid request body." }, 400);
   const status = String(body.status ?? "completed");
   if (!["completed", "skipped"].includes(status)) return feedJson({ error: "Milestone status must be completed or skipped." }, 400);
-  const { data, error } = await feedAdmin.rpc("record_feed_milestone", { p_actor_id: ctx.userId, p_milestone_id: String(body.milestoneId ?? ""), p_flock_id: String(body.flockId ?? ""), p_status: status, p_notes: String(body.notes ?? "").trim() || null });
+  const { data, error } = await feedAdmin.rpc("record_feed_milestone", { p_actor_id: ctx.userId, p_milestone_id: String(body.milestoneId ?? ""), p_flock_id: String(body.flockId ?? ""), p_status: status, p_notes: String(body.notes ?? "").trim() || undefined });
   return error ? feedJson({ error: error.message }, 400) : feedJson({ result: data });
 }

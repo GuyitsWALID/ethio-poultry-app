@@ -1,4 +1,43 @@
 {
+  "FlockMove": {
+    "title":"Move the whole flock", "help":"Exceptional move only. All current birds move together into an empty, cleared house. Original batch and arrival records stay unchanged. The CEO must approve before you apply the move.",
+    "wholeCount":"All {count} birds will move. No partial transfers or additions.", "farm":"Destination farm", "house":"Empty destination house", "choose":"Choose", "date":"Actual move date", "time":"Actual move time (Addis Ababa)", "reason":"Why is this move needed?", "submit":"Ask CEO to approve", "saving":"Submitting…", "loading":"Loading current flock…", "unavailable":"This flock cannot move until its cycle membership and location evidence are verified.", "error":"Check the date, time, count and destination. If anything changed, close and reopen this form for fresh values. Your entries are preserved.", "submitted":"Move submitted for CEO review.", "review":"Review request"
+  },
+  "FlockProfile": {
+    "lineage": {"title":"Check this flock's placement and moves", "verified":"Original batch placement is preserved. The approved whole-flock movement chain verifies the current location.", "review":"Location evidence needs review. Do not move birds merely to clear an alert. Review the original placement and approved movements, then check again.", "agrees":"Verified", "disagrees":"Needs review", "return":"Return to this Record Check", "houseFarm":"Current house and farm", "batchFarm":"Original farm and approved moves", "batchHouse":"Original house and approved moves"},
+    "view": "View flock", "show": "Show flock details", "hide": "Hide flock details", "selected": "Selected",
+    "title": "Flock details", "periods": "Profile period", "days": "{days} days", "loading": "Loading flock details…",
+    "unavailable": "This flock is unavailable or you no longer have access.", "loadFailed": "Could not load flock details. Try again.", "retry": "Try again",
+    "farm": "Farm", "house": "House", "batch": "Batch", "breed": "Breed", "type": "Flock type", "placement": "Placed",
+    "age": "Bird age", "ageDays": "{days} days", "starting": "Starting birds", "current": "Birds currently recorded", "lifecycle": "Lifecycle status",
+    "unknown": "Not available", "attention": "Performance and what needs attention", "period": "{from} to {to}",
+    "partial": "Results use available records only. Missing information is not zero.", "records": "Daily Records", "feedClosed": "Feeding days finished",
+    "coverage": "{complete} of {expected} days", "missingDates": "Missing Daily Records", "missingFeedDates": "Unfinished feeding days",
+    "deaths": "Deaths", "culls": "Culled birds", "losses": "Deaths and culls", "feedKg": "Feed used (kg)", "feedPerBird": "Feed per bird per day (g)",
+    "eggs": "Eggs collected", "production": "Egg production (%)", "saleable": "Saleable eggs (%)", "mortality": "Deaths per bird-day (%)",
+    "evidenceDays": "Evidence for {days} days", "target": "Age-adjusted target: {value}", "latestWeight": "Latest measured weight (g)", "growth": "Growth per day (g)",
+    "weights": "Weight measurements", "sampleDate": "Measured {date}", "outside": "This measurement is outside the selected period.", "noWeights": "No weight measurements in this period.",
+    "today": "Unfinished work for {date}", "todayComplete": "All required flock tasks are complete for this date.", "todayUnavailable": "Today's task status is not available in this view.",
+    "nextSteps": "Next steps", "noConcerns": "No supported concerns were found in the available evidence.", "review": "Review this flock's evidence", "openTask": "{task}",
+    "history": "History — coming soon", "historyHelp": "History is not built yet. Existing history and correction pages remain available.",
+    "archiveNote": "Historical population is not proof that birds are still present. Verified clearance evidence is required before house reuse.",
+    "completionUnknown": "This archive has no verified completion date. Period results cannot be dated reliably yet.", "beforeClearance": "Birds before final clearance", "historicalPopulation": "Population in the historical record",
+    "statuses": {"active":"Active","quarantined":"Quarantined","archived":"Archived","sold":"Sold","culled":"Culled","transferred":"Transferred"},
+    "types": {"layer":"Layer","broiler":"Broiler","rearing":"Pullet","parent_stock":"Parent stock"},
+    "severity": {"critical":"Needs urgent attention","watch":"Needs review","pending":"Missing evidence"},
+    "actions": {"production_shortfall":"Review this flock's production checks","growth_variance":"Review this batch's growth records","mortality_high":"Review this flock's death checks","feed_variance":"Review this batch's feeding history","stale_weight":"Review this batch's weight records","missing_targets":"Open this batch's feed configuration","missing_records":"Review the missing Daily Record date","unfinished_feed":"Review the unfinished feeding date","completion_unverified":"Review this flock's lifecycle checks","todayBirds":"Complete today's bird check","todayFeeding":"Finish today's feeding"},
+    "steps": {
+      "production_shortfall":"Egg production is below its age-adjusted target. Review the recorded output and feeding evidence.",
+      "growth_variance":"Measured weight differs from the target for the birds' age on the measurement date. Review growth and feeding.",
+      "mortality_high":"The recorded death rate exceeds its age-adjusted target. Review the causes and health records.",
+      "feed_variance":"Feed per bird differs from the age-adjusted plan. Review the actual feeding records.",
+      "stale_weight":"A recent weight measurement is missing. Check the weighing schedule and record a current sample.",
+      "missing_targets":"Age-appropriate targets are missing for part of this period. Review the breed and feed configuration.",
+      "missing_records":"Daily Records are missing. Review the listed dates; do not guess their values.",
+      "unfinished_feed":"Feeding is not closed for the listed dates. Review the sessions before closing each day.",
+      "completion_unverified":"Ask the CEO to review completion evidence before this house is used for another cycle."
+    }
+  },
   "ReportWorkspace": {
     "title": "Reports",
     "ceoScope": "See results across your organization. Choose a farm to narrow the report.",
@@ -508,6 +547,7 @@
     }
   },
   "Today": {
+    "closedFlockReadOnly": "This flock or farm day has finished. Saved work remains visible; changes require approved historical correction.",
     "eyebrow": "Today’s farm sheet",
     "title": "Today’s work",
     "question": "What work must I finish today?",
@@ -823,5 +863,44 @@
     "validation": "Check the highlighted information and try again.",
     "offlineFinish": "Connect to the internet before finishing the day.",
     "unknown": "Something went wrong. Try again."
+  },
+  "ArchivedCorrection": {
+    "reviewLosses": "Correct death and cull evidence too", "lossHelp": "Include every loss event for selected records. Zero explicitly removes an incorrect event; its original evidence stays in the audit history. Event totals must match the corrected counts above.",
+    "quantity": "Bird count", "explanation": "Cause or reason supported by evidence", "addDeath": "+ Death event", "addCull": "+ Cull event",
+    "reviewDepartures": "Correct final departures for the entire cycle", "departureHelp": "Review every flock’s final record and every departure. Counts must agree exactly. Original closure stays preserved; this amendment replaces current allocation evidence, not sale revenue or payments.",
+    "sale": "Existing bird sale", "headCount": "Physical head count for non-bird units", "addDeparture": "+ Final departure", "removeDeparture": "Remove from proposed departures",
+    "title": "Ask to correct archived bird counts",
+    "warning": "Select incorrect records and include any related loss or final-departure evidence. The CEO reviews all changes together. Original evidence remains in audit history. Sale revenue, payments, feed and stock stay unchanged; the flock stays archived with no birds present.",
+    "failed": "Could not submit or load this correction. Check that counts balance, refresh changed evidence and try again. Loss-event or departure changes need separate reviewed evidence.",
+    "refresh": "Refresh evidence", "loading": "Loading archived records…", "final": "Final record",
+    "opening_birds": "Birds at the start", "deaths": "Deaths", "culls": "Culled birds", "transfers_in": "Birds moved in",
+    "transfers_out": "Birds moved out", "other_removals": "Other birds removed, including final departures", "closing_birds": "Birds at the end",
+    "reference": "Supporting reference", "reason": "Why do these counts need correcting?", "send": "Send to CEO for review", "sending": "Sending…",
+    "submitted": "Correction sent. Nothing changes until the CEO approves and you apply it.", "approvals": "View approvals"
+  },
+  "FlockCycles": {
+    "healthConfirmed": "Health and deaths recorded or confirmed none", "suppliesConfirmed": "Supplies recorded or confirmed none",
+    "title": "Batch cycles", "sequence": "Account for remaining birds → Finish and archive the previous cycle → Place the new batch.",
+    "farm": "Farm", "choose": "Choose", "create": "Place a new batch", "close": "Finish and archive cycle", "cycle": "Previous cycle",
+    "active": "Active", "archived": "Archived", "unavailable": "This farm or cycle is unavailable to your account.",
+    "loadFailed": "Cycle information could not be loaded. Refresh and try again.", "refresh": "Refresh current evidence", "loading": "Loading cycle evidence…",
+    "managerProposes": "A Farm Manager proposes the change. Review and approve the exact request in Approvals.",
+    "placementDate": "Actual placement date", "completionDate": "Actual completion date", "time": "Actual time — Addis Ababa",
+    "actualDateWarning": "Use the date the birds actually arrived and were placed—not the date you are entering this record.",
+    "closeWarning": "Finish all member houses together. Existing deaths and culls are already accounted for. This request does not create a sale or payment.",
+    "cycleCode": "Cycle name or code", "purpose": "Production purpose", "breed": "Breed", "arrivalAge": "Age at arrival (days)",
+    "supplier": "Supplier or source", "cost": "Purchase cost per bird (ETB)", "layer": "Layer", "broiler": "Broiler", "rearing": "Pullet", "parent_stock": "Parent stock",
+    "occupied": "This house still contains an active or quarantined flock. Finish its cycle first.",
+    "unverified": "Previous completion is not verified. Obtain CEO-approved completion evidence before reuse.",
+    "count": "Starting birds", "batchCode": "House batch code", "flockCode": "New flock code", "transport": "Transport cost (ETB)", "other": "Other acquisition cost (ETB)",
+    "total": "Total starting birds: {count}", "confirmDate": "I confirm this is the actual placement date.",
+    "legacyWarning": "Confirm the house was physically cleared, with a supporting reference and actual completion time. Historical bird counts will not be rewritten.",
+    "reference": "Supporting reference", "remaining": "Remaining birds to account for: {count}", "finalRecord": "Final Daily Record complete", "feedClosed": "Final feeding closed", "balanced": "Bird counts agree",
+    "ready": "Ready", "missing": "Needs attention", "departure": "Final departure {number}", "flock": "Flock", "departureType": "How the birds left", "sold": "Sold", "otherDeparture": "Other final departure", "quantity": "Physical birds leaving",
+    "sale": "Existing bird sale", "allocated": "Birds already allocated to this sale: {count}", "physicalWarning": "This sale uses another unit. Provide evidenced physical head-count capacity; kilograms do not establish a bird count.",
+    "physicalCount": "Evidenced total head count for this sale", "departureReason": "Reason for this departure", "remove": "Remove departure", "addDeparture": "+ Add final departure",
+    "missingWork": "Complete final records, finish feeding, and account for every remaining bird in every house before requesting closure. Health and supplies confirmations must also be complete.",
+    "reason": "Explain this request to the CEO", "send": "Send to CEO for approval", "sending": "Sending…", "submitted": "Request sent. The CEO must approve it before you apply the exact change.", "approvals": "Review requests and approvals",
+    "invalidFields": "Check the date, time, quantities and evidence. Every selected house needs its own starting count and codes.", "submitFailed": "The request could not be submitted. Your entries are preserved. Refresh the evidence if records changed, then review and try again."
   }
 }

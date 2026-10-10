@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+const database='ethio_flock_lifecycle_dryrun_20261007';
+assert.equal(database,'ethio_flock_lifecycle_dryrun_20261007');
+const fixture=readFileSync('tests/database/flock-cycle.integration.sql','utf8');
+const seam='do $$ declare v_daily uuid; v_before timestamptz;';
+assert.equal(fixture.split(seam).length,2,'Review the canonical closure fixture seam');
+const sql=fixture.split(seam)[0]+readFileSync('tests/database/archived-cycle-corrections.assertions.sql','utf8');
+const result=spawnSync('docker',['exec','-i','supabase_db_ethio-poultry-app','psql','-U','postgres','-d',database,'-v','ON_ERROR_STOP=1','-q'],{input:sql,encoding:'utf8'});
+if(result.status!==0)throw new Error(result.stderr||'Archived correction test failed');
+console.log('PASS archived corrections: approval, stale sources, replay, unchanged closure/sales, zero archived population, immutable amendment and invalid balance rejection. Fixtures rolled back.');

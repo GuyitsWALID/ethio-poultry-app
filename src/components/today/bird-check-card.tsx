@@ -30,7 +30,7 @@ export function BirdCheckCard({flock, task, farmId, workDate, online, expanded, 
   const correctionHref = `/app/daily-records?${new URLSearchParams({farm_id: farmId, flock_id: flock.id, date: workDate})}`;
 
   async function startDay() {
-    if (!online || !openingReady || initial.dailyRecordId || saving) return;
+    if (flock.canRecord === false || !online || !openingReady || initial.dailyRecordId || saving) return;
     setSaving(true);
     setMessage(null);
     try {
@@ -54,6 +54,7 @@ export function BirdCheckCard({flock, task, farmId, workDate, online, expanded, 
       <span className="flex items-center gap-2"><span className="rounded-full border border-sand-300 bg-sand-50 px-2.5 py-1 text-[11px] font-semibold text-forest-700">{stateLabel}</span>{expanded ? <ChevronUp className="h-5 w-5"/> : <ChevronDown className="h-5 w-5"/>}</span>
     </button>
     {expanded ? <div className="grid gap-4 border-t border-sand-200 p-4">
+      {flock.canRecord === false ? <p className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">{t("closedFlockReadOnly")}</p> : null}
       <div className="rounded-xl bg-forest-900 p-4 text-white"><span className="text-xs text-sand-100/70">{t("birdCheck.opening")}</span><div className="mt-1 flex flex-wrap items-baseline justify-between gap-2"><strong className="text-2xl tabular-nums">{initial.openingBirds === null ? "—" : formatNumber(initial.openingBirds, locale)}</strong><span className="text-xs text-sand-100/75">{t(`birdCheck.sources.${initial.openingSource}`)}</span></div></div>
       {!openingReady ? <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{t("birdCheck.missingOpening")} <Link href={correctionHref} className="font-semibold underline">{t("birdCheck.openRecord")}</Link></p> : null}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -65,7 +66,7 @@ export function BirdCheckCard({flock, task, farmId, workDate, online, expanded, 
       {initial.dailyRecordId && (!assessment.valid || unusualMovement) ? <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{t("birdCheck.legacyMovements")} <Link href={correctionHref} className="font-semibold underline">{t("birdCheck.openRecord")}</Link></p> : null}
       {message ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{message}</p> : null}
       {!online && !initial.dailyRecordId ? <p role="status" className="text-sm text-amber-800">{t("birdCheck.offlineHelp")}</p> : null}
-      {!initial.dailyRecordId ? <div className="flex justify-end"><button type="button" onClick={startDay} disabled={saving || !online || !openingReady} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50"><Save className="h-4 w-4"/>{saving ? t("birdCheck.saving") : t("birdCheck.save")}</button></div> : null}
+      {!initial.dailyRecordId && flock.canRecord !== false ? <div className="flex justify-end"><button type="button" onClick={startDay} disabled={saving || !online || !openingReady} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50"><Save className="h-4 w-4"/>{saving ? t("birdCheck.saving") : t("birdCheck.save")}</button></div> : null}
     </div> : null}
   </article>;
 }

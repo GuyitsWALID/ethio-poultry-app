@@ -131,6 +131,9 @@ function PageScopeProvider({ children, pathname, viewerRole, todayWorkspaceEnabl
 
   useEffect(() => {
     if (loading || !storageKey.current) return;
+    // Redirect-only legacy profile URLs must not be rewritten while their
+    // streamed server redirect is resolving. Also ignore stale route effects.
+    if (/^\/app\/flocks\/[^/]+\/?$/.test(pathname) || window.location.pathname !== pathname) return;
     if (search !== lastSearch.current) {
       lastSearch.current = search;
       restoreFilters(readPageFilters(search, null), { branches, farms, houses, flocks, batches });

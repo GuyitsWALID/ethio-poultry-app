@@ -59,6 +59,15 @@ function data(flocks = [flock()]) {
   };
 }
 
+test("same-day completed identity remains evidence-only while replacement stays editable",()=>{
+  const workspace=deriveTodayWorkspace(data([flock({completedAt:'2026-09-20T10:00:00+03:00'}),flock({id:'replacement'})]),selection,true);
+  assert.equal(workspace.flocks[0].canRecord,false);
+  assert.equal(workspace.flocks[1].canRecord,true);
+  const closed=data();closed.operatingDay.status='closed';
+  assert.equal(deriveTodayWorkspace(closed,selection,true).flocks[0].canRecord,false);
+  assert.equal(deriveTodayWorkspace(data(),selection,false).flocks[0].canRecord,false);
+});
+
 test("complete layer evidence makes the operating day finishable", () => {
   const workspace = deriveTodayWorkspace(data(), selection, true);
   assert.equal(workspace.capabilities.canFinish, true);

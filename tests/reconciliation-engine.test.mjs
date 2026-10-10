@@ -24,6 +24,22 @@ const batch = { id:"batch-1", farmId:"farm-1", houseId:"house-1", totalCount:100
 const flock = { id:"flock-1", code:"F-1", status:"active", farmId:"farm-1", houseId:"house-1", batchId:"batch-1", placementDate:"2026-08-01", initialCount:100, currentCount:99 };
 const daily = { id:"daily-1", flockId:"flock-1", recordDate:"2026-08-09", openingBirds:100, closingBirds:99, deaths:2, culls:0, transfersIn:0, transfersOut:0, otherRemovals:0, totalEggs:100, normalEggs:90, brokenEggs:5, dirtyEggs:4, feedKg:8, updatedAt:"2026-08-09T15:00:00Z", recordedBy:"manager-1" };
 
+test("approved movement chain preserves original batch without hiding invalid destination ownership",()=>{
+  const movedHouse={...house,id:'empty-destination'};
+  const sources={farms:[farm],houses:[house,movedHouse],batches:[batch],flocks:[{...flock,houseId:movedHouse.id,verifiedMovementChain:true}]};
+  assert(!engine.evaluateOperationalReconciliation(input(sources)).some(row=>row.ruleCode==='ACTIVE_FLOCK_LINEAGE_BROKEN'));
+  assert(engine.evaluateOperationalReconciliation(input({...sources,flocks:[{...sources.flocks[0],verifiedMovementChain:false}]})).some(row=>row.ruleCode==='ACTIVE_FLOCK_LINEAGE_BROKEN'));
+  assert(engine.evaluateOperationalReconciliation(input({...sources,houses:[house,{...movedHouse,farmId:'other-farm'}]})).some(row=>row.ruleCode==='ACTIVE_FLOCK_LINEAGE_BROKEN'));
+});
+
+test("exact lifecycle approval recognizes only current snapshot matches, not later edits", () => {
+  const sources={farms:[farm],houses:[house],batches:[batch],flocks:[flock],daily:[daily],operatingDays:[{farmId:farm.id,date:daily.recordDate,status:"locked",lockedAt:"2026-08-09T10:00:00Z"}]};
+  const approved=engine.evaluateOperationalReconciliation(input({...sources,exactLifecycleCorrectionSourceIds:new Set([daily.id])}));
+  assert(!approved.some(row=>row.ruleCode==="LOCKED_RECORD_CHANGED_WITHOUT_APPROVAL"));
+  const changed=engine.evaluateOperationalReconciliation(input({...sources,exactLifecycleCorrectionSourceIds:new Set()}));
+  assert(changed.some(row=>row.ruleCode==="LOCKED_RECORD_CHANGED_WITHOUT_APPROVAL"));
+});
+
 test("detects bird custody, egg classification, mortality allocation, and locked-record contradictions", () => {
   const findings = engine.evaluateOperationalReconciliation(input({
     farms:[farm], houses:[house], batches:[batch], flocks:[flock], daily:[daily],

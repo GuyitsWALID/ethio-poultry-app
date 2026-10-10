@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 76,
-  "latest": "20261006001000_atomic_farm_manager_handover.sql",
-  "aggregateSha256": "2d69f903f47d51a5807f76566232a2257783751bcb295ce1febb2e8a3d333180",
+  "count": 82,
+  "latest": "20261010001000_archived_cycle_accounting_amendments.sql",
+  "aggregateSha256": "a02b29ef556a3999d61d64ba55f9e9b1808985461c975fec4adcacf69b897d3a",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -156,6 +156,12 @@
     "20261005000000_today_rollout_authorization.sql": "2dfc423f1912724af910cdcec6fce88f8b4d426d55bc9b20c9273af35fbffdca",
     "20261005001000_ceo_workspace_pilot_gate.sql": "b608111a33c73de31a8acd38c84653d8016713bf714eeddfedec7d9e2b9aaea5",
     "20261006000000_effective_farm_warehouse_access.sql": "d04a6a452c98974c118a9ed7e23ab00ef41dfed9ba847a551648848cbdbd6fd3",
-    "20261006001000_atomic_farm_manager_handover.sql": "19c92fa8e82e4602441734d1e6c74ebe138d0fa3450dde20bdf6f22c461004ad"
+    "20261006001000_atomic_farm_manager_handover.sql": "19c92fa8e82e4602441734d1e6c74ebe138d0fa3450dde20bdf6f22c461004ad",
+    "20261007000000_safe_flock_cycle_foundation.sql": "dc9bac0811e755eeb111d827963ab1f32cb280f464210f5c0ffdcf59516e99e9",
+    "20261007001000_atomic_flock_cycle_governance.sql": "9537114bd1287493f5e33426dda589a869fefa77bba48854a7b855aece84e79f",
+    "20261007002000_completed_flock_operating_guards.sql": "c05578ea6d175f26760060459f1b67bbeda85f5cebc399c6506dbf1ab289adcb",
+    "20261008000000_approved_whole_flock_moves.sql": "2145ba537a2ff8d8dd694cee8e6bd4541c5eff5645a7480aa453518818922148",
+    "20261010000000_reviewed_archived_cycle_corrections.sql": "15861a263700b5c9722427c5653601dbe820efa864e56d14834ede44f8be0e1a",
+    "20261010001000_archived_cycle_accounting_amendments.sql": "8ee06d514dd8a6260ee8b4edd39f4832f344a96822995cbc7bf03d1fcaa840c6"
   }
 }

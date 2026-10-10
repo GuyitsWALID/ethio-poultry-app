@@ -60,8 +60,8 @@ for (const account of accounts) {
 const manager = accounts.find((account) => account.role === "farm_manager");
 const { data: farmAssignment } = await admin.from("user_farm_access").select("id").eq("org_id", orgId).eq("profile_id", manager.userId).eq("farm_id", farmId).maybeSingle();
 if (!farmAssignment) await must(admin.from("user_farm_access").insert({ org_id: orgId, profile_id: manager.userId, farm_id: farmId, starts_at: new Date(Date.now() - 60_000).toISOString() }), "farm assignment");
-const { data: warehouseAssignment } = await admin.from("user_warehouse_access").select("id").eq("org_id", orgId).eq("profile_id", manager.userId).eq("warehouse_id", warehouseId).maybeSingle();
-if (!warehouseAssignment) await must(admin.from("user_warehouse_access").insert({ org_id: orgId, profile_id: manager.userId, warehouse_id: warehouseId, starts_at: new Date(Date.now() - 60_000).toISOString() }), "warehouse assignment");
+// Farm-owned stores inherit the farm assignment. Never manufacture a separate
+// warehouse grant: the migrated authorization model deliberately rejects it.
 
 console.log("Local browser fixtures are ready.");
 for (const account of accounts) console.log(`E2E_${account.key}_EMAIL=${account.email}`);

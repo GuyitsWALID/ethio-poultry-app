@@ -8,6 +8,7 @@ import {
   type TodayWorkspace,
 } from "./contracts.ts";
 import {assessBirdCheck} from "./bird-check.ts";
+import {hasTaskEvidence} from "./task-evidence.ts";
 
 type Row = Record<string, unknown>;
 
@@ -42,6 +43,7 @@ export type TodayWorkspaceData = {
     placementDate: string;
     ageAtPlacementDays: number | null;
     currentCount: number;
+    completedAt?: string | null;
     dailyRecord: null | {
       id: string;
       openingBirds: number | null;
@@ -100,10 +102,8 @@ export function deriveTodayWorkspace(
       transfersOut: daily?.transfersOut ?? 0,
       otherRemovals: daily?.otherRemovals ?? 0,
     });
-    const healthConfirmed = flock.hasHealthOrDeathActivity
-      || flock.healthAttestationFingerprint === flock.healthFingerprint;
-    const suppliesConfirmed = flock.hasRoutineSupplyUsage
-      || flock.suppliesAttestationFingerprint === flock.suppliesFingerprint;
+    const healthConfirmed = hasTaskEvidence({hasActivity: flock.hasHealthOrDeathActivity, sourceFingerprint: flock.healthFingerprint, attestationFingerprint: flock.healthAttestationFingerprint});
+    const suppliesConfirmed = hasTaskEvidence({hasActivity: flock.hasRoutineSupplyUsage, sourceFingerprint: flock.suppliesFingerprint, attestationFingerprint: flock.suppliesAttestationFingerprint});
     const eggsAndWaterComplete = Boolean(
       daily
       && daily.waterLiters !== null
@@ -146,6 +146,7 @@ export function deriveTodayWorkspace(
     ];
     return {
       id: flock.id,
+      canRecord: canEdit && !flock.completedAt && data.operatingDay.status === "open",
       code: flock.code,
       type: flock.type,
       batchLabel: flock.batchLabel,
@@ -261,10 +262,12 @@ export async function loadTodayWorkspace(
   }
 
   const flocksResult = await governanceAdmin.from("flocks")
-    .select("id,flock_code,flock_type,batch_id,house_id,placement_date,age_at_placement_days,current_count")
+    .select("id,flock_code,flock_type,batch_id,house_id,placement_date,age_at_placement_days,current_count,completed_at")
     .eq("org_id", context.orgId)
     .eq("farm_id", selection.farmId)
-    .eq("status", "active")
+    // Match flock_operates_on at atomic server close: an archived identity still
+    // applies on its completion day, alongside a same-day replacement.
+    .or(`and(status.in.(active,quarantined),completed_at.is.null),completed_at.gte.${selection.workDate}T00:00:00+03:00`)
     .lte("placement_date", selection.workDate)
     .order("flock_code");
   if (flocksResult.error) throw new TodayWorkspaceError("INTERNAL_ERROR", flocksResult.error.message, 500);
@@ -370,6 +373,7 @@ export async function loadTodayWorkspace(
         placementDate: String(row.placement_date),
         ageAtPlacementDays: asNumber(row.age_at_placement_days),
         currentCount: Number(row.current_count ?? 0),
+        completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
         dailyRecord: record ? {
           id: String(record.id),
           openingBirds: asNumber(record.opening_birds),

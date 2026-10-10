@@ -54,6 +54,7 @@ export const managerTodayMessageKeys = [
   "Today.loading",
   "Today.refresh",
   "Today.currentContext",
+  "Today.closedFlockReadOnly",
   "Today.embedded.completedSummary",
   "Today.embedded.feedSummary",
   "Today.embedded.eggsWaterSummary",
@@ -299,6 +300,7 @@ export const managerTodayMessageKeys = [
 ] as const;
 
 export const pendingTerminologyReviewKeys = [
+  "Today.closedFlockReadOnly",
   "Errors.farmAccess",
   "Errors.sharedStorePermission",
   "Today.embedded.addFeeding",

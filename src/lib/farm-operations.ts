@@ -299,7 +299,7 @@ export async function closeFeedDay(context: FeedContext, input: unknown) {
   const body = objectInput(input);
   const resolved = await resolveFeedBatch(context, String(body.batchId ?? ""));
   if (!resolved.batch) throw new FarmOperationError(resolved.error ?? "Batch is unavailable.", 403);
-  const {data, error} = await feedAdmin.rpc("close_feed_day", {p_actor_id: context.userId, p_flock_id: String(body.flockId ?? ""), p_record_date: String(body.recordDate ?? ""), p_override_reason: String(body.overrideReason ?? "").trim() || null});
+  const {data, error} = await feedAdmin.rpc("close_feed_day", {p_actor_id: context.userId, p_flock_id: String(body.flockId ?? ""), p_record_date: String(body.recordDate ?? ""), p_override_reason: String(body.overrideReason ?? "").trim() || undefined});
   if (error) throw new FarmOperationError(error.message);
   return data;
 }

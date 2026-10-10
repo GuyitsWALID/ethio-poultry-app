@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GovernanceAuditHistory } from "@/components/governance-audit-history";
 import { FeedTemplateReview } from "@/components/governance-feed-template-review";
+import {GovernanceStructuredValue} from "@/components/governance-structured-value";
 
 type DisplayValue = { field: string; label: string; value: unknown };
 type Context = { title?: string; sourceLabel?: string; farmName?: string | null; houseName?: string | null; flockName?: string | null; batchName?: string | null; warehouseName?: string | null; currentValues?: DisplayValue[]; proposedValues?: DisplayValue[]; impact?: string };
@@ -30,6 +31,7 @@ const requestLabels: Record<string, string> = {
   batch_create: "Create batch cycle", batch_archive: "Archive batch cycle", flock_place: "Place flock", flock_transfer: "Transfer flock",
   flock_close: "Close flock", flock_archive: "Archive flock", feed_template: "Feed template", breed_target: "Breed target",
   health_schedule: "Health schedule", warning_threshold: "Warning thresholds", locked_correction: "Locked record correction", void_record: "Void a record",
+  batch_cycle_create: "Place new batch cycle", batch_cycle_close: "Finish and archive cycle", archived_cycle_correction: "Correct archived bird history",
 };
 const statusText: Record<string, string> = { pending: "Awaiting CEO", returned: "Returned for changes", approved: "Ready to fix", rejected: "Rejected", applied: "Completed", conflict: "Source changed", expired: "Authorization expired", submitted: "Submitted", resubmitted: "Resubmitted" };
 const statusStyle: Record<string, string> = {
@@ -42,13 +44,6 @@ function dateTime(value?: string | null) {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Addis_Ababa" }).format(new Date(value));
 }
 function roleLabel(value: string) { return value === "farm_manager" ? "Farm Manager" : value.replaceAll("_", " "); }
-function displayValue(value: unknown) {
-  if (value === null || value === undefined || value === "") return "Not recorded";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "object") return "Structured details attached";
-  return String(value);
-}
-
 function correctionHref(row: RequestRow, includeAuthorization = false) {
   const url = new URL(row.correction_route ?? "/app/governance", "https://internal.invalid");
   if (row.request_type === "feed_template") {
@@ -67,7 +62,7 @@ function Difference({ context }: { context: Context }) {
   const current = new Map((context.currentValues ?? []).map((item) => [item.field, item]));
   return <div><p className="text-xs font-semibold uppercase tracking-wider text-forest-500">What will change</p><div className="mt-2 overflow-hidden rounded-xl border border-sand-200 bg-white">
     {(context.proposedValues ?? []).map((next) => next.field === "rows" ? <div key={next.field} className="border-b border-sand-100 p-3 last:border-b-0"><strong className="mb-2 block text-sm text-forest-900">{next.label}</strong><FeedTemplateReview rows={next.value}/></div> : <div key={next.field} className="grid gap-2 border-b border-sand-100 p-3 last:border-b-0 sm:grid-cols-[1fr_1fr_auto_1fr] sm:items-center">
-      <strong className="text-sm text-forest-900">{next.label}</strong><span className="rounded-lg bg-sand-50 px-3 py-2 text-sm text-forest-600">{displayValue(current.get(next.field)?.value)}</span><ArrowRight className="hidden h-4 w-4 text-forest-400 sm:block"/><span className="rounded-lg bg-leaf-50 px-3 py-2 text-sm font-semibold text-forest-900">{displayValue(next.value)}</span>
+      <strong className="text-sm text-forest-900">{next.label}</strong><div className="rounded-lg bg-sand-50 px-3 py-2 text-sm text-forest-600"><GovernanceStructuredValue value={current.get(next.field)?.value}/></div><ArrowRight className="hidden h-4 w-4 text-forest-400 sm:block"/><div className="rounded-lg bg-leaf-50 px-3 py-2 text-sm font-semibold text-forest-900"><GovernanceStructuredValue value={next.value}/></div>
     </div>)}
   </div></div>;
 }

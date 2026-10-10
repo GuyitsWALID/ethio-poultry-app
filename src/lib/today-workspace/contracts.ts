@@ -318,6 +318,7 @@ export type TodayTask = {
 
 export type TodayFlockContext = {
   id: string;
+  canRecord?: boolean;
   code: string;
   type: string;
   batchLabel: string | null;

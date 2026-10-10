@@ -35,3 +35,17 @@ test("assigned farm options cannot be reused across authenticated identities", (
   assert.match(scopeOptionsRoute, /Cache-Control["']:\s*["']private, no-store["']/);
   assert.match(scopeProvider, /fetch\("\/api\/scope\/options",\s*\{\s*method:\s*"GET",\s*cache:\s*"no-store"\s*\}\)/);
 });
+
+test("global filter persistence cannot overwrite legacy flock redirects or a newer route", () => {
+  const guard=scopeProvider.indexOf('window.location.pathname !== pathname');
+  const write=scopeProvider.indexOf('window.history.replaceState');
+  assert(guard>=0&&guard<write);
+  assert(scopeProvider.includes('/^\\/app\\/flocks\\/[^/]+\\/?$/'));
+});
+
+test("legacy flock URLs redirect before the authenticated shell streams", async () => {
+  const config=await readFile(new URL("../next.config.ts",import.meta.url),"utf8");
+  assert.match(config,/source: "\/app\/flocks\/:flockId"/);
+  assert.match(config,/destination: "\/app\/flocks\?flock=:flockId&details=1&filter_page_tab=overview"/);
+  assert.match(config,/permanent: false/);
+});

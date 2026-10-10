@@ -52,14 +52,14 @@ begin
     placement_date, age_at_placement_days, total_count, status
   ) values (
     v_batch, v_org_a, v_branch_a, v_farm_active, v_house, 'TODAY-FOUNDATION-BATCH',
-    'external_purchase', date '2099-01-01', 0, 100, 'active'
+    'external_purchase', (now() at time zone 'Africa/Addis_Ababa')::date - 31, 0, 100, 'active'
   );
   insert into public.flocks(
     id, org_id, farm_id, house_id, batch_id, flock_code, flock_type, source,
     placement_date, initial_count, current_count, age_at_placement_days, status
   ) values (
     v_flock, v_org_a, v_farm_active, v_house, v_batch, 'TODAY-FOUNDATION-FLOCK',
-    'layer', 'external_purchase', date '2099-01-01', 100, 100, 0, 'active'
+    'layer', 'external_purchase', (now() at time zone 'Africa/Addis_Ababa')::date - 31, 100, 100, 0, 'active'
   );
   insert into public.user_farm_access(org_id, profile_id, farm_id, starts_at) values
     (v_org_a, v_manager, v_farm_active, now() - interval '1 day'),

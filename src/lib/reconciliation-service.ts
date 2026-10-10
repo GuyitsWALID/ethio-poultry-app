@@ -400,6 +400,18 @@ export async function ensureFreshReconciliation(
         updatedAt: String(row.updated_at),
         recordedBy: text(row.recorded_by),
       }));
+    // The database compares full current rows with exact, immutable approved
+    // snapshots. No client/source-ID whitelist can authorize a later edit.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const exactCorrections = await (governanceAdmin as any).rpc("exact_lifecycle_corrections", {p_org: ctx.orgId});
+    if (exactCorrections.error || !exactCorrections.data || exactCorrections.data.length > 10000) throw new Error("Lifecycle correction evidence could not be verified.");
+    // Verify the complete immutable movement chain on the server, never trust
+    // a location-mismatch exemption submitted by the browser.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const movements = await (governanceAdmin as any).rpc("verified_flock_movements", {p_org: ctx.orgId});
+    if (movements.error || !movements.data || movements.data.length > 10000) throw new Error("Approved flock movements could not be verified.");
+    const verified = new Set((movements.data as Array<{flock_id: string}>).map(row => row.flock_id));
+    for (const flock of flocks) flock.verifiedMovementChain = verified.has(flock.id);
     const drafts = evaluateOperationalReconciliation({
       asOfDate: asOf,
       daily,
@@ -579,6 +591,7 @@ export async function ensureFreshReconciliation(
       approvedCorrectionSourceIds: new Set(
         correctionRows.map((row) => String(row.source_id)),
       ),
+      exactLifecycleCorrectionSourceIds: new Set((exactCorrections.data as Array<{source_id: string}>).map(row => row.source_id)),
     });
     const { data: existing, error: existingError } = await governanceAdmin
       .from("reconciliation_findings")
