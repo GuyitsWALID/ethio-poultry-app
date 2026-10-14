@@ -2,10 +2,11 @@ import type { TodayCommand, TodayCommandResult, TodayWorkspace } from "./contrac
 
 export const OFFLINE_STORE_VERSION = 1;
 const ACTIVE_IDENTITY_KEY = "ethiopoultry.offline_identity";
+const openDatabases = new Map<string, Set<IDBDatabase>>();
 
 export type OfflineIdentity = { tenantId: string; userId: string; authorizedWorkDate: string };
 export type OfflineDraft = { key: string; taskId: string; workDate: string; value: unknown; updatedAt: string };
-export type QueuedCommand = { command: TodayCommand; state: "queued" | "sending" | "conflict" | "rejected"; result?: TodayCommandResult; queuedAt: string };
+export type QueuedCommand = { command: TodayCommand; originalCommand?: TodayCommand; draftUpdatedAt?: string; state: "queued" | "sending" | "conflict" | "rejected"; result?: TodayCommandResult; queuedAt: string; attempts?: number; nextAttemptAt?: string; taskKey?: string; resourceKey?: string };
 
 export class OfflineStorageError extends Error {
   readonly code: "UNAVAILABLE" | "QUOTA" | "UPGRADE_FAILED";
@@ -17,8 +18,10 @@ export class OfflineStorageError extends Error {
 
 export interface OfflineStore {
   getSnapshot(key: string): Promise<TodayWorkspace | undefined>;
+  listSnapshots(): Promise<TodayWorkspace[]>;
   putSnapshot(key: string, value: TodayWorkspace): Promise<void>;
   getDraft(key: string): Promise<OfflineDraft | undefined>;
+  listDrafts(): Promise<OfflineDraft[]>;
   putDraft(value: OfflineDraft): Promise<void>;
   removeDraft(key: string): Promise<void>;
   listCommands(): Promise<QueuedCommand[]>;
@@ -37,8 +40,10 @@ export class MemoryOfflineStore implements OfflineStore {
   private drafts = new Map<string, OfflineDraft>();
   private commands = new Map<string, QueuedCommand>();
   async getSnapshot(key: string) { return this.snapshots.get(key); }
+  async listSnapshots() { return [...this.snapshots.values()].map(value=>structuredClone(value)); }
   async putSnapshot(key: string, value: TodayWorkspace) { this.snapshots.set(key, structuredClone(value)); }
   async getDraft(key: string) { return this.drafts.get(key); }
+  async listDrafts() { return [...this.drafts.values()].map(value => structuredClone(value)); }
   async putDraft(value: OfflineDraft) { this.drafts.set(value.key, structuredClone(value)); }
   async removeDraft(key: string) { this.drafts.delete(key); }
   async listCommands() { return [...this.commands.values()].sort((a, b) => a.queuedAt.localeCompare(b.queuedAt)); }
@@ -81,8 +86,10 @@ class IndexedDbOfflineStore implements OfflineStore {
     } catch (error) { throw storageFailure(error); }
   }
   async getSnapshot(key: string) { return this.read<TodayWorkspace>("snapshots", key); }
+  async listSnapshots() { return requestResult(this.database.transaction("snapshots").objectStore("snapshots").getAll()) as Promise<TodayWorkspace[]>; }
   async putSnapshot(key: string, value: TodayWorkspace) { await this.write("snapshots", { ...value, key }); }
   async getDraft(key: string) { return this.read<OfflineDraft>("drafts", key); }
+  async listDrafts() { return requestResult(this.database.transaction("drafts").objectStore("drafts").getAll()) as Promise<OfflineDraft[]>; }
   async putDraft(value: OfflineDraft) { await this.write("drafts", value); }
   async removeDraft(key: string) { await this.remove("drafts", key); }
   async listCommands() {
@@ -107,7 +114,7 @@ export async function openOfflineStore(identity: OfflineIdentity): Promise<Offli
   if (typeof indexedDB === "undefined" || typeof localStorage === "undefined") throw new OfflineStorageError("UNAVAILABLE", "Offline storage is not available in this browser.");
   const namespace = identityNamespace(identity);
   const previous = localStorage.getItem(ACTIVE_IDENTITY_KEY);
-  if (previous && previous !== namespace) indexedDB.deleteDatabase(previous);
+  if (previous && previous !== namespace) await deleteIdentityDatabase(previous);
 
   const request = indexedDB.open(namespace, OFFLINE_STORE_VERSION);
   request.onupgradeneeded = () => {
@@ -117,7 +124,16 @@ export async function openOfflineStore(identity: OfflineIdentity): Promise<Offli
     if (!database.objectStoreNames.contains("outbox")) database.createObjectStore("outbox", { keyPath: "command.command_id" });
   };
   try {
-    const database = await requestResult(request);
+    const database = await new Promise<IDBDatabase>((resolve,reject)=>{
+      let blocked=false;
+      request.onsuccess=()=>{if(blocked){request.result.close();return;}resolve(request.result);};
+      request.onerror=()=>reject(request.error);
+      request.onblocked=()=>{blocked=true;reject(new OfflineStorageError("UPGRADE_FAILED","Close other application tabs to recover offline storage."));};
+    });
+    const connections = openDatabases.get(namespace) ?? new Set<IDBDatabase>();
+    connections.add(database);
+    openDatabases.set(namespace, connections);
+    database.onversionchange = () => { database.close(); connections.delete(database); };
     localStorage.setItem(ACTIVE_IDENTITY_KEY, namespace);
     return new IndexedDbOfflineStore(database);
   } catch (error) {
@@ -125,9 +141,44 @@ export async function openOfflineStore(identity: OfflineIdentity): Promise<Offli
   }
 }
 
+async function deleteIdentityDatabase(namespace: string) {
+  for (const database of openDatabases.get(namespace) ?? []) database.close();
+  openDatabases.delete(namespace);
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(namespace);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new OfflineStorageError("UNAVAILABLE", "Offline data cleanup failed."));
+    request.onblocked = () => reject(new OfflineStorageError("UNAVAILABLE", "Close other application tabs to finish clearing offline data."));
+  });
+}
+
 export async function clearOfflineIdentity() {
   if (typeof indexedDB === "undefined" || typeof localStorage === "undefined") return;
   const namespace = localStorage.getItem(ACTIVE_IDENTITY_KEY);
-  if (namespace) indexedDB.deleteDatabase(namespace);
+  if (namespace) await deleteIdentityDatabase(namespace);
   localStorage.removeItem(ACTIVE_IDENTITY_KEY);
+}
+
+export async function retainOfflineIdentity(identity:{tenantId?:string;userId:string}|null){
+  const active=localStorage.getItem(ACTIVE_IDENTITY_KEY);
+  const matches=identity&&(identity.tenantId?active===identityNamespace({tenantId:identity.tenantId,userId:identity.userId,authorizedWorkDate:""}):active?.endsWith(`-${identity.userId.replace(/[^a-zA-Z0-9_-]/g,"_")}`));
+  if(active&&!matches)await clearOfflineIdentity();
+}
+
+export async function recoverOfflineStore() {
+  const namespace=localStorage.getItem(ACTIVE_IDENTITY_KEY);
+  if(!namespace?.startsWith('ethiopoultry-offline-'))throw Error('OFFLINE_NOT_AUTHORIZED');
+  const request=indexedDB.open(namespace,OFFLINE_STORE_VERSION);
+  request.onupgradeneeded=()=>request.transaction?.abort();
+  const database=await requestResult(request);
+  const store=new IndexedDbOfflineStore(database);
+  try {
+    const snapshots=(await store.listSnapshots()).filter(row=>row.schemaVersion===1&&row.offlineAccess).sort((a,b)=>b.offlineAccess!.issuedAt.localeCompare(a.offlineAccess!.issuedAt));
+    const grant=snapshots[0]?.offlineAccess;
+    if(!grant)throw Error('OFFLINE_NOT_AUTHORIZED');
+    const identity={tenantId:grant.tenantId,userId:grant.userId,authorizedWorkDate:grant.workDate};
+    if(identityNamespace(identity)!==namespace || snapshots.some(row=>row.offlineAccess!.tenantId!==identity.tenantId||row.offlineAccess!.userId!==identity.userId))throw Error('IDENTITY_CHANGED');
+    database.close();
+    return {store:await openOfflineStore(identity),identity,snapshots};
+  }catch(error){database.close();throw error;}
 }

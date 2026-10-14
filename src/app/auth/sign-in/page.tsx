@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 
 import { normalizeRole, routeForRole } from "@/lib/roles";
 import { createClient } from "@/utils/supabase/client";
+import {retainOfflineIdentity} from "@/lib/today-workspace/offline-store";
 
 const workdaySteps = [
   { icon: Building2, label: "Assigned operation", detail: "See only the farms and stores you manage" },
@@ -29,10 +30,11 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null);
 
   const destinationForRole = async (role: ReturnType<typeof normalizeRole>) => {
-    if (role !== "farm_manager") return routeForRole(role);
     const response = await fetch("/api/me/context", {cache: "no-store"});
-    if (!response.ok) return routeForRole(role);
+    if (!response.ok) throw Error("Your workspace could not be confirmed. Reconnect and try again.");
     const context = await response.json();
+    await retainOfflineIdentity(context.role==="farm_manager"?{tenantId:context.orgId,userId:context.userId}:null);
+    if (role !== "farm_manager") return routeForRole(role);
     return context?.todayWorkspaceEnabled ? "/app/today" : routeForRole(role);
   };
 
@@ -44,6 +46,7 @@ export default function SignInPage() {
       } = await supabase.auth.getUser();
 
       if (!user) return;
+      await retainOfflineIdentity({userId:user.id});
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -55,7 +58,7 @@ export default function SignInPage() {
       window.location.replace(await destinationForRole(normalizeRole(resolvedRole)));
     };
 
-    void checkSession();
+    void checkSession().catch(()=>setError("Your workspace could not be confirmed. Reconnect and try again."));
   }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -85,6 +88,8 @@ export default function SignInPage() {
       setIsLoading(false);
       return;
     }
+    try{await retainOfflineIdentity({userId:user.id});}
+    catch{setError("Your saved work could not be secured. Close other app tabs and try again.");setIsLoading(false);return;}
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -102,7 +107,8 @@ export default function SignInPage() {
       return;
     }
 
-    window.location.replace(await destinationForRole(normalizedRole));
+    try{window.location.replace(await destinationForRole(normalizedRole));}
+    catch{setError("Your saved work could not be secured. Close other app tabs and try again.");setIsLoading(false);}
   };
 
   return (

@@ -37,7 +37,9 @@ begin
 end $$;
 
 create temporary table feed_warehouse_revision as
-select public.today_resource_revision('feed_day', '16000000-0000-4000-8000-000000000007', current_date) as revision;
+select public.today_resource_revision('feed_day', '16000000-0000-4000-8000-000000000007', current_date) as revision,
+ public.today_source_fingerprint('16000000-0000-4000-8000-000000000004','16000000-0000-4000-8000-000000000007',current_date,'health_deaths') as health,
+ public.today_source_fingerprint('16000000-0000-4000-8000-000000000004','16000000-0000-4000-8000-000000000007',current_date,'routine_supplies') as supplies;
 grant select on feed_warehouse_revision to authenticated;
 
 set local role authenticated;
@@ -88,6 +90,16 @@ begin
   v_command := jsonb_build_object('schema_version', 1, 'command_id', '16000000-0000-4000-8000-000000000103',
     'type', 'close_feed_day', 'farm_id', v_farm, 'flock_id', v_flock, 'work_date', current_date,
     'expected_resource_revision', v_revision, 'payload', '{}'::jsonb);
+  -- A second offline session names its predecessor instead of silently rebasing.
+  v_result:=public.dispatch_today_command_v1(v_actor,jsonb_build_object('schema_version',1,'command_id','16000000-0000-4000-8000-000000000106',
+    'type','save_feed_session','farm_id',v_farm,'flock_id',v_flock,'work_date',current_date,
+    'expected_resource_revision',(select revision from feed_warehouse_revision),'revision_from','16000000-0000-4000-8000-000000000101',
+    'depends_on',jsonb_build_array('16000000-0000-4000-8000-000000000101'),
+    'payload',jsonb_build_object('session',jsonb_build_object('session_name','Feeding 2','session_time','15:00','feeders_count',1,'planned_feed_kg',5,'actual_feed_kg',5,'feed_item_id',v_feed,'warehouse_id',v_store,'feed_type','layer_feed','status','completed'))));
+  if v_result->>'status'<>'applied' then raise exception 'Receipt-chained second feeding failed: %',v_result; end if;
+  v_result:=public.dispatch_today_command_v1(v_actor,jsonb_set(v_command,'{command_id}','"16000000-0000-4000-8000-000000000110"'));
+  if v_result->>'status'<>'conflict' then raise exception 'Stale feed close did not conflict.'; end if;
+  v_command:=v_command||jsonb_build_object('revision_from','16000000-0000-4000-8000-000000000106','depends_on',jsonb_build_array('16000000-0000-4000-8000-000000000106'));
   v_result := public.dispatch_today_command_v1(v_actor, v_command);
   if v_result->>'status' <> 'applied' or public.dispatch_today_command_v1(v_actor, v_command) <> v_result then
     raise exception 'Feed close or replay failed.';
@@ -99,19 +111,34 @@ begin
         'warehouse_id', v_store, 'item_id', v_feed, 'quantity', 10, 'unit_cost', 10,
         'details', jsonb_build_object('procurement_type', 'miscellaneous'))));
   if v_result->>'status'<>'applied' then raise exception 'Farm-owned stock receipt did not inherit access.'; end if;
+  v_command:=jsonb_build_object('schema_version',1,'command_id','16000000-0000-4000-8000-000000000107','type','save_daily_record',
+    'farm_id',v_farm,'flock_id',v_flock,'work_date',current_date,'revision_from','16000000-0000-4000-8000-000000000103',
+    'depends_on',jsonb_build_array('16000000-0000-4000-8000-000000000103'),
+    'payload',jsonb_build_object('daily_record_id',null,'record',jsonb_build_object('record_date',current_date,'water_consumed_liters',123,'normal_eggs',10,'broken_eggs',1,'dirty_eggs',1,'total_eggs',12),'usages',null));
+  v_result:=public.dispatch_today_command_v1(v_actor,v_command);
+  if v_result->>'status'<>'applied' or public.dispatch_today_command_v1(v_actor,v_command)<>v_result then raise exception 'Daily edit after feed close or receipt replay failed: %',v_result; end if;
+  for v_command in select jsonb_build_object('schema_version',1,'command_id',entry.id,'type','confirm_no_activity',
+    'farm_id',v_farm,'flock_id',v_flock,'work_date',current_date,'fingerprint_from','16000000-0000-4000-8000-000000000107',
+    'depends_on',jsonb_build_array('16000000-0000-4000-8000-000000000107'),
+    'payload',jsonb_build_object('task_code',entry.task,'source_fingerprint',entry.fingerprint))
+    from (select '16000000-0000-4000-8000-000000000108' as id,'health_deaths' as task,health as fingerprint from feed_warehouse_revision
+      union all select '16000000-0000-4000-8000-000000000109','routine_supplies',supplies from feed_warehouse_revision) entry loop
+    v_result:=public.dispatch_today_command_v1(v_actor,v_command);
+    if v_result->>'status'<>'applied' then raise exception 'Chained zero confirmation failed: %',v_result; end if;
+  end loop;
 end $$;
 reset role;
 
 do $$
 begin
-  if (select count(*) from public.feeding_session_records where org_id = '16000000-0000-4000-8000-000000000001') <> 1 then
+  if (select count(*) from public.feeding_session_records where org_id = '16000000-0000-4000-8000-000000000001') <> 2 then
     raise exception 'Feed replay duplicated the session.';
   end if;
   if (select count(*) from public.stock_ledger where org_id = '16000000-0000-4000-8000-000000000001' and source_kind = 'feed_day_close') <> 1
-    or (select sum(quantity) from public.stock_ledger where org_id = '16000000-0000-4000-8000-000000000001' and source_kind = 'feed_day_close') <> 5 then
+    or (select sum(quantity) from public.stock_ledger where org_id = '16000000-0000-4000-8000-000000000001' and source_kind = 'feed_day_close') <> 10 then
     raise exception 'Feed close did not deduct exactly once.';
   end if;
-  if not exists(select 1 from public.daily_farm_records where org_id = '16000000-0000-4000-8000-000000000001' and feed_intake_quantity = 5) then
+  if not exists(select 1 from public.daily_farm_records where org_id = '16000000-0000-4000-8000-000000000001' and feed_intake_quantity = 10 and water_consumed_liters=123) then
     raise exception 'Feed close did not synchronize the Daily Record.';
   end if;
   if exists(select 1 from public.client_operation_receipts where command_id in (

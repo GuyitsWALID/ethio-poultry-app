@@ -817,6 +817,20 @@
       "complete": "Complete",
       "needsAttention": "Needs attention"
     },
+    "offline": {
+      "loadingDraft": "Loading saved draft…",
+      "recovered": "Saved work recovered on this device. Reconnect to sign in, sync and finish the day. Pending entries are not complete yet.",
+      "expired": "Reconnect and sign in to continue. Your draft is kept on this device.",
+      "conflict": "This record changed or could not be saved. Your original inputs remain below. Review the latest server record before entering the correction again.",
+      "discardConfirm": "Discard this task’s local inputs and rejected save, then load the server values? Queued saves still waiting for a result cannot be discarded.",
+      "reviewServer": "Discard local inputs and review server values",
+      "needsAttention": "Needs attention",
+      "waiting": "Saved on this device. Waiting to sync; not complete yet.",
+      "resourcePending": "Another change to this record is waiting to sync. Keep this draft and sync the earlier change first.",
+      "birdHelp": "You can save this bird check on this device today. It is complete only after the server accepts it.",
+      "blocked": "Saving is paused. Keep this browser profile and drafts. Reconnect and retry; if storage is blocked, close other app tabs. Do not clear browser data.",
+      "retry": "Check access and retry sync"
+    },
     "connection": {
       "saved": "Saved on tablet",
       "waiting": "Waiting to sync",

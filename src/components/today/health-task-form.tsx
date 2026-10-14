@@ -3,6 +3,7 @@
 import {useState, type FormEvent, type ReactNode} from "react";
 import {useTranslations} from "next-intl";
 import {Save} from "lucide-react";
+import {DraftFieldGroup, useDraftField, useDraftState, useDraftSubmit,useTodayOffline} from "@/components/today/offline-context";
 
 import type {TodayFlockContext, TodayTaskDetail} from "@/lib/today-workspace/contracts";
 import {sendTodayCommand} from "@/lib/today-workspace/sync";
@@ -15,25 +16,31 @@ const string = (value: FormDataEntryValue | null) => String(value ?? "").trim();
 const number = (value: FormDataEntryValue | null) => Number(value ?? 0);
 
 function Field({label, name, type = "text", required = false, min, step}: {label: string; name: string; type?: string; required?: boolean; min?: string; step?: string}) {
-  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<input className={inputClass} name={name} type={type} required={required} min={min} step={type === "number" ? (step ?? "1") : undefined} inputMode={type === "number" ? (step ? "decimal" : "numeric") : undefined}/></label>;
+  const [value,setValue]=useDraftField(name,"");
+  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<input value={value} onChange={event=>setValue(event.target.value)} className={inputClass} name={name} type={type} required={required} min={min} step={type === "number" ? (step ?? "1") : undefined} inputMode={type === "number" ? (step ? "decimal" : "numeric") : undefined}/></label>;
 }
 
 function Select({label, name, children, required = false}: {label: string; name: string; children: ReactNode; required?: boolean}) {
-  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<select className={inputClass} name={name} required={required}>{children}</select></label>;
+  const [value,setValue]=useDraftField<string|undefined>(name,undefined);
+  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<select value={value} onChange={event=>setValue(event.target.value)} className={inputClass} name={name} required={required}>{children}</select></label>;
 }
 
 export function HealthTaskForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDetail; flock: TodayFlockContext; onChanged: () => void; onSaved: () => void}) {
   const t = useTranslations("Today.embedded");
   const errors = useTranslations("Errors");
+  const offlineText=useTranslations("Today.offline");
+  const send=useDraftSubmit();
+  const pendingDaily=useTodayOffline().queue.some(row=>row.command.type==="save_daily_record"&&row.command.flock_id===flock.id&&row.command.work_date===detail.workDate);
   const vaccinations = Array.isArray(detail.data.vaccinations) ? detail.data.vaccinations as Row[] : [];
   const medicines = detail.inventory.filter((item) => item.category === "medicine");
   const vaccines = detail.inventory.filter((item) => item.category === "vaccine");
-  const [selected, setSelected] = useState<Choice[]>([]);
-  const [saved, setSaved] = useState<Choice[]>([]);
+  const [selected, setSelected] = useDraftState<Choice[]>("health.selected",[]);
+  const [saved, setSaved] = useDraftState<Choice[]>("health.saved",[]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{error: boolean; text: string} | null>(null);
 
   function toggle(choice: Choice) {
+    if(saved.includes(choice)||(choice==="none"&&saved.some(row=>row!=="none")))return;
     setMessage(null);
     setSelected((current) => choice === "none"
       ? current.includes("none") ? [] : ["none"]
@@ -45,7 +52,8 @@ export function HealthTaskForm({detail, flock, onChanged, onSaved}: {detail: Tod
     setSaving(true);
     setMessage(null);
     try {
-      const result = await sendTodayCommand(command);
+      const result = await send(command);
+      if(result.status==="queued"){const next=[...new Set([...saved,...choices])];setSaved(next);setMessage({error:false,text:offlineText("waiting")});if(selected.every(choice=>next.includes(choice)))onSaved();else onChanged();return;}
       if (result.status !== "applied") {
         setMessage({error: true, text: result.error_code === "RESOURCE_CONFLICT" ? errors("staleRevision") : errors("validation")});
         return;
@@ -61,7 +69,7 @@ export function HealthTaskForm({detail, flock, onChanged, onSaved}: {detail: Tod
 
   async function saveLoss(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!flock.birdCheck.dailyRecordId || !flock.birdCheck.resourceRevision) {
+    if ((!flock.birdCheck.dailyRecordId || !flock.birdCheck.resourceRevision)&&!pendingDaily) {
       setMessage({error: true, text: t("startBirdCheckFirst")});
       return;
     }
@@ -116,13 +124,13 @@ export function HealthTaskForm({detail, flock, onChanged, onSaved}: {detail: Tod
     <div className="grid gap-2 sm:grid-cols-2">{choices.map((choice) => <label key={choice} className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold ${selected.includes(choice) ? "border-forest-900 bg-forest-900 text-white" : "border-sand-300 text-forest-900"}`}><input type="checkbox" checked={selected.includes(choice)} disabled={choice === "none" && flock.healthSummary.hasActivity} onChange={() => toggle(choice)} className="h-5 w-5 accent-leaf-500"/><span>{t(`healthModes.${choice}`)}</span></label>)}</div>
     <p className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">{t("recordedLosses", {deaths: flock.birdCheck.deaths, culls: flock.birdCheck.culls})}</p>
     {selected.includes("none") ? <div className="flex justify-end"><button type="button" onClick={() => void confirmNone()} disabled={saving || saved.includes("none")} className={saveClass}><Save className="h-4 w-4"/>{t("confirmNone")}</button></div> : null}
-    {lossChosen && !["death", "cull"].filter((choice) => selected.includes(choice as Choice)).every((choice) => saved.includes(choice as Choice)) ? <form onSubmit={saveLoss} className="grid gap-3 rounded-xl border border-sand-200 p-4">
-      {!flock.birdCheck.dailyRecordId ? <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{t("startBirdCheckFirst")}</p> : null}
+    {lossChosen && !["death", "cull"].filter((choice) => selected.includes(choice as Choice)).every((choice) => saved.includes(choice as Choice)) ? <DraftFieldGroup name="loss"><form onSubmit={saveLoss} className="grid gap-3 rounded-xl border border-sand-200 p-4">
+      {!flock.birdCheck.dailyRecordId&&!pendingDaily ? <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{t("startBirdCheckFirst")}</p> : null}
       <div className="grid gap-3 sm:grid-cols-2">{selected.includes("death") ? <><Field label={t("deathCount")} name="death_count" type="number" min="1" required/><Select label={t("cause")} name="cause" required><option value="">{t("choose")}</option><option value="Natural">{t("deathCauses.natural")}</option><option value="Illness">{t("deathCauses.illness")}</option><option value="Unknown">{t("deathCauses.unknown")}</option></Select><Field label={t("time")} name="time" type="time"/><Field label={t("diagnosis")} name="diagnosis"/><Field label={t("notes")} name="notes"/></> : null}{selected.includes("cull") ? <><Field label={t("cullCount")} name="cull_count" type="number" min="1" required/><Field label={t("cullReason")} name="cull_reason" required/></> : null}</div>
-      <div className="flex justify-end"><button disabled={saving || !flock.birdCheck.dailyRecordId} className={saveClass}><Save className="h-4 w-4"/>{t("saveLoss")}</button></div>
-    </form> : null}
-    {selected.includes("health") && !saved.includes("health") ? <form onSubmit={saveHealth} className="grid gap-3 rounded-xl border border-sand-200 p-4"><div className="grid gap-3 sm:grid-cols-2"><Select label={t("eventType")} name="event_type" required><option value="observation">{t("observation")}</option><option value="disease">{t("disease")}</option><option value="treatment">{t("treatment")}</option></Select><Field label={t("description")} name="description" required/><Field label={t("diagnosis")} name="diagnosis"/><Field label={t("treatment")} name="treatment"/><Select label={t("medicine")} name="item"><option value="">{t("noneUsed")}</option>{medicines.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><Select label={t("warehouse")} name="warehouse"><option value="">{t("choose")}</option>{detail.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select><Field label={t("quantity")} name="quantity" type="number" min="0.01" step="0.01"/></div><div className="flex justify-end"><button disabled={saving} className={saveClass}><Save className="h-4 w-4"/>{t("saveContinue")}</button></div></form> : null}
-    {selected.includes("vaccination") && !saved.includes("vaccination") ? <form onSubmit={saveVaccination} className="grid gap-3 rounded-xl border border-sand-200 p-4"><div className="grid gap-3 sm:grid-cols-2"><Select label={t("vaccination")} name="schedule" required><option value="">{t("choose")}</option>{vaccinations.map((row) => <option key={String(row.id)} value={String(row.id)}>{String(row.vaccine_name)} · {String(row.dosage ?? "")}</option>)}</Select><Select label={t("vaccine")} name="item" required><option value="">{t("choose")}</option>{vaccines.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><Select label={t("warehouse")} name="warehouse" required><option value="">{t("choose")}</option>{detail.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select><Field label={t("quantity")} name="quantity" type="number" min="0.01" step="0.01" required/></div><div className="flex justify-end"><button disabled={saving} className={saveClass}><Save className="h-4 w-4"/>{t("saveContinue")}</button></div></form> : null}
+      <div className="flex justify-end"><button disabled={saving || (!flock.birdCheck.dailyRecordId&&!pendingDaily)} className={saveClass}><Save className="h-4 w-4"/>{t("saveLoss")}</button></div>
+    </form></DraftFieldGroup> : null}
+    {selected.includes("health") && !saved.includes("health") ? <DraftFieldGroup name="health"><form onSubmit={saveHealth} className="grid gap-3 rounded-xl border border-sand-200 p-4"><div className="grid gap-3 sm:grid-cols-2"><Select label={t("eventType")} name="event_type" required><option value="observation">{t("observation")}</option><option value="disease">{t("disease")}</option><option value="treatment">{t("treatment")}</option></Select><Field label={t("description")} name="description" required/><Field label={t("diagnosis")} name="diagnosis"/><Field label={t("treatment")} name="treatment"/><Select label={t("medicine")} name="item"><option value="">{t("noneUsed")}</option>{medicines.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><Select label={t("warehouse")} name="warehouse"><option value="">{t("choose")}</option>{detail.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select><Field label={t("quantity")} name="quantity" type="number" min="0.01" step="0.01"/></div><div className="flex justify-end"><button disabled={saving} className={saveClass}><Save className="h-4 w-4"/>{t("saveContinue")}</button></div></form></DraftFieldGroup> : null}
+    {selected.includes("vaccination") && !saved.includes("vaccination") ? <DraftFieldGroup name="vaccination"><form onSubmit={saveVaccination} className="grid gap-3 rounded-xl border border-sand-200 p-4"><div className="grid gap-3 sm:grid-cols-2"><Select label={t("vaccination")} name="schedule" required><option value="">{t("choose")}</option>{vaccinations.map((row) => <option key={String(row.id)} value={String(row.id)}>{String(row.vaccine_name)} · {String(row.dosage ?? "")}</option>)}</Select><Select label={t("vaccine")} name="item" required><option value="">{t("choose")}</option>{vaccines.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><Select label={t("warehouse")} name="warehouse" required><option value="">{t("choose")}</option>{detail.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</Select><Field label={t("quantity")} name="quantity" type="number" min="0.01" step="0.01" required/></div><div className="flex justify-end"><button disabled={saving} className={saveClass}><Save className="h-4 w-4"/>{t("saveContinue")}</button></div></form></DraftFieldGroup> : null}
     {message ? <p role={message.error ? "alert" : "status"} className={`rounded-xl p-3 text-sm ${message.error ? "bg-red-50 text-red-800" : "bg-leaf-500/10 text-leaf-700"}`}>{message.text}</p> : null}
   </div>;
 }

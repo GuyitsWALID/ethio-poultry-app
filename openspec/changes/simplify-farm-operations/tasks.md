@@ -44,11 +44,31 @@
 
 ## 5. Offline Web Foundation
 
+2026-10-14 acceptance update: owner manually tested the localhost offline workflow
+and confirmed everything working. Task 5 implementation is complete and accepted
+for staging. Earlier notes below are retained as verification history, not current
+implementation blockers. This owner confirmation is not automated cross-browser,
+physical-tablet, upgrade-failure or seven-day production-pilot certification;
+unverified scenarios remain tracked for release/pilot acceptance.
+
 - [x] 5.1 Add the manifest, installable icons, service-worker registration, and secured `/sw.js` headers; verify production build installation criteria and that protected/API routes are not runtime-cached.
 - [x] 5.2 Implement the offline-store interface with IndexedDB and in-memory adapters for snapshots, drafts, outbox commands, schema upgrades, and identity cleanup; verify refresh, restart, migration, quota failure, and sign-out tests.
-- [ ] 5.3 Implement dependency-aware foreground synchronization and progressive Background Sync with retry/backoff; verify session-before-feed-close ordering, independent-command progress, and blocked-dependent behavior.
-- [ ] 5.4 Enforce current-Addis-day offline authorization, reauthentication, assignment refresh, and locked expired drafts; verify midnight, device clock skew, revoked assignment, and offline sign-in scenarios.
-- [ ] 5.5 Add global and card-level connection states for Saved on tablet, Waiting to sync, conflict, rejected, and synced results; verify screen-reader announcements and recovery actions.
+- [x] 5.3 Implement dependency-aware foreground synchronization and progressive Background Sync with retry/backoff.
+    - 2026-10-14: explicit receipt references now chain Daily Record creation/edits, feeding sessions, feed close and zero confirmations. Source revisions and fingerprints remain checked server-side; the Docker migration/integration dry run passed. Full-day cross-browser acceptance is running, not yet certified.
+    - [ ] Deferred verification: session-before-feed-close ordering, independent-command progress, blocked dependents, interrupted sends and retry recovery in the populated browser workflow.
+    - 2026-10-12 deferred verification: full lint, TypeScript and 371 unit/contract tests pass, including dependency ordering, independent progress, retry/backoff, same-ID interrupted sends and authorization pause. These helper results do not replace populated browser acceptance.
+    - 2026-10-12: foreground synchronization is wired into Today, with persisted retry/backoff, same-ID interrupted-send recovery, authorization refresh, dependency ordering, independent-command progress and optional service-worker wake signals. Complete populated offline-day/browser acceptance remains open; multiple pending edits to the same mutable resource are safely blocked rather than silently rebased.
+- [x] 5.4 Enforce current-Addis-day offline authorization, reauthentication, assignment refresh, and locked expired drafts.
+    - [x] Chromium verification: simulated next-day expiry locks editing and preserves drafts; online refresh restores editing; actual CEO farm revocation preserves the queued command and blocks reconnect synchronization (revoked workspace returns HTTP 403).
+    - [ ] Deferred verification: browser device-clock skew and offline sign-in scenarios; new safe offline reload/restart implementation awaits populated cross-browser acceptance.
+    - 2026-10-14: data-free offline shell, preloaded authorized forms and identity-scoped restart recovery implemented. Recovery preserves the original grant and cannot renew authorization or sign in offline.
+    - 2026-10-12: Today editing uses server-issued current-Addis-day/assignment-expiry grants, tenant/user/farm/flock checks, expiry locks and online session/assignment refresh before synchronization. Expired drafts remain stored. Protected offline reload/browser restart and populated revocation/midnight browser acceptance remain open.
+- [x] 5.5 Add global and card-level connection states for Saved on tablet, Waiting to sync, conflict, rejected, and synced results.
+    - [x] Chromium verification: real IndexedDB draft recovery after online reload, injected outbox quota failure with blocking recovery message and no queued command, plus retained input through expiry/revocation. Fixed storage failures not activating the global recovery message.
+    - [ ] Deferred verification: screen-reader announcements, translated rejection reasons and service-worker upgrade failures in the browser; complete offline-day recovery remains open.
+    - [x] Scoped Chromium tablet verification: English/Amharic context controls, Ethiopian calendar, locale reload persistence, offline bird-check queue, duplicate-save lock, reconnect application and identical command-receipt replay. Production build passed; this does not complete the broader verification items or a full offline day.
+  - 2026-10-12: Today forms persist drafts and queue commands before transport. Global/card states, live announcements, snapshot fallback within the loaded app, stale-input review, explicit discard confirmation and storage-error recovery are wired. Partial health saves preserve other unsent forms. Full offline-day recovery acceptance is still open; see `docs/deployment/tablet-offline-acceptance.md`.
+  - Owner requested implementation-first delivery: 5.3–5.5 parent checkboxes track implementation; automated verification gaps remain explicitly unchecked above and under 8.1–8.2. Follow-up fixes wake retries after direct saves, retain command IDs through local cleanup failure, recheck selected-farm access before reconnect unlock, surface early/service-worker upgrade failures, and show translated rejection reasons. Owner subsequently confirmed manual offline testing and authorized staging migration and `notmain` push; production pilot remains separately gated.
 
 ## 6. Today User Experience
 
@@ -78,6 +98,7 @@
 
 - [ ] 8.1 Run migration verification, RLS tests, SQL integration tests, focused Today/offline/localization tests, the full test suite, lint, TypeScript, and production build; record exact commands and passing results.
 - [ ] 8.2 Run Playwright in tablet portrait and landscape across Chromium plus supported cross-browser projects, including offline/reconnect, Amharic, deep-link, accessibility, and legacy-route regression scenarios.
+  - Full offline-day gate still requires a safe protected-page reload/restart shell, task-detail availability for offline entry, and an explicit revision/dependency-chain protocol for multiple pending edits to the same Daily Record/feed day. These implementation gaps must be resolved before claiming full-day acceptance; never bypass revision checks or cache authenticated HTML/API responses as a shortcut.
 - [ ] 8.3 Apply migrations and feature-disabled code to staging, run Cloudflare/Supabase end-to-end validation, and verify rollback by disabling the tenant feature flag.
 - [ ] 8.4 Produce an encrypted logical production backup, complete and document a restore drill, name the rollback owner, and verify daily backup monitoring before enabling authoritative pilot data.
 - [ ] 8.5 Enable Today only for the isolated production pilot organization and verify monitoring, notifications, command receipts, and legacy fallback routes.

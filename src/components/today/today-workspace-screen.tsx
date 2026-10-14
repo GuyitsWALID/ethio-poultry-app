@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { useFarmScope } from "@/components/farm-scope-context";
+import {TodayOfflineProvider, useTodayOffline} from "@/components/today/offline-context";
 import {BirdCheckCard} from "@/components/today/bird-check-card";
 import {EmbeddedTaskCard} from "@/components/today/embedded-task-card";
 import { formatNumber, formatOperationDate } from "@/i18n/formats";
@@ -41,11 +42,18 @@ function earliestEditableDate(today: string) {
 }
 
 export function TodayWorkspaceScreen() {
+  return <TodayOfflineProvider><TodayWorkspaceContent/></TodayOfflineProvider>;
+}
+function TodayWorkspaceContent() {
+  const offline=useTodayOffline();
+  const {acceptWorkspace:rememberWorkspace,runtime:offlineRuntime,fail:offlineFailure}=offline;
+  const offlineText=useTranslations("Today.offline");
   const searchParams = useSearchParams();
   const locale = useLocale() as AppLocale;
   const t = useTranslations("Today");
   const { role, loading: scopeLoading, farms, houses, flocks, scope, setScope } = useFarmScope();
-  const today = useMemo(() => addisToday(), []);
+  const [today,setToday] = useState(addisToday);
+  useEffect(()=>{const timer=window.setInterval(()=>setToday(addisToday()),15000);return()=>window.clearInterval(timer);},[]);
   const requestedFarmId = searchParams.get("farm_id") ?? "";
   const requestedHouseId = searchParams.get("house_id") ?? "";
   const requestedFlockId = searchParams.get("flock_id") ?? "";
@@ -199,18 +207,27 @@ export function TodayWorkspaceScreen() {
         return;
       }
       const next = body as TodayWorkspace;
+      if(controller.signal.aborted)return;
       setError(null);
       setWorkspace(next);
       setFlockId((current) => next.flocks.some((flock) => flock.id === current) ? current : "");
+      // Show authoritative work immediately; preparing every offline form can
+      // take longer than loading the selected flock itself.
+      setLoading(false);
+      try {await rememberWorkspace(next);}catch(reason){offlineFailure(reason);}
     }).catch((reason: unknown) => {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
-      setError("LOAD_FAILED"); setWorkspace(null);
+      if(!navigator.onLine && offlineRuntime) {
+        void offlineRuntime.store.getSnapshot(`${farmId}:${workDate}`).then(cached=>{if(controller.signal.aborted)return;if(cached){setWorkspace(cached);setError(null);}else{setError("LOAD_FAILED");setWorkspace(null);}}).catch(offlineFailure);
+      } else {setError("LOAD_FAILED"); setWorkspace(null);}
     }).finally(() => {
       if (controller.signal.aborted) return;
       setLoading(false);
     });
     return () => controller.abort();
-  }, [farmId, reloadVersion, role, workDate]);
+  }, [farmId, reloadVersion, role, workDate,rememberWorkspace,offlineRuntime,offlineFailure]);
+
+  useEffect(()=>{const synced=()=>{setLoading(true);setReloadVersion(value=>value+1);};window.addEventListener("ethiopoultry:today-synced",synced);return()=>window.removeEventListener("ethiopoultry:today-synced",synced);},[]);
 
   function reload() {
     setFinishIssues([]);
@@ -218,25 +235,26 @@ export function TodayWorkspaceScreen() {
     setReloadVersion((current) => current + 1);
   }
 
+  const displayWorkspace = useMemo(()=>workspace?{...workspace,flocks:workspace.flocks.map(flock=>({...flock,tasks:flock.tasks.map(task=>({...task,state:offline.stateFor({farmId:workspace.farm.id,flockId:flock.id,workDate:workspace.workDate},task)}))})),farmTasks:workspace.farmTasks.map(task=>({...task,state:offline.stateFor({farmId:workspace.farm.id,workDate:workspace.workDate},task)}))}:null,[workspace,offline]);
   const visibleFlocks = useMemo(
-    () => activeFlockId ? availableFlocks.filter((flock) => flock.id === activeFlockId) : [],
-    [activeFlockId, availableFlocks],
+    () => activeFlockId ? displayWorkspace?.flocks.filter((flock) => flock.id === activeFlockId)??[] : [],
+    [activeFlockId, displayWorkspace],
   );
   const required = useMemo(() => {
     if (!workspace) return [];
-    return [...workspace.flocks.flatMap((flock) => flock.tasks), ...workspace.farmTasks].filter((task) => task.required && task.applicable);
-  }, [workspace]);
+    return [...displayWorkspace!.flocks.flatMap((flock) => flock.tasks), ...displayWorkspace!.farmTasks].filter((task) => task.required && task.applicable);
+  }, [workspace,displayWorkspace]);
   const reviewTasks = useMemo<ReviewTask[]>(() => {
     if (!workspace) return [];
     return [
-      ...workspace.flocks.flatMap((flock) => flock.tasks
+      ...displayWorkspace!.flocks.flatMap((flock) => flock.tasks
         .filter((task) => task.required && task.applicable)
         .map((task) => ({...task, contextLabel: flock.code}))),
-      ...workspace.farmTasks
+      ...displayWorkspace!.farmTasks
         .filter((task) => task.required && task.applicable && task.code !== "review_finish")
         .map((task) => ({...task, contextLabel: workspace.farm.name})),
     ];
-  }, [workspace]);
+  }, [workspace,displayWorkspace]);
   const completed = required.filter((task) => task.state === "complete").length;
   const progress = required.length ? Math.round(completed / required.length * 100) : 0;
 
@@ -294,7 +312,7 @@ export function TodayWorkspaceScreen() {
       <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("house")}<select value={houseId} disabled={!availableHouses.length} onChange={(event)=>{const id=event.target.value;setSelectedHouseId(id);setFlockId("");setScope((current)=>({...current,houseId:id,flockId:"",batchId:""}));}} className="min-h-12 rounded-xl border border-sand-300 bg-white px-3 text-sm text-forest-900 disabled:bg-sand-50"><option value="">{t("chooseHouse")}</option>{availableHouses.map((house)=><option key={house.id} value={house.id}>{house.name}</option>)}</select></label>
       <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("flock")}<select value={activeFlockId} disabled={!houseId || !availableFlocks.length} onChange={(event)=>{const id=event.target.value;setFlockId(id);setScope((current)=>({...current,flockId:id,batchId:""}));}} className="min-h-12 rounded-xl border border-sand-300 bg-white px-3 text-sm text-forest-900 disabled:bg-sand-50"><option value="">{t("chooseFlock")}</option>{availableFlocks.map((flock)=><option key={flock.id} value={flock.id}>{flock.code}</option>)}</select></label>
       <button type="button" onClick={reload} disabled={loading||!farmId} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading?"animate-spin motion-reduce:animate-none":""}`} />{t("refresh")}</button>
-      <div className="sm:col-span-2 xl:col-span-5 flex flex-wrap items-center justify-between gap-2 border-t border-sand-100 pt-3 text-xs text-forest-600"><span>{workspace?t("currentContext",{farm:workspace.farm.name,date:formatOperationDate(workspace.workDate,locale)}):t("loading")}</span><span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-semibold ${online?"bg-leaf-500/10 text-leaf-700":"bg-amber-500/10 text-amber-800"}`}>{online?<Cloud className="h-4 w-4"/>:<CloudOff className="h-4 w-4"/>}{online?t("connection.synced"):t("connection.offline")}</span></div>
+      <div className="sm:col-span-2 xl:col-span-5 flex flex-wrap items-center justify-between gap-2 border-t border-sand-100 pt-3 text-xs text-forest-600"><span>{workspace?t("currentContext",{farm:workspace.farm.name,date:formatOperationDate(workspace.workDate,locale)}):t("loading")}</span><span role="status" aria-live="polite" className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-semibold ${online?"bg-leaf-500/10 text-leaf-700":"bg-amber-500/10 text-amber-800"}`}>{online?<Cloud className="h-4 w-4"/>:<CloudOff className="h-4 w-4"/>}{offline.problem||offline.queue.some(row=>row.state==="conflict"||row.state==="rejected")||offline.drafts.some(row=>(row.value as {needsReview?:boolean}).needsReview)?offlineText("needsAttention"):offline.queue.length?t("connection.waiting"):offline.drafts.length?t("connection.saved"):online?t("connection.synced"):t("connection.offline")}</span></div>
     </section>
 
     {error === "FEATURE_DISABLED" ? <section className="rounded-3xl border border-amber-300 bg-amber-50 p-7 text-center"><h2 className="font-display text-2xl font-semibold text-forest-900">{t("featureDisabled")}</h2><p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-forest-700">{t("featureDisabledHelp")}</p><Link href="/app/farm-manager" className="mt-5 inline-flex min-h-12 items-center rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white">{t("openDashboard")}</Link></section>:null}
@@ -303,8 +321,9 @@ export function TodayWorkspaceScreen() {
 
     {workspace && (!error||error==="ACCESS_CHANGED"||error==="ASSIGNMENT_REQUIRED") ? <fieldset disabled={Boolean(error)} className="min-w-0 space-y-6 border-0 p-0">
       {!workspace.flocks.length ? <section className="rounded-3xl border border-dashed border-sand-300 bg-white p-8 text-center"><CheckCircle2 className="mx-auto h-8 w-8 text-leaf-600"/><h2 className="mt-3 font-display text-2xl font-semibold text-forest-900">{t("noActiveFlock")}</h2><p className="mt-2 text-sm text-forest-600">{t("noActiveFlockHelp")}</p></section> : null}
+      {offline.problem?<p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-800">{offlineText("blocked")} <button type="button" className="min-h-12 underline" onClick={()=>{reload();void offline.authorize().then(allowed=>{if(allowed)window.dispatchEvent(new CustomEvent("ethiopoultry:retry-sync"));}).catch(offline.fail);}}>{offlineText("retry")}</button></p>:null}
       {visibleFlocks.map((flock)=><section key={flock.id} className="overflow-hidden rounded-3xl border border-sand-200 bg-sand-50 shadow-sm"><header className="grid gap-4 border-b border-sand-200 bg-white p-5 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-display text-2xl font-semibold text-forest-900">{flock.code}</h2><span className="rounded-full bg-forest-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-white">{flock.type.replaceAll("_"," ")}</span></div><p className="mt-1 text-sm text-forest-600">{flock.houseLabel}{flock.batchLabel?` · ${flock.batchLabel}`:""} · {t("age",{days:flock.ageDays})}</p></div><div className="grid grid-cols-2 gap-2 text-xs"><div className="rounded-xl bg-sand-50 px-3 py-2"><span className="block text-forest-500">{t("openingBirds")}</span><strong className="mt-1 block text-base text-forest-900">{flock.openingBirds===null?"—":formatNumber(flock.openingBirds,locale)}</strong></div><div className="rounded-xl bg-sand-50 px-3 py-2"><span className="block text-forest-500">{t("previousClose")}</span><strong className="mt-1 block text-base text-forest-900">{flock.previousClosingBirds===null?"—":formatNumber(flock.previousClosingBirds,locale)}</strong></div></div></header><div className="grid gap-3 p-4">{flock.tasks.filter((task)=>task.applicable).map((task)=>task.code === "birds" ? <BirdCheckCard key={`${flock.id}:${flock.birdCheck.resourceRevision ?? "new"}`} flock={flock} task={task} farmId={workspace.farm.id} workDate={workspace.workDate} online={online} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onSaved={()=>saved(task)}/> : <EmbeddedTaskCard key={task.code} task={task} flock={flock} farmId={workspace.farm.id} workDate={workspace.workDate} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onChanged={reload} onSaved={()=>saved(task)}/>)}</div></section>)}
-      <section><div className="mb-3 flex items-center gap-2"><HeartPulse className="h-5 w-5 text-forest-600"/><h2 className="font-display text-xl font-semibold text-forest-900">{t("additional")}</h2></div><div className="grid gap-3">{workspace.farmTasks.filter((task)=>task.applicable).map((task)=><EmbeddedTaskCard key={task.code} task={task} flock={visibleFlocks[0]} farmId={workspace.farm.id} workDate={workspace.workDate} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onChanged={reload} onSaved={()=>saved(task)} dayRevision={workspace.operatingDay.revision} reviewTasks={reviewTasks} finishIssues={finishIssues} online={online} canFinish={workspace.capabilities.canFinish}/>)}</div></section>
+      <section><div className="mb-3 flex items-center gap-2"><HeartPulse className="h-5 w-5 text-forest-600"/><h2 className="font-display text-xl font-semibold text-forest-900">{t("additional")}</h2></div><div className="grid gap-3">{displayWorkspace!.farmTasks.filter((task)=>task.applicable).map((task)=><EmbeddedTaskCard key={task.code} task={task} flock={visibleFlocks[0]} farmId={workspace.farm.id} workDate={workspace.workDate} expanded={openTask===task.code} onToggle={()=>setOpenTask((current)=>current===task.code?null:task.code)} onChanged={reload} onSaved={()=>saved(task)} dayRevision={workspace.operatingDay.revision} reviewTasks={reviewTasks} finishIssues={finishIssues} online={online} canFinish={workspace.capabilities.canFinish && !offline.queue.length && !offline.drafts.length && !offline.problem}/>)}</div></section>
     </fieldset>:null}
   </main>;
 }

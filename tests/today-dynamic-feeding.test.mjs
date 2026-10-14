@@ -14,7 +14,7 @@ test("Today returns actual feed sessions without inventing two fixed sessions", 
 
 test("Today adds any number of feedings and uses native status checkboxes", () => {
   const feeding = card.slice(card.indexOf("function FeedingForm"), card.indexOf("function SuppliesForm"));
-  assert.match(feeding, /setEditingId\("new"\)/);
+  assert.match(feeding, /setEditingId\(crypto\.randomUUID\(\)\)/);
   assert.match(feeding, /t\("addFeeding"\)/);
   assert.match(feeding, /type="checkbox" checked=\{status === choice\}/);
   assert.match(feeding, /title=\{t\(choice === "completed" \? "fedHelp" : "missedHelp"\)\}/);

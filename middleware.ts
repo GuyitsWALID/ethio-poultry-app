@@ -22,6 +22,12 @@ type SupportSessionQuery = {
 type SupportRpc={rpc(name:string,args:Record<string,string>):PromiseLike<unknown>};
 
 export async function middleware(request: NextRequest) {
+  if(request.nextUrl.pathname==="/offline"){
+    const shell=NextResponse.next();
+    shell.headers.set("X-Offline-Shell","public-v1");
+    shell.headers.set("Cache-Control","public, max-age=0, must-revalidate");
+    return shell;
+  }
   const { supabase, response } = createClient(request);
   const { pathname } = request.nextUrl;
   const lockedOrgRoutes = ["/app/crm", "/app/training", "/app/hr", "/app/fleet", "/app/users", "/app/alerts"];

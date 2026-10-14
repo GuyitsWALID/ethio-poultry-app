@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 test("manifest supplies an installable standalone application identity", async () => {
   const manifest = await read("../src/app/manifest.ts");
   assert.match(manifest, /display: "standalone"/);
-  assert.match(manifest, /start_url: "\/app\/farm-manager"/);
+  assert.match(manifest, /start_url: "\/app\/today"/);
   assert.match(manifest, /purpose: "maskable"/);
 });
 

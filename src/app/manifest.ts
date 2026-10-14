@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Ethiopoultry Farm Operations",
     short_name: "Ethiopoultry",
     description: "Daily poultry farm work, records, stock, health, and sales.",
-    start_url: "/app/farm-manager",
+    start_url: "/app/today",
     display: "standalone",
     background_color: "#f7f4ed",
     theme_color: "#182c20",

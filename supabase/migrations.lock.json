@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 82,
-  "latest": "20261010001000_archived_cycle_accounting_amendments.sql",
-  "aggregateSha256": "a02b29ef556a3999d61d64ba55f9e9b1808985461c975fec4adcacf69b897d3a",
+  "count": 83,
+  "latest": "20261013000000_today_receipt_chains.sql",
+  "aggregateSha256": "d32b17a933135e0d0cc207e812c035a7e056e17c4a0916f48e5c4958288c585e",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -162,6 +162,7 @@
     "20261007002000_completed_flock_operating_guards.sql": "c05578ea6d175f26760060459f1b67bbeda85f5cebc399c6506dbf1ab289adcb",
     "20261008000000_approved_whole_flock_moves.sql": "2145ba537a2ff8d8dd694cee8e6bd4541c5eff5645a7480aa453518818922148",
     "20261010000000_reviewed_archived_cycle_corrections.sql": "15861a263700b5c9722427c5653601dbe820efa864e56d14834ede44f8be0e1a",
-    "20261010001000_archived_cycle_accounting_amendments.sql": "8ee06d514dd8a6260ee8b4edd39f4832f344a96822995cbc7bf03d1fcaa840c6"
+    "20261010001000_archived_cycle_accounting_amendments.sql": "8ee06d514dd8a6260ee8b4edd39f4832f344a96822995cbc7bf03d1fcaa840c6",
+    "20261013000000_today_receipt_chains.sql": "1855d67961963e174bbdca90108eb08692eb67585bfa8a98aff2c8a929507675"
   }
 }

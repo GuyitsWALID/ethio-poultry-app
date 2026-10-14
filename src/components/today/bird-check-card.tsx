@@ -9,12 +9,19 @@ import {formatNumber} from "@/i18n/formats";
 import type {AppLocale} from "@/i18n/locale";
 import type {TodayFlockContext, TodayTask} from "@/lib/today-workspace/contracts";
 import {assessBirdCheck} from "@/lib/today-workspace/bird-check";
-import {sendTodayCommand} from "@/lib/today-workspace/sync";
+import {TaskDraftScope, useDraftSubmit,useTodayOffline} from "@/components/today/offline-context";
 
-export function BirdCheckCard({flock, task, farmId, workDate, online, expanded, onToggle, onSaved}: {
+type BirdCheckProps = {
   flock: TodayFlockContext; task: TodayTask; farmId: string; workDate: string;
   online: boolean; expanded: boolean; onToggle: () => void; onSaved: () => void;
-}) {
+};
+export function BirdCheckCard(props:BirdCheckProps) {
+  return <TaskDraftScope selection={{farmId:props.farmId,flockId:props.flock.id,workDate:props.workDate}} task="birds" revision={props.flock.birdCheck.resourceRevision??undefined}><BirdCheckContent {...props}/></TaskDraftScope>;
+}
+function BirdCheckContent({flock, task, farmId, workDate, online, expanded, onToggle, onSaved}:BirdCheckProps) {
+  const send=useDraftSubmit();
+  const pending=useTodayOffline().queue.some(row=>row.command.type==="save_daily_record"&&row.command.flock_id===flock.id&&row.command.work_date===workDate&&row.taskKey?.endsWith(":birds"));
+  const offlineText=useTranslations("Today.offline");
   const t = useTranslations("Today");
   const errors = useTranslations("Errors");
   const locale = useLocale() as AppLocale;
@@ -26,15 +33,15 @@ export function BirdCheckCard({flock, task, farmId, workDate, online, expanded, 
   const openingReady = initial.openingBirds !== null && Number.isInteger(initial.openingBirds) && initial.openingBirds >= 0;
   const closing = initial.dailyRecordId ? initial.closingBirds : initial.openingBirds;
   const stateLabel = task.state === "complete" ? t("states.complete")
-    : task.state === "needs_attention" ? t("states.needsAttention") : t("states.notStarted");
+    : task.state === "needs_attention" ? t("states.needsAttention") : task.state === "waiting_to_sync" ? t("states.waiting") : task.state === "draft_on_tablet" ? t("states.draft") : t("states.notStarted");
   const correctionHref = `/app/daily-records?${new URLSearchParams({farm_id: farmId, flock_id: flock.id, date: workDate})}`;
 
   async function startDay() {
-    if (flock.canRecord === false || !online || !openingReady || initial.dailyRecordId || saving) return;
+    if (flock.canRecord === false || !openingReady || initial.dailyRecordId || saving || pending) return;
     setSaving(true);
     setMessage(null);
     try {
-      const result = await sendTodayCommand({
+      const result = await send({
         schema_version: 1, command_id: crypto.randomUUID(), type: "save_daily_record",
         farm_id: farmId, flock_id: flock.id, work_date: workDate,
         payload: {daily_record_id: null, record: {
@@ -43,6 +50,7 @@ export function BirdCheckCard({flock, task, farmId, workDate, online, expanded, 
         }, usages: null},
       });
       if (result.status === "applied") onSaved();
+      else if(result.status === "queued"){setMessage(offlineText("waiting"));onSaved();}
       else setMessage(result.error_code === "RESOURCE_CONFLICT" ? errors("staleRevision") : errors("validation"));
     } catch { setMessage(errors("unknown")); }
     finally { setSaving(false); }
@@ -65,8 +73,8 @@ export function BirdCheckCard({flock, task, farmId, workDate, online, expanded, 
       <p className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">{t("birdCheck.healthEntry")}</p>
       {initial.dailyRecordId && (!assessment.valid || unusualMovement) ? <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{t("birdCheck.legacyMovements")} <Link href={correctionHref} className="font-semibold underline">{t("birdCheck.openRecord")}</Link></p> : null}
       {message ? <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800">{message}</p> : null}
-      {!online && !initial.dailyRecordId ? <p role="status" className="text-sm text-amber-800">{t("birdCheck.offlineHelp")}</p> : null}
-      {!initial.dailyRecordId && flock.canRecord !== false ? <div className="flex justify-end"><button type="button" onClick={startDay} disabled={saving || !online || !openingReady} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50"><Save className="h-4 w-4"/>{saving ? t("birdCheck.saving") : t("birdCheck.save")}</button></div> : null}
+      {!online && !initial.dailyRecordId ? <p role="status" className="text-sm text-amber-800">{offlineText("birdHelp")}</p> : null}
+      {!initial.dailyRecordId && flock.canRecord !== false ? <div className="flex justify-end"><button type="button" onClick={startDay} disabled={saving || !openingReady || pending} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50"><Save className="h-4 w-4"/>{saving ? t("birdCheck.saving") : t("birdCheck.save")}</button></div> : null}
     </div> : null}
   </article>;
 }

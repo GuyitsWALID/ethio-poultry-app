@@ -11,6 +11,7 @@ import {todayErrorMessageKeys} from "@/i18n/today-copy";
 import {buildFinishReview, type FinishIssue, type ReviewTask} from "@/lib/today-workspace/finish-review";
 import {sendTodayCommand} from "@/lib/today-workspace/sync";
 import {HealthTaskForm} from "@/components/today/health-task-form";
+import {DraftFieldGroup, TaskDraftScope, useDraftField, useDraftState, useDraftSubmit, useTodayOffline} from "@/components/today/offline-context";
 
 type Row = Record<string, unknown>;
 type SubmitState = {tone: "success" | "error"; text: string} | null;
@@ -46,21 +47,26 @@ function TaskMessage({message}: {message: SubmitState}) {
 }
 
 function Field({label, name, type = "text", defaultValue, required = false, step, min, readOnly = false}: {label: string; name: string; type?: string; defaultValue?: string | number | null; required?: boolean; step?: string; min?: string; readOnly?: boolean}) {
-  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<input name={name} type={type} required={required} step={step} min={min} readOnly={readOnly} defaultValue={defaultValue ?? ""} inputMode={type === "number" ? "decimal" : undefined} className={inputClass}/></label>;
+  const [value,setValue]=useDraftField(name,String(defaultValue??""));
+  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<input name={name} type={type} required={required} step={step} min={min} readOnly={readOnly} value={value} onChange={event=>setValue(event.target.value)} inputMode={type === "number" ? "decimal" : undefined} className={inputClass}/></label>;
 }
 
 function SelectField({label, name, children, required = false, defaultValue}: {label: string; name: string; children: React.ReactNode; required?: boolean; defaultValue?: string}) {
-  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<select name={name} required={required} defaultValue={defaultValue} className={inputClass}>{children}</select></label>;
+  const [value,setValue]=useDraftField(name,defaultValue);
+  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<select name={name} required={required} value={value} onChange={event=>setValue(event.target.value)} className={inputClass}>{children}</select></label>;
 }
 
 function useTaskSubmit() {
   const errors = useTranslations("Errors");
+  const offlineText=useTranslations("Today.offline");
+  const send=useDraftSubmit();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<SubmitState>(null);
   async function submit(command: Parameters<typeof sendTodayCommand>[0], success: string, onApplied: () => void) {
     setSaving(true); setMessage(null);
     try {
-      const result = await sendTodayCommand(command);
+      const result = await send(command);
+      if(result.status === "queued") {setMessage({tone:"success",text:offlineText("waiting")});onApplied();return result;}
       if (result.status !== "applied") {
         setMessage({tone: "error", text: result.error_code === "RESOURCE_CONFLICT" ? errors("staleRevision") : result.error_code === "INSUFFICIENT_STOCK" ? errors("insufficientStock") : errors("validation")});
         return result;
@@ -68,8 +74,8 @@ function useTaskSubmit() {
       setMessage({tone: "success", text: success});
       onApplied();
       return result;
-    } catch {
-      setMessage({tone: "error", text: errors("unknown")});
+    } catch (error) {
+      setMessage({tone: "error", text: error instanceof Error && error.message === "RESOURCE_PENDING" ? offlineText("resourcePending") : errors("unknown")});
       return null;
     } finally { setSaving(false); }
   }
@@ -92,12 +98,20 @@ function EggsWaterForm({detail, flock, onSaved}: {detail: TodayTaskDetail; flock
 function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDetail; flock: TodayFlockContext; onChanged: () => void; onSaved: () => void}) {
   const t = useTranslations("Today.embedded");
   const {saving, message, submit} = useTaskSubmit();
-  const sessions = rows(detail.data.sessions);
+  const queued=useTodayOffline().queue.filter(row=>row.command.farm_id===detail.farmId&&row.command.flock_id===flock.id&&row.command.work_date===detail.workDate);
+  const sessions=rows(detail.data.sessions).map(row=>({...row}));
+  for(const row of queued.filter(row=>row.command.type==="save_feed_session")){
+    const session=(row.command.payload as {session:Row}).session;
+    const existing=sessions.findIndex(row=>row.session_name===session.session_name);
+    const value={...session,id:`pending:${row.command.command_id}`,_queued:true};
+    if(existing<0)sessions.push(value);else sessions[existing]=value;
+  }
+  const closeQueued=queued.some(row=>row.command.type==="close_feed_day");
   const closed = detail.data.closed === true;
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useDraftState<string | null>("feeding.editingId",null);
   const session = sessions.find((row) => String(row.id) === editingId) ?? {};
   const feedItems = detail.inventory.filter((item) => item.category === "feed");
-  const [status, setStatus] = useState<"completed" | "missed">("completed");
+  const [status, setStatus] = useDraftState<"completed" | "missed">("feeding.status","completed");
   const [revision, setRevision] = useState(detail.resourceRevision);
   const [sessionDependencies, setSessionDependencies] = useState<string[]>([]);
   const mayClose = sessions.length > 0 && sessions.every((row) => row.status === "completed" || row.status === "missed") && editingId === null;
@@ -106,7 +120,7 @@ function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDeta
     setStatus(row.status === "missed" ? "missed" : "completed");
   }
   function addSession() {
-    setEditingId("new");
+    setEditingId(crypto.randomUUID());
     setStatus("completed");
   }
   async function saveSession(event: React.FormEvent<HTMLFormElement>) {
@@ -129,10 +143,10 @@ function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDeta
         status, notes: text(form.get("notes")) || null,
       }},
     }, t("sessionSaved"), () => {});
-    if (result?.status === "applied") {
-      setRevision(result.resource_revision ?? revision);
-      setSessionDependencies((current) => [...new Set([...current, commandId])]);
+    if (result?.status === "applied" || result?.status === "queued") {
       setEditingId(null);
+      if(result.status==="applied")setRevision(result.resource_revision ?? revision);
+      setSessionDependencies((current) => [...new Set([...current, commandId])]);
       onChanged();
     }
   }
@@ -141,15 +155,16 @@ function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDeta
     await submit({schema_version: 1, command_id: crypto.randomUUID(), type: "close_feed_day", farm_id: detail.farmId, flock_id: flock.id, work_date: detail.workDate, expected_resource_revision: revision, depends_on: sessionDependencies.length ? sessionDependencies : undefined, payload: {}}, t("feedClosed"), onSaved);
   }
   if (closed) return <div className="rounded-xl bg-leaf-500/10 p-4 text-sm font-semibold text-leaf-700"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{t("feedAlreadyClosed")}</div>;
+  if(closeQueued)return <p role="status">{t("reviewUnsynced")}</p>;
   return <div className="grid gap-4">
     <div className="grid gap-2" aria-label={t("feedingSessions")}>
       {sessions.map((row, index) => <div key={String(row.id)} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-sand-200 px-3 py-2 text-sm">
         <span><span className="font-semibold">{String(row.session_name || t("feedingNumber", {number: index + 1}))}</span><span className="ml-2 text-forest-600">{String(row.session_time ?? "").slice(0, 5)} · {row.status === "completed" ? t("done") : row.status === "missed" ? t("missed") : t("pending")}</span></span>
-        <button type="button" onClick={() => editSession(row)} className="min-h-11 rounded-lg px-3 font-semibold text-forest-800 underline">{t("editFeeding")}</button>
+        <button type="button" disabled={row._queued===true} onClick={() => editSession(row)} className="min-h-11 rounded-lg px-3 font-semibold text-forest-800 underline disabled:opacity-50">{t("editFeeding")}</button>
       </div>)}
     </div>
     <button type="button" onClick={addSession} className={`${secondaryClass} w-fit`}><Plus className="h-5 w-5"/>{t("addFeeding")}</button>
-    {editingId ? <form key={editingId} onSubmit={saveSession} className="grid gap-4 rounded-xl border border-sand-200 p-4">
+    {editingId ? <DraftFieldGroup name={`feeding:${editingId}`}><form key={editingId} onSubmit={saveSession} className="grid gap-4 rounded-xl border border-sand-200 p-4">
       <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-semibold text-forest-900">{t("feedingResult")}</legend>
         {(["completed", "missed"] as const).map((choice) => <label key={choice} className="flex min-h-12 items-center gap-3 text-sm text-forest-900">
           <input type="checkbox" checked={status === choice} onChange={() => setStatus(choice)} className="h-5 w-5 accent-forest-900"/>
@@ -172,7 +187,7 @@ function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDeta
       <Field label={status === "missed" ? t("missedReason") : t("notes")} name="notes" required={status === "missed"} defaultValue={String(session.notes ?? "")}/>
       <TaskMessage message={message}/>
       <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setEditingId(null)} className={secondaryClass}>{t("cancelFeeding")}</button><button disabled={saving} className={primaryClass}><Save className="h-4 w-4"/>{t("saveSession")}</button></div>
-    </form> : null}
+    </form></DraftFieldGroup> : null}
     {!editingId ? <div className="flex justify-end"><button type="button" disabled={saving || !mayClose} onClick={() => void closeDay()} className={primaryClass}>{t("closeFeedDay")}</button></div> : null}
     <TaskMessage message={message}/>
   </div>;
@@ -183,8 +198,8 @@ function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDeta
 function SuppliesForm({detail, flock, task, onSaved}: {detail: TodayTaskDetail; flock: TodayFlockContext; task: TodayTask; onSaved: () => void}) {
   const t = useTranslations("Today.embedded");
   const {saving, message, submit} = useTaskSubmit();
-  const [checked, setChecked] = useState(false);
-  const [supplyRows, setSupplyRows] = useState([0]);
+  const [checked, setChecked] = useDraftState("supplies.checked",false);
+  const [supplyRows, setSupplyRows] = useDraftState("supplies.rows",[0]);
   const eligible = detail.inventory.filter((item) => ["vitamin", "supplement", "equipment", "spare_parts", "packaging", "miscellaneous"].includes(item.category));
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -207,8 +222,8 @@ function SimpleFarmForm({detail, task, onChanged, onSaved, dayRevision, reviewTa
   const query = useSearchParams();
   const requestedWarehouse = query.get("warehouse_id") ?? "";
   const initialWarehouse = detail.warehouses.some((row) => row.id === requestedWarehouse) ? requestedWarehouse : "";
-  const [stockMode, setStockMode] = useState<"receipt" | "count">(query.get("stock_mode") === "count" ? "count" : "receipt");
-  const [countWarehouse, setCountWarehouse] = useState(initialWarehouse);
+  const [stockMode, setStockMode] = useDraftState<"receipt" | "count">("stock.mode",query.get("stock_mode") === "count" ? "count" : "receipt");
+  const [countWarehouse, setCountWarehouse] = useDraftState("stock.warehouse",initialWarehouse);
   const finishCommandId = useRef(crypto.randomUUID());
   const dueWarehouses = new Set(Array.isArray(detail.data.countDueWarehouseIds) ? detail.data.countDueWarehouseIds.map(String) : []);
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -268,10 +283,14 @@ function AssignedFixes({detail, onChanged, onSaved}: {detail: TodayTaskDetail; o
 }
 
 export function EmbeddedTaskCard({task,flock,farmId,workDate,expanded,onToggle,onChanged,onSaved,dayRevision,reviewTasks,finishIssues,online,canFinish}:{task:TodayTask;flock?:TodayFlockContext;farmId:string;workDate:string;expanded:boolean;onToggle:()=>void;onChanged:()=>void;onSaved:()=>void;dayRevision?:string;reviewTasks?:ReviewTask[];finishIssues?:FinishIssue[];online?:boolean;canFinish?:boolean}){
+  const offline=useTodayOffline();
   const t=useTranslations("Today");const [detail,setDetail]=useState<TodayTaskDetail|null>(null);const [loading,setLoading]=useState(false);const [loadError,setLoadError]=useState(false);
-  const flockId=flock?.id;
+  const flockId=["feeding","eggs_water","health_deaths","routine_supplies"].includes(task.code)?flock?.id:undefined;
   const readOnly=flock?.canRecord===false&&["feeding","eggs_water","health_deaths","routine_supplies"].includes(task.code);
-  useEffect(()=>{if(!expanded||readOnly)return;const controller=new AbortController();const params=new URLSearchParams({farm_id:farmId,date:workDate});if(flockId)params.set("flock_id",flockId);const load=async()=>{setLoading(true);setLoadError(false);try{const response=await fetch(`/api/farm-manager/today/tasks/${task.code}?${params}`,{cache:"no-store",signal:controller.signal});if(!response.ok)throw new Error();setDetail(await response.json() as TodayTaskDetail)}catch(error:unknown){if(error instanceof DOMException&&error.name==="AbortError")return;setLoadError(true)}finally{if(!controller.signal.aborted)setLoading(false)}};void load();return()=>controller.abort()},[expanded,readOnly,farmId,flockId,task.code,task.resourceRevision,workDate]);
+  useEffect(()=>{if(!expanded||readOnly)return;const controller=new AbortController();const params=new URLSearchParams({farm_id:farmId,date:workDate});if(flockId)params.set("flock_id",flockId);const load=async()=>{setLoading(true);setLoadError(false);try{
+    if(!navigator.onLine){const cached=await offline.runtime?.readDetail({farmId,flockId,workDate},task.code);if(!cached)throw Error("OFFLINE_DETAIL_MISSING");setDetail(cached);return;}
+    const response=await fetch(`/api/farm-manager/today/tasks/${task.code}?${params}`,{cache:"no-store",signal:controller.signal});if(!response.ok)throw new Error();const next=await response.json() as TodayTaskDetail;await offline.runtime?.rememberDetail(next);if(!controller.signal.aborted)setDetail(next);
+  }catch(error:unknown){if(error instanceof DOMException&&error.name==="AbortError")return;setLoadError(true)}finally{if(!controller.signal.aborted)setLoading(false)}};void load();return()=>controller.abort()},[expanded,readOnly,farmId,flockId,task.code,task.resourceRevision,workDate,offline.runtime]);
   const title=t(({birds:"tasks.birds",feeding:"tasks.feeding",eggs_water:"tasks.eggsWater",health_deaths:"tasks.healthDeaths",routine_supplies:"tasks.supplies",review_finish:"tasks.review",stock:"tasks.stock",sales:"tasks.sales",expenses:"tasks.expenses",assigned_fixes:"tasks.assignedFixes"} as const)[task.code]);
   const exampleKey=({birds:"embedded.examples.birds",feeding:"embedded.examples.feeding",eggs_water:"embedded.examples.eggsWater",health_deaths:"embedded.examples.healthDeaths",routine_supplies:"embedded.examples.supplies",review_finish:"embedded.examples.review",stock:"embedded.examples.stock",sales:"embedded.examples.sales",expenses:"embedded.examples.expenses",assigned_fixes:"embedded.examples.assignedFixes"} as const)[task.code];
   const summary=useMemo(()=>{
@@ -286,5 +305,5 @@ export function EmbeddedTaskCard({task,flock,farmId,workDate,expanded,onToggle,o
   if (readOnly) {
     return <article id={`today-task-${task.code}`} className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><button type="button" onClick={onToggle} aria-expanded={expanded} className="flex min-h-16 w-full items-center justify-between gap-3 p-4 text-left"><span><span className="font-semibold text-forest-900">{title}</span><span className="mt-1 block text-xs text-forest-600">{summary}</span></span><span className="text-xs text-forest-700">{stateLabel(task,t)}</span></button>{expanded?<p className="border-t border-sand-200 p-4 text-sm text-forest-700">{t("closedFlockReadOnly")}</p>:null}</article>;
   }
-  return <article id={`today-task-${task.code}`} tabIndex={-1} className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><button type="button" onClick={onToggle} aria-expanded={expanded} className="flex min-h-16 w-full items-center justify-between gap-3 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest-700"><span><span className="font-semibold text-forest-900">{title}</span><span className="mt-1 block text-xs text-forest-600">{summary}</span></span><span className="flex items-center gap-2"><span className="rounded-full bg-sand-100 px-2.5 py-1 text-[11px] font-semibold text-forest-700">{stateLabel(task,t)}</span>{expanded?<ChevronUp className="h-5 w-5"/>:<ChevronDown className="h-5 w-5"/>}</span></button>{expanded?<div className="border-t border-sand-200 p-4">{loading?<p role="status" className="py-6 text-sm text-forest-600">{t("loading")}</p>:loadError?<div role="alert" className="flex items-center gap-2 rounded-xl bg-red-50 p-4 text-sm text-red-800"><AlertCircle className="h-4 w-4"/>{t("loadFailed")}</div>:detail?<div className="grid gap-4"><p className="rounded-xl bg-sand-50 p-3 text-sm text-forest-600">{t(exampleKey)}</p>{task.code==="feeding"&&flock?<FeedingForm key={detail.resourceRevision??"new"} detail={detail} flock={flock} onChanged={onChanged} onSaved={onSaved}/>:null}{task.code==="eggs_water"&&flock?<EggsWaterForm detail={detail} flock={flock} onSaved={onSaved}/>:null}{task.code==="health_deaths"&&flock?<HealthTaskForm detail={detail} flock={flock} onChanged={onChanged} onSaved={onSaved}/>:null}{task.code==="routine_supplies"&&flock?<SuppliesForm detail={detail} flock={flock} task={task} onSaved={onSaved}/>:null}{["stock","sales","expenses","review_finish"].includes(task.code)?<SimpleFarmForm detail={detail} task={task} onChanged={onChanged} onSaved={onSaved} dayRevision={dayRevision} reviewTasks={reviewTasks} finishIssues={finishIssues} online={online} canFinish={canFinish}/>:null}{task.code==="assigned_fixes"?<AssignedFixes detail={detail} onChanged={onChanged} onSaved={onSaved}/>:null}</div>:null}</div>:null}</article>;
+  return <article id={`today-task-${task.code}`} tabIndex={-1} className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><button type="button" onClick={onToggle} aria-expanded={expanded} className="flex min-h-16 w-full items-center justify-between gap-3 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest-700"><span><span className="font-semibold text-forest-900">{title}</span><span className="mt-1 block text-xs text-forest-600">{summary}</span></span><span className="flex items-center gap-2"><span className="rounded-full bg-sand-100 px-2.5 py-1 text-[11px] font-semibold text-forest-700">{stateLabel(task,t)}</span>{expanded?<ChevronUp className="h-5 w-5"/>:<ChevronDown className="h-5 w-5"/>}</span></button>{expanded?<div className="border-t border-sand-200 p-4">{loading?<p role="status" className="py-6 text-sm text-forest-600">{t("loading")}</p>:loadError?<div role="alert" className="flex items-center gap-2 rounded-xl bg-red-50 p-4 text-sm text-red-800"><AlertCircle className="h-4 w-4"/>{t("loadFailed")}</div>:detail?<TaskDraftScope key={`${farmId}:${flockId??"farm"}:${workDate}:${task.code}`} selection={{farmId,flockId:["stock","sales","expenses","review_finish","assigned_fixes"].includes(task.code)?undefined:flockId,workDate}} task={task.code} revision={detail.resourceRevision??task.sourceFingerprint??undefined}><div className="grid gap-4"><p className="rounded-xl bg-sand-50 p-3 text-sm text-forest-600">{t(exampleKey)}</p>{task.code==="feeding"&&flock?<FeedingForm key={detail.resourceRevision??"new"} detail={detail} flock={flock} onChanged={onChanged} onSaved={onSaved}/>:null}{task.code==="eggs_water"&&flock?<EggsWaterForm detail={detail} flock={flock} onSaved={onSaved}/>:null}{task.code==="health_deaths"&&flock?<HealthTaskForm detail={detail} flock={flock} onChanged={onChanged} onSaved={onSaved}/>:null}{task.code==="routine_supplies"&&flock?<SuppliesForm detail={detail} flock={flock} task={task} onSaved={onSaved}/>:null}{["stock","sales","expenses","review_finish"].includes(task.code)?<SimpleFarmForm detail={detail} task={task} onChanged={onChanged} onSaved={onSaved} dayRevision={dayRevision} reviewTasks={reviewTasks} finishIssues={finishIssues} online={online} canFinish={canFinish}/>:null}{task.code==="assigned_fixes"?<AssignedFixes detail={detail} onChanged={onChanged} onSaved={onSaved}/>:null}</div></TaskDraftScope>:null}</div>:null}</article>;
 }

@@ -61,6 +61,9 @@ const baseCommand = z.object({
   flock_id: nullableUuid,
   work_date: date,
   expected_resource_revision: nonEmpty.optional(),
+  revision_from: uuid.optional(),
+  daily_revision_from: uuid.optional(),
+  fingerprint_from: uuid.optional(),
   depends_on: z.array(uuid).max(32).optional(),
 });
 
@@ -172,7 +175,7 @@ const commandSchemas = {
   close_feed_day: baseCommand.extend({
     type: z.literal("close_feed_day"),
     flock_id: uuid,
-    expected_resource_revision: nonEmpty,
+    expected_resource_revision: nonEmpty.optional(),
     payload: z.object({override_reason: z.string().trim().max(1000).nullable().optional()}),
   }),
   record_mortality_event: baseCommand.extend({
@@ -255,13 +258,18 @@ export const todayCommandSchema = z.discriminatedUnion("type", [
 ]).superRefine((command, context) => {
   const updatesDailyRecord = command.type === "save_daily_record" && Boolean(command.payload.daily_record_id);
   const changesFeedDay = command.type === "save_feed_session";
-  if ((updatesDailyRecord || changesFeedDay) && !command.expected_resource_revision) {
+  if ((updatesDailyRecord || changesFeedDay || command.type === "close_feed_day") && !command.expected_resource_revision && !command.revision_from) {
     context.addIssue({
       code: "custom",
       path: ["expected_resource_revision"],
       message: "Refresh this work before saving it.",
     });
   }
+  for (const reference of [command.revision_from, command.daily_revision_from, command.fingerprint_from]) {
+    if (reference && (reference === command.command_id || !command.depends_on?.includes(reference))) context.addIssue({code:"custom",path:["depends_on"],message:"Receipt references must name an earlier dependency."});
+  }
+  if(command.daily_revision_from && command.type!=="close_feed_day")context.addIssue({code:"custom",path:["daily_revision_from"],message:"Only feed close can depend on a second resource."});
+  if(command.fingerprint_from && command.type!=="confirm_no_activity")context.addIssue({code:"custom",path:["fingerprint_from"],message:"Only zero confirmations can use a fingerprint dependency."});
 });
 
 export type TodayCommand = z.infer<typeof todayCommandSchema>;
@@ -369,6 +377,7 @@ export type TodayTaskDetail = {
 };
 
 export type TodayWorkspace = {
+  offlineAccess?: OfflineAccessGrant;
   schemaVersion: typeof TODAY_SCHEMA_VERSION;
   timezone: "Africa/Addis_Ababa";
   farm: {id: string; name: string};
@@ -378,4 +387,14 @@ export type TodayWorkspace = {
   flocks: TodayFlockContext[];
   farmTasks: TodayTask[];
   capabilities: {canEdit: boolean; canFinish: boolean; offlineAuthorizedUntil: string};
+};
+
+export type OfflineAccessGrant = {
+  tenantId: string;
+  userId: string;
+  farmId: string;
+  flockIds: string[];
+  workDate: string;
+  issuedAt: string;
+  expiresAt: string;
 };

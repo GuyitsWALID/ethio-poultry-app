@@ -11,6 +11,8 @@ const database=`flock_browser_${suffix}`;
 const dbContainer='supabase_db_ethio-poultry-app';
 const template='ethio_flock_lifecycle_dryrun_20261007';
 const created=[];
+const reuseBuild=process.argv.includes('--reuse-local-build');
+const testArgs=process.argv.slice(2).filter(arg=>arg!=='--reuse-local-build');
 let cloned=false, app, proxy;
 assert.match(database,/^flock_browser_[a-f0-9]{32}$/);
 function docker(args,input){
@@ -35,6 +37,8 @@ function runNode(args,env){
   });
 }
 try{
+  // Fail bad test filters before creating containers or compiling the app.
+  await runNode(['node_modules/@playwright/test/cli.js','test','tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts','--list',...testArgs],process.env);
   docker(['exec',dbContainer,'createdb','-U','postgres','--template',template,database]);cloned=true;
   // The SQL-only template has Auth's current schema but no migration-history
   // rows. Copy that metadata, not real users, so GoTrue does not replay older
@@ -109,13 +113,40 @@ try{
     values('12000000-0000-4000-8000-000000000011','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','12000000-0000-4000-8000-000000000003','12000000-0000-4000-8000-000000000004','12000000-0000-4000-8000-000000000010','BROWSER-BATCH','external_purchase',current_date-40,120,100,'active');
     insert into public.flocks(id,org_id,farm_id,house_id,batch_id,flock_code,flock_type,source,placement_date,placed_at,age_at_placement_days,initial_count,current_count,status)
     values('12000000-0000-4000-8000-000000000012','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000003','12000000-0000-4000-8000-000000000004','12000000-0000-4000-8000-000000000011','BROWSER-LAYER','layer','external_purchase',current_date-40,now()-interval '40 days',120,100,100,'active');
+    insert into public.daily_farm_records(org_id,flock_id,record_date,opening_birds,closing_birds,recorded_by)
+    values('12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000012',(now() at time zone 'Africa/Addis_Ababa')::date-1,100,100,'${manager.id}');
     insert into public.houses(id,org_id,branch_id,farm_id,name,house_type)
     values('12000000-0000-4000-8000-000000000013','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','12000000-0000-4000-8000-000000000003','Empty replacement house','layer');
     commit;`);
-  app=spawn(process.execPath,['node_modules/next/dist/bin/next','dev','--webpack','--hostname','127.0.0.1','--port','3100'],{env,stdio:'inherit'});
+  for(const slot of [2,3,4,5]){
+    const id=offset=>`12000000-0000-4000-8000-${String(slot*100+offset).padStart(12,'0')}`;
+    query(`begin;
+      insert into public.farms(id,org_id,branch_id,name) values('${id(1)}','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','Offline farm ${slot}');
+      insert into public.houses(id,org_id,branch_id,farm_id,name,house_type) values('${id(4)}','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','${id(1)}','Offline house ${slot}','layer');
+      insert into public.batch_cycles(id,org_id,farm_id,cycle_code,production_purpose,status,placement_date,placed_at) values('${id(2)}','12000000-0000-4000-8000-000000000001','${id(1)}','OFFLINE-CYCLE-${slot}','layer','active',current_date-40,now()-interval '40 days');
+      insert into public.batches(id,org_id,branch_id,farm_id,house_id,batch_cycle_id,batch_code,source,placement_date,age_at_placement_days,total_count,status) values('${id(3)}','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','${id(1)}','${id(4)}','${id(2)}','OFFLINE-BATCH-${slot}','external_purchase',current_date-40,120,100,'active');
+      insert into public.flocks(id,org_id,farm_id,house_id,batch_id,flock_code,flock_type,source,placement_date,placed_at,age_at_placement_days,initial_count,current_count,status) values('${id(5)}','12000000-0000-4000-8000-000000000001','${id(1)}','${id(4)}','${id(3)}','OFFLINE-LAYER-${slot}','layer','external_purchase',current_date-40,now()-interval '40 days',120,100,100,'active');
+      insert into public.user_farm_access(org_id,profile_id,farm_id,starts_at) values('12000000-0000-4000-8000-000000000001','${manager.id}','${id(1)}',now()-interval '1 day');
+      insert into public.daily_farm_records(org_id,flock_id,record_date,opening_birds,closing_birds,recorded_by) values('12000000-0000-4000-8000-000000000001','${id(5)}',(now() at time zone 'Africa/Addis_Ababa')::date-1,100,100,'${manager.id}');
+      insert into public.warehouses(id,org_id,branch_id,farm_id,name,type,status) values('${id(6)}','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','${id(1)}','Offline feed store ${slot}','farm_store','active');
+      insert into public.inventory_items(id,org_id,name,category,unit,unit_cost,reorder_level) values('${id(7)}','12000000-0000-4000-8000-000000000001','Offline feed ${slot}','feed','kg',10,0);
+      insert into public.stock_ledger(org_id,item_id,warehouse_id,transaction_type,quantity,unit_cost,transaction_date,branch_id,farm_id,recorded_by) values('12000000-0000-4000-8000-000000000001','${id(7)}','${id(6)}','receipt',100,10,current_date,'12000000-0000-4000-8000-000000000002','${id(1)}','${manager.id}');
+      commit;`);
+  }
+  // Test the production bundle once; cold development compiles mask UI failures.
+  if(reuseBuild)console.log('Reusing the previously verified LOCAL bundle for test-only retries; never deploy this bundle.');
+  else await runNode(['node_modules/next/dist/bin/next','build','--webpack'],env);
+  app=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3100'],{env,stdio:'inherit'});
   await ready(`${env.APP_BASE_URL}/auth/sign-in`,180_000);
+  // Check protected routes outside the interaction test deadline.
+  // These requests are anonymous: authorization is not bypassed or mocked.
+  for(const path of ['/app/today','/app/flocks','/app/ceo','/api/me/context','/api/scope/options','/api/alerts/header','/api/notifications','/api/flocks/workspace',
+    '/api/flocks/12000000-0000-4000-8000-000000000012/profile?days=30','/api/farm-manager/today','/api/farm-manager/today/tasks/review_finish']){
+    const response=await fetch(`${env.APP_BASE_URL}${path}`,{signal:AbortSignal.timeout(120_000)});
+    await response.arrayBuffer();
+  }
   console.log('Isolated migrated local API and application ready. Remote databases untouched.');
-  await runNode(['node_modules/@playwright/test/cli.js','test','tests/browser/flock-lifecycle.spec.ts','--workers=1','--max-failures=1','--timeout=240000',...process.argv.slice(2)],env);
+  await runNode(['node_modules/@playwright/test/cli.js','test','tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts','--workers=1','--max-failures=1','--timeout=240000',...testArgs],env);
 }finally{
   if(app?.pid){
     if(process.platform==='win32')spawnSync('taskkill',['/PID',String(app.pid),'/T','/F'],{stdio:'ignore'});

@@ -1,5 +1,6 @@
 import {getAccessContext, isAccessResponse} from "@/lib/access-context";
 import {loadTodayWorkspace, TodayWorkspaceError} from "@/lib/today-workspace/workspace";
+import {attachOfflineGrant} from "@/lib/today-workspace/offline-grant";
 
 const headers = {"Cache-Control": "private, no-store, max-age=0", "CDN-Cache-Control": "no-store", Vary: "Cookie, Authorization"};
 const json = (value: unknown, status = 200) => Response.json(value, {status, headers});
@@ -18,7 +19,9 @@ export async function GET(request: Request) {
   const workDate = url.searchParams.get("date")?.trim() || addisToday();
   if (!farmId) return json({error_code: "INVALID_PAYLOAD", error_params: {field: "farm_id"}}, 400);
   try {
-    return json(await loadTodayWorkspace(context, {farmId, workDate}));
+    const workspace = await loadTodayWorkspace(context, {farmId, workDate});
+    await attachOfflineGrant(context, workspace);
+    return json(workspace);
   } catch (error) {
     if (error instanceof TodayWorkspaceError) return json({error_code: error.code}, error.status);
     return json({error_code: "INTERNAL_ERROR"}, 500);

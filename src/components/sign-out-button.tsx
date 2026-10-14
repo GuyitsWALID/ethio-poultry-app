@@ -18,14 +18,24 @@ type SignOutButtonProps = {
 export function SignOutButton({ iconOnly = false, compact = false, tone = "light", redirectTo = "/auth/sign-in" }: SignOutButtonProps) {
   const router = useRouter();
   const t = useTranslations("Common");
+  const errors = useTranslations("Errors");
   const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const handleSignOut = async () => {
     setPending(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    await clearOfflineIdentity();
-    router.replace(redirectTo);
+    setFailed(false);
+    try {
+      const supabase = createClient();
+      const {error} = await supabase.auth.signOut();
+      if (error) throw error;
+      await clearOfflineIdentity();
+      router.replace(redirectTo);
+    } catch {
+      setFailed(true);
+      setPending(false);
+      window.dispatchEvent(new CustomEvent("ethiopoultry:offline-storage-error"));
+    }
   };
 
   const toneClass = tone === "dark"
@@ -33,7 +43,7 @@ export function SignOutButton({ iconOnly = false, compact = false, tone = "light
     : "border-sand-200 bg-white text-forest-700 hover:border-forest-400 hover:bg-sand-50 focus:ring-forest-500";
 
   return (
-    <button
+    <span className="inline-flex flex-col gap-1"><button
       className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold transition focus:outline-none focus:ring-2 disabled:cursor-wait disabled:opacity-60 ${toneClass} ${iconOnly ? "w-10 px-0" : ""}`}
       type="button"
       onClick={() => void handleSignOut()}
@@ -41,6 +51,6 @@ export function SignOutButton({ iconOnly = false, compact = false, tone = "light
     >
       <LogOut className="h-4 w-4" aria-hidden="true" />
       {iconOnly ? <span className="sr-only">{t("signOut")}</span> : <span className={compact ? "hidden sm:inline" : ""}>{pending ? t("signingOut") : t("signOut")}</span>}
-    </button>
+    </button>{failed ? <span role="alert" className="max-w-64 text-xs text-red-700">{errors("unknown")}</span> : null}</span>
   );
 }
