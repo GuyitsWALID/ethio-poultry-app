@@ -2,6 +2,54 @@
 
 Change: `openspec/changes/simplify-flock-lifecycle`, linked to `simplify-farm-operations`.
 
+## Scoped audit improvements — 2026-10-15
+
+See `flock-cycle-review.md` for the requested Ponytail review and scoped audit.
+Three concrete findings are fixed locally: incompatible sale choices/stale sale
+evidence, placement confirmation remaining valid after date/time changes, and
+unrelated sales exhausting the context read cap. Thirty focused tests, TypeScript
+changed-file ESLint and whitespace checks passed.
+SQL and ledgers are unchanged; no new migration is needed. These application
+edits require focused rebuilt UI/release verification and are not covered by
+the earlier browser/build results. Delivery targets `notmain` and its staging
+application deployment only; production is excluded. Staging needs no new SQL.
+
+## Acceptance continuation — 2026-10-14
+
+The earlier implementation-blocker notes are historical. All lifecycle operations,
+including broader archived accounting corrections, are implemented and the six
+lifecycle migrations are already applied to staging. No new migration is needed
+for this continuation. `notmain` commit `9141861` passed its GitHub Quality gate
+(full checks, migration contract and production build); the owner confirmed its
+Cloudflare staging deployment. Lifecycle-specific staging visual acceptance is
+still with the owner and is not implied by the Today staging confirmation.
+
+Focused lifecycle tests: 41 passed. The expanded rollback-only Docker integration
+test passed same-day replacement/Finish, rejection of queued completed-flock
+edits, unchanged old/new populations and identical Finish receipt replay. These
+checks used only `ethio_flock_lifecycle_dryrun_20261007`; all fixtures rolled back.
+All six focused Chromium browser scenarios passed against disposable local data:
+periods/access, inline tablet/reduced-motion/Amharic compatibility, placement
+blockers and proposals, CEO review evidence and whole-flock move forms. Four
+passed in the initial run; placement and move passed focused retries after test
+locale isolation and a label locator were corrected. No business guard changed.
+The new local production build passed. Staging visual sign-off remains with the
+owner; physical-device and production-pilot acceptance are not implied.
+The changed browser-test file passed ESLint with zero warnings, and whitespace
+checks passed. Full application checks are taken from the successful CI run on
+the unchanged application code, not claimed as a new local full-suite run.
+Only regression tests and acceptance records changed in this continuation;
+no new migration or application deployment is required. These artifacts are
+not yet committed/pushed; final lifecycle staging sign-off remains pending.
+
+Commands/evidence: `node --experimental-strip-types --test` for the four
+`flock-*.test.mjs` suites (41 passed); rollback-only
+`tests/database/flock-cycle.integration.sql` via Docker `psql` (passed);
+`scripts/test-flock-lifecycle-browser.mjs` with six lifecycle case filters and
+test-only `--reuse-local-build` retries for the remaining forms (all passed).
+Local output is under `.release/lifecycle-*.log`. CI full-check/build evidence:
+https://github.com/GuyitsWALID/ethio-poultry-app/actions/runs/38578222176.
+
 ## Current release checkpoint — 2026-10-10
 
 All six lifecycle migrations through `20261010001000` are applied to staging `uzmhpecehmlwojdmitgj`. The guarded staging runner verified nine clean preflight checks, locked migration history, effective evidence views, private internal-helper permissions and unchanged fingerprints of Daily Records, sales, stock ledger, feed closures, mortality, culls, flock populations and canonical batches. Only the new lifecycle metadata was excluded from those comparisons. Production was not accessed.

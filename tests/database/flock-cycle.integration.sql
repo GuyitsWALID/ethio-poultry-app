@@ -216,6 +216,45 @@ end $$;
 reset role;
 select set_config('request.jwt.claim.sub','',true);
 select set_config('request.jwt.claims','{}',true);
+-- Finish must verify BOTH completed old identities and the replacement. A
+-- queued old-flock write conflicts, while current replacement work can close.
+do $$ declare v_org uuid:='17000000-0000-4000-8000-000000000001'; v_day date:=(now() at time zone 'Africa/Addis_Ababa')::date;
+  v_new public.flocks; v_old public.daily_farm_records; v_result jsonb; v_revision text; v_command uuid:=gen_random_uuid();
+begin
+  select * into v_new from public.flocks where org_id=v_org and flock_code='FLOCK-A-REPLACEMENT';
+  select * into v_old from public.daily_farm_records where org_id=v_org order by id limit 1;
+  perform set_config('request.jwt.claim.sub','17000000-0000-4000-8000-000000000002',true);
+  v_result:=public.dispatch_today_command_v1('17000000-0000-4000-8000-000000000002',jsonb_build_object(
+    'schema_version',1,'command_id',gen_random_uuid(),'type','save_daily_record','farm_id',v_new.farm_id,'flock_id',v_old.flock_id,'work_date',v_day,
+    'expected_resource_revision',public.today_resource_revision('daily_record',v_old.id,null),
+    'payload',jsonb_build_object('daily_record_id',v_old.id,'record',jsonb_build_object('water_consumed_liters',99))));
+  if v_result->>'status'<>'conflict' then raise exception 'Queued completed-flock write was not rejected safely'; end if;
+  if (select closing_birds from public.daily_farm_records where id=v_old.id)<>0 then raise exception 'Queued draft resurrected archived birds'; end if;
+  v_revision:=public.today_resource_revision('operating_day',v_new.farm_id,v_day);
+  begin
+    perform public.finish_farm_operating_day_v1('17000000-0000-4000-8000-000000000002',v_command,1,jsonb_build_object('turnover','missing replacement'),v_new.farm_id,v_day,v_revision);
+    raise exception 'Finish ignored missing replacement work';
+  exception when check_violation then null; end;
+  perform set_config('request.jwt.claim.sub','',true);
+  -- Undo the deliberate non-bird snapshot-collision fixture above.
+  perform set_config('app.governance_apply','true',true);
+  update public.daily_farm_records set water_consumed_liters=20 where org_id=v_org;
+  perform set_config('app.governance_apply','false',true);
+  insert into public.daily_farm_records(org_id,flock_id,record_date,opening_birds,closing_birds,deaths,culls,normal_eggs,broken_eggs,dirty_eggs,total_eggs,water_consumed_liters,recorded_by)
+    values(v_org,v_new.id,v_day,150,150,0,0,0,0,0,0,20,'17000000-0000-4000-8000-000000000002');
+  insert into public.feed_day_closures(org_id,batch_id,flock_id,record_date,status,actual_feed_kg,closed_at,closed_by)
+    values(v_org,v_new.batch_id,v_new.id,v_day,'closed',0,now(),'17000000-0000-4000-8000-000000000002');
+  insert into public.daily_task_attestations(org_id,farm_id,flock_id,work_date,task_code,source_fingerprint,confirmed_by)
+    select v_org,v_new.farm_id,v_new.id,v_day,task,public.today_source_fingerprint(v_new.farm_id,v_new.id,v_day,task),'17000000-0000-4000-8000-000000000002'
+    from unnest(array['health_deaths','routine_supplies']) task;
+  perform set_config('request.jwt.claim.sub','17000000-0000-4000-8000-000000000002',true);
+  v_revision:=public.today_resource_revision('operating_day',v_new.farm_id,v_day);
+  v_result:=public.finish_farm_operating_day_v1('17000000-0000-4000-8000-000000000002',v_command,1,jsonb_build_object('turnover','complete'),v_new.farm_id,v_day,v_revision);
+  if v_result->>'status'<>'applied' or not exists(select 1 from public.farm_operating_days where farm_id=v_new.farm_id and operating_date=v_day and status='closed') then raise exception 'Complete turnover day did not close'; end if;
+  if public.finish_farm_operating_day_v1('17000000-0000-4000-8000-000000000002',v_command,1,jsonb_build_object('turnover','complete'),v_new.farm_id,v_day,v_revision) is distinct from v_result then raise exception 'Turnover Finish replay changed its receipt'; end if;
+  if (select current_count from public.flocks where id=v_new.id)<>150 or exists(select 1 from public.flocks where org_id=v_org and id<>v_new.id and current_count<>0) then raise exception 'Finish changed old/new populations'; end if;
+  perform set_config('request.jwt.claim.sub','',true);
+end $$;
 update public.user_farm_access set revoked_at=now(),revoked_by='17000000-0000-4000-8000-000000000003' where profile_id='17000000-0000-4000-8000-000000000002';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','17000000-0000-4000-8000-000000000002',true);

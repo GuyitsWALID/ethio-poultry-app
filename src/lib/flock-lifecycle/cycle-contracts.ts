@@ -71,6 +71,6 @@ export type CycleContext = {
   cycle: null | {id: string; code: string; status: string; legacy: boolean; completionVerified: boolean; revision: string};
   houses: Array<{id: string; name: string; eligible: boolean; blocker: "OCCUPIED" | "COMPLETION_UNVERIFIED" | null; revision: string}>;
   members: Array<{id: string; code: string; house: string; batch: string; currentBirds: number; finalRecord: boolean; feedClosed: boolean; healthConfirmed: boolean; suppliesConfirmed: boolean; balanced: boolean; finalValues: null | {date: string; opening: number | null; deaths: number | null; culls: number | null; otherRemovals: number; closing: number | null}}>;
-  sales: Array<{id: string; label: string; date: string; unit: string; quantity: number; headCount: number | null; allocated: number; revision: string}>;
+  sales: Array<{id: string; label: string; date: string; unit: string; quantity: number; eligibleFlockIds: string[]; headCount: number | null; allocated: number; revision: string}>;
   breeds: Array<{id: string; name: string}>;
 };

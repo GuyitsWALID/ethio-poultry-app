@@ -1,5 +1,40 @@
 # Tasks
 
+## Scoped review improvements — 2026-10-15
+
+Ponytail review/audit findings fixed: flock-specific sale eligibility and early
+proposal validation, stale sale/head-count-reference reset, placement confirmation
+bound to farm/date/time, and bounded sale reads scoped before the cap. Thirty
+focused regressions, TypeScript, changed-file ESLint and whitespace checks pass. No SQL, approval, stock or ledger rule changed; no new
+migration is needed. These application changes supersede the earlier statement
+that this continuation only changes acceptance artifacts. Focused rebuilt UI and
+release verification are open again; localization remains under the parent change.
+
+## Acceptance completion — 2026-10-14
+
+No additional lifecycle migration is needed. The six lifecycle migrations are
+already on staging; application code is included in `notmain` commit `9141861`.
+Its GitHub Quality gate passed full lint, TypeScript, unit tests, migration
+verification and production build. The owner confirmed that commit deployed on
+Cloudflare staging; lifecycle-specific visual staging checks are still with the
+owner (inline profile, periods, Amharic and occupied-house blockers).
+
+This continuation passed 41 focused lifecycle unit/contract tests and the expanded
+rollback-only Docker cycle integration test. Same-day Finish now has explicit
+regression evidence: a missing replacement record blocks closure; a queued edit
+against the completed old flock returns conflict without resurrecting birds;
+completed old/new work closes once, preserves populations and replays the same
+receipt. All six focused authenticated browser scenarios passed: access/period
+reads, inline old-link/tablet/reduced-motion behavior, Amharic persistence and CEO
+result parity, cycle blockers/new placement/CEO evidence, and whole-flock moves.
+The first four passed together; the placement and move cases passed in focused
+retries after correcting test locale isolation and a select-field locator.
+No authorization, accounting or application guard was relaxed. The local
+production build and changed browser-test ESLint check also passed. Full
+application checks were reused from the successful CI run on unchanged
+application code rather than repeated locally. Owner-owned staging visual sign-off remains open;
+these results do not certify physical tablets or the production pilot.
+
 ## Current release checkpoint — 2026-10-10
 
 The broader archived correction is implemented and database-tested: exact loss-event changes and complete-cycle final departure amendments preserve original evidence, zero archived population, sale capacity and financial/stock values. Six lifecycle migrations are now applied to staging `uzmhpecehmlwojdmitgj`; migration head, private helper permissions and unchanged fingerprints of eight operational source tables passed. Production was not accessed.
@@ -23,16 +58,17 @@ The earlier counts-only limitation is superseded locally by `20261010001000_arch
 
 - [x] 1. Save approved scope, design, requirements and staged acceptance; preserve clean `notmain` baseline.
 - [x] 2. Implement authorized profile read module, period calculations and focused regressions.
-- [ ] 3. Implement obvious selection, readable badges, inline profile, exact actions, localization and old-profile compatibility.
+- [x] 3. Implement obvious selection, readable badges, inline profile, exact actions, localization and old-profile compatibility.
 - [x] 4. Add read-only lifecycle preflight and operator mapping requirements.
 - [x] 5. Add shared-cycle schema, safe legacy singleton mapping, immutable closure/allocation/head-count evidence and RLS.
 - [x] 6. Implement atomic approved cycle closure/attestation and source protection with target-specific audit recognition.
 - [x] 7. Implement atomic actual-date placement, occupied-house/concurrency safeguards and retirement of branch replacement.
-- [ ] 8. Add authorized cycle context and inline finish/create forms with Governance previews.
-- [ ] 9. Preserve approved whole-flock transfers, lineage targets and reconciliation compatibility.
-- [ ] 10. Recalculate Today same-day applicability and reject completed/stale offline writes while preserving drafts.
+- [x] 8. Add authorized cycle context and inline finish/create forms with Governance previews.
+- [x] 9. Preserve approved whole-flock transfers, lineage targets and reconciliation compatibility.
+- [x] 10. Recalculate Today same-day applicability and reject completed/stale offline writes while preserving drafts.
 - [ ] 11. Pass focused/full tests, TypeScript, lint, production/Cloudflare builds, migration/RLS dry runs and bilingual tablet/browser checks.
 - [ ] 12. Resolve staging preflight explicitly, migrate/validate staging and commit/push reviewed work to `notmain`. Production unchanged.
+    - Lifecycle migrations/application already deployed; owner is checking the final Flocks staging visuals. This continuation adds only regression tests and acceptance records, not a migration or application change. Final staging sign-off and commit/push of these acceptance artifacts remain open.
 
 No task is complete merely because its UI exists. Database transitions require transaction/RLS tests; release requires authenticated staging evidence.
 

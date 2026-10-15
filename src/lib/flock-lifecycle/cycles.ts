@@ -5,6 +5,7 @@ import {createCycleSchema, closeCycleSchema, wholeFlockMoveSchema, type CycleCon
 import type {GovernanceInput} from "@/lib/governance-workflow";
 import {hasTaskEvidence} from "@/lib/today-workspace/task-evidence";
 import {cycleSubmissionIdentity} from "./submission-identity";
+import {eligibleSaleFlockIds} from "./sale-eligibility";
 
 // New schema is isolated here until the generated database catalogue is refreshed.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -75,18 +76,17 @@ export async function loadCycleContext(ctx: AccessContext, farmId: string, cycle
   const farmResult = await db.from("farms").select("id,name").eq("id", farmId).eq("org_id", ctx.orgId).maybeSingle();
   if (farmResult.error) throw new FlockLifecycleError("LOAD_FAILED", 500);
   if (!farmResult.data) throw new FlockLifecycleError("UNAVAILABLE", 404);
-  const [houseResult, flockResult, batchResult, clearanceResult, cycleResult, breedResult, saleResult, allCyclesResult, moveResult] = await Promise.all([
+  const [houseResult, flockResult, batchResult, clearanceResult, cycleResult, breedResult, allCyclesResult, moveResult] = await Promise.all([
     db.from("houses").select("id,name,farm_id").eq("org_id", ctx.orgId).order("name").limit(1000),
-    db.from("flocks").select("id,flock_code,house_id,batch_id,current_count,status,farm_id,flock_type").eq("org_id", ctx.orgId).limit(1000),
+    db.from("flocks").select("id,flock_code,house_id,batch_id,current_count,status,farm_id,flock_type,placement_date").eq("org_id", ctx.orgId).limit(1000),
     db.from("batches").select("id,batch_code,batch_cycle_id").eq("org_id", ctx.orgId).limit(1000),
     db.from("batch_cycle_clearances").select("flock_id,house_id").eq("org_id", ctx.orgId).limit(1000),
     cycleId ? db.from("batch_cycles").select("id,cycle_code,status,legacy_singleton,completion_verified,farm_id,updated_at").eq("org_id", ctx.orgId).eq("farm_id", farmId).eq("id", cycleId).maybeSingle() : Promise.resolve({data: null, error: null}),
     db.from("breeds").select("id,name").eq("org_id", ctx.orgId).order("name").limit(1000),
-    db.from("daily_sales_records").select("id,product_label,sale_date,unit,quantity,flock_id,batch_id,farm_id").eq("org_id", ctx.orgId).eq("product_category", "bird").is("voided_at", null).lte("sale_date", day).order("sale_date", {ascending: false}).limit(1000),
     db.from("batch_cycles").select("id,cycle_code,status,completion_verified,farm_id").eq("org_id", ctx.orgId).order("placement_date", {ascending: false}).limit(1000),
     db.from("flock_transfers").select("flock_id,from_house_id").eq("org_id", ctx.orgId).limit(1000),
   ]);
-  const houses = rows(houseResult), flocks = rows(flockResult), batches = rows(batchResult), clearances = rows(clearanceResult), breeds = rows(breedResult), allSales = rows(saleResult), moves = rows(moveResult), allCycles = rows(allCyclesResult);
+  const houses = rows(houseResult), flocks = rows(flockResult), batches = rows(batchResult), clearances = rows(clearanceResult), breeds = rows(breedResult), moves = rows(moveResult), allCycles = rows(allCyclesResult);
   if (cycleResult.error) throw new FlockLifecycleError("LOAD_FAILED", 500);
   if (cycleId && !cycleResult.data) throw new FlockLifecycleError("UNAVAILABLE", 404);
   const cycle = cycleResult.data;
@@ -94,7 +94,14 @@ export async function loadCycleContext(ctx: AccessContext, farmId: string, cycle
   const members = cycleId ? flocks.filter(row => memberBatches.has(String(row.batch_id))) : [];
   const memberFarms = new Set([farmId, ...members.map(row => String(row.farm_id))]);
   for (const memberFarm of memberFarms) if (!(await canAccessFarm(ctx, memberFarm))) throw new FlockLifecycleError("UNAVAILABLE", 404);
-  const sales = allSales.filter(row => memberFarms.has(String(row.farm_id)));
+  // Creation/movement context needs no sales. Unrelated farms' sale history
+  // must not exhaust this cycle's bounded read or create unusable choices.
+  const earliestPlacement=members.map(row=>String(row.placement_date)).sort()[0];
+  const saleResult=members.length ? await db.from("daily_sales_records")
+    .select("id,product_label,sale_date,unit,quantity,flock_id,batch_id,house_id,farm_id")
+    .eq("org_id",ctx.orgId).in("farm_id",[...memberFarms]).eq("product_category","bird").is("voided_at",null)
+    .gte("sale_date",earliestPlacement).lte("sale_date",day).order("sale_date",{ascending:false}).limit(1000) : {data:[],error:null};
+  const sales:Array<Row & {eligibleFlockIds:string[]}>=rows(saleResult).map(sale=>({...sale,eligibleFlockIds:eligibleSaleFlockIds(sale,members,day)})).filter(sale=>sale.eligibleFlockIds.length);
   const ids = members.map(row => String(row.id));
   const empty = {data: [], error: null};
   const [dailyResult, feedResult, allocationsResult, attestationResult, healthResult, mortalityResult, suppliesResult, confirmationsResult] = await Promise.all([
@@ -134,7 +141,7 @@ export async function loadCycleContext(ctx: AccessContext, farmId: string, cycle
         suppliesConfirmed: confirmed("routine_supplies", supplies.some(row => row.flock_id === member.id)),
         finalValues: record ? {date: day, opening: record.opening_birds === null ? null : Number(record.opening_birds), deaths: record.deaths === null ? null : Number(record.deaths), culls: record.culls === null ? null : Number(record.culls), otherRemovals: Number(record.other_removals ?? 0), closing: record.closing_birds === null ? null : Number(record.closing_birds)} : null};
     }),
-    sales: await Promise.all(sales.map(async sale => ({id: String(sale.id), label: String(sale.product_label), date: String(sale.sale_date), unit: String(sale.unit), quantity: Number(sale.quantity), headCount: String(sale.unit).trim().toLowerCase() === "bird" ? Number(sale.quantity) : Number(attestations.find(row => row.sale_id === sale.id)?.head_count ?? 0) || null, allocated: allocations.filter(row => row.sale_id === sale.id).reduce((sum, row) => sum + Number(row.quantity), 0), revision: await token("lifecycle_sale_revision", {p_sale: sale.id, p_org: ctx.orgId})}))),
+    sales: await Promise.all(sales.map(async sale => ({id: String(sale.id), label: String(sale.product_label), date: String(sale.sale_date), unit: String(sale.unit), quantity: Number(sale.quantity), eligibleFlockIds:sale.eligibleFlockIds, headCount: String(sale.unit).trim().toLowerCase() === "bird" ? Number(sale.quantity) : Number(attestations.find(row => row.sale_id === sale.id)?.head_count ?? 0) || null, allocated: allocations.filter(row => row.sale_id === sale.id).reduce((sum, row) => sum + Number(row.quantity), 0), revision: await token("lifecycle_sale_revision", {p_sale: sale.id, p_org: ctx.orgId})}))),
     breeds: breeds.map(row => ({id: String(row.id), name: String(row.name)})),
   };
 }
@@ -174,5 +181,11 @@ export async function prepareCycleProposal(ctx: AccessContext, input: Governance
   const context = await loadCycleContext(ctx, input.farm_id, p.cycle_id, `${part("year")}-${part("month")}-${part("day")}`);
   if (context.cycle?.revision !== p.expected_revision) throw new Error("CYCLE_SOURCE_CHANGED");
   if (p.dispositions.some(row => !context.members.some(member => member.id === row.flock_id))) throw new Error("CYCLE_INVALID_FIELDS");
+  for(const departure of p.dispositions){
+    if(departure.kind!=="sale")continue;
+    const sale=context.sales.find(row=>row.id===departure.sale_id);
+    if(!sale?.eligibleFlockIds.includes(departure.flock_id))throw new Error("CYCLE_INVALID_FIELDS");
+    if(sale.revision!==departure.sale_revision)throw new Error("CYCLE_SOURCE_CHANGED");
+  }
   return {...input, source_table: "batch_cycles", source_id: p.cycle_id, source_version: null, changed_fields: ["completion", "dispositions", "final_records"], proposed_values: p, correction_route: `/app/flocks?filter_page_tab=batches&farm_id=${context.farm.id}&cycle=${p.cycle_id}`};
 }

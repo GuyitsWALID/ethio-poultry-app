@@ -10,6 +10,7 @@ import {formatNumber, formatOperationDate} from "@/i18n/formats";
 import type {AppLocale} from "@/i18n/locale";
 import {ArchivedCorrection} from "./archived-correction";
 import {createCycleSchema, closeCycleSchema, type CycleContext} from "@/lib/flock-lifecycle/cycle-contracts";
+import {updateDepartureSelection} from "@/lib/flock-lifecycle/sale-eligibility";
 
 const control = "min-h-12 w-full rounded-xl border border-sand-300 bg-white px-3 text-sm text-forest-950";
 const button = "min-h-12 rounded-xl border border-sand-300 px-4 text-sm font-semibold disabled:opacity-50";
@@ -46,7 +47,11 @@ function CycleWorkspaceContent({target}: {target: CycleTarget}) {
   const [reason, setReason] = useState(""), [reference, setReference] = useState("");
   const [code, setCode] = useState(""), [purpose, setPurpose] = useState("broiler"), [breed, setBreed] = useState("");
   const [age, setAge] = useState("0"), [supplier, setSupplier] = useState(""), [cost, setCost] = useState("");
-  const [confirmed, setConfirmed] = useState(false), [placements, setPlacements] = useState<PlacementDraft[]>([]);
+  const [confirmedFor,setConfirmedFor]=useState("");
+  const confirmationKey=JSON.stringify([farmId,day,time]);
+  const confirmed=confirmedFor===confirmationKey;
+  const setConfirmed=(value:boolean)=>setConfirmedFor(value?confirmationKey:"");
+  const [placements, setPlacements] = useState<PlacementDraft[]>([]);
   const [departures, setDepartures] = useState<DepartureDraft[]>([]);
   const key = `${farmId}:${cycleId}:${batchId}:${day}`;
   const context = loaded?.key === key && !["unavailable", "loadFailed"].includes(failure ?? "") ? loaded.context : null;
@@ -67,11 +72,11 @@ function CycleWorkspaceContent({target}: {target: CycleTarget}) {
     })();
     return () => controller.abort();
   }, [farmId, cycleId, batchId, day, key, retry]);
-  const resetContext = () => {setFailure(null); setLoaded(null); setSubmitted(false); setRequestId(null); setBatchId(""); setPlacements([]); setDepartures([]);};
+  const resetContext = () => {setFailure(null); setLoaded(null); setSubmitted(false); setRequestId(null); setConfirmed(false); setBatchId(""); setPlacements([]); setDepartures([]);};
   const number = (value: number) => formatNumber(value, locale);
   const date = (value: string) => formatOperationDate(`${value}T12:00:00Z`, locale);
   const legacy = context?.cycle?.legacy && context.cycle.status === "archived" && !context.cycle.completionVerified;
-  const changeDeparture = (index: number, change: Partial<DepartureDraft>) => setDepartures(rows => rows.map((row, i) => i === index ? {...row, ...change} : row));
+  const changeDeparture = (index: number, change: Partial<DepartureDraft>) => setDepartures(rows => rows.map((row, i) => i === index ? updateDepartureSelection(row,change) : row));
   const changePlacement = (index: number, change: Partial<PlacementDraft>) => setPlacements(rows => rows.map((row, i) => i === index ? {...row, ...change} : row));
   const closureReady = Boolean(context?.cycle && (legacy || (context.cycle.status === "active" && context.members.length && context.members.every(member => member.finalRecord && member.feedClosed && member.healthConfirmed && member.suppliesConfirmed && member.balanced && departures.filter(row => row.flockId === member.id).reduce((sum, row) => sum + Number(row.quantity), 0) === member.currentBirds))));
   const submit = async (event: React.FormEvent) => {
@@ -123,9 +128,10 @@ function CycleWorkspaceContent({target}: {target: CycleTarget}) {
       </> : legacy ? <><p className="rounded-xl bg-sand-50 p-4 text-sm">{t("legacyWarning")}</p><label className="grid gap-2 text-sm">{t("reference")}<input className={control} minLength={3} maxLength={1000} required value={reference} onChange={event => setReference(event.target.value)}/></label></> : <>
         <div className="space-y-3">{context.members.map(member => <div className="rounded-xl border border-sand-200 p-4" key={member.id}><h3 className="font-semibold">{member.code} · {member.house}</h3><p className="mt-1 text-sm">{t("remaining", {count: number(member.currentBirds)})}</p><ul className="mt-2 space-y-1 text-sm">{([["finalRecord", member.finalRecord], ["feedClosed", member.feedClosed], ["healthConfirmed", member.healthConfirmed], ["suppliesConfirmed", member.suppliesConfirmed], ["balanced", member.balanced]] as const).map(([label, complete]) => <li key={String(label)}>{t(label)}: {t(complete ? "ready" : "missing")}</li>)}</ul></div>)}</div>
         {departures.map((row, index) => {
-          const sale = context.sales.find(item => item.id === row.saleId);
+          const eligibleSales=context.sales.filter(item=>item.eligibleFlockIds.includes(row.flockId));
+          const sale = eligibleSales.find(item => item.id === row.saleId);
           return <fieldset key={index} className="space-y-3 rounded-xl border border-sand-200 p-4"><legend className="px-2 font-semibold">{t("departure", {number: number(index + 1)})}</legend><div className="grid gap-3 sm:grid-cols-3"><label className="grid gap-2 text-sm">{t("flock")}<select required className={control} value={row.flockId} onChange={event => changeDeparture(index, {flockId: event.target.value})}><option value="">{t("choose")}</option>{context.members.map(member => <option key={member.id} value={member.id}>{member.code} · {member.house}</option>)}</select></label><label className="grid gap-2 text-sm">{t("departureType")}<select className={control} value={row.kind} onChange={event => changeDeparture(index, {kind: event.target.value as "sale" | "other", saleId: ""})}><option value="sale">{t("sold")}</option><option value="other">{t("otherDeparture")}</option></select></label><label className="grid gap-2 text-sm">{t("quantity")}<input type="number" inputMode="numeric" className={control} min={1} required value={row.quantity} onChange={event => changeDeparture(index, {quantity: event.target.value})}/></label></div>
-            {row.kind === "sale" ? <><label className="grid gap-2 text-sm">{t("sale")}<select required className={control} value={row.saleId} onChange={event => changeDeparture(index, {saleId: event.target.value, capacity: ""})}><option value="">{t("choose")}</option>{context.sales.map(item => <option key={item.id} value={item.id}>{item.label} · {date(item.date)} · {number(item.quantity)} {item.unit}</option>)}</select></label>{sale ? <p className="text-sm">{t("allocated", {count: number(sale.allocated)})}</p> : null}{sale && sale.unit.trim().toLowerCase() !== "bird" ? <><p className="text-sm text-amber-950">{t("physicalWarning")}</p><label className="grid gap-2 text-sm">{t("physicalCount")}<input type="number" inputMode="numeric" className={control} min={1} required={!sale.headCount} value={row.capacity} placeholder={sale.headCount ? number(sale.headCount) : undefined} onChange={event => changeDeparture(index, {capacity: event.target.value})}/></label></> : null}</> : <label className="grid gap-2 text-sm">{t("departureReason")}<textarea className={control} required minLength={8} maxLength={2000} value={row.reason} onChange={event => changeDeparture(index, {reason: event.target.value})}/></label>}
+            {row.kind === "sale" ? <><label className="grid gap-2 text-sm">{t("sale")}<select required disabled={!row.flockId} className={control} value={row.saleId} onChange={event => changeDeparture(index, {saleId: event.target.value})}><option value="">{t("choose")}</option>{eligibleSales.map(item => <option key={item.id} value={item.id}>{item.label} · {date(item.date)} · {number(item.quantity)} {item.unit}</option>)}</select></label>{sale ? <p className="text-sm">{t("allocated", {count: number(sale.allocated)})}</p> : null}{sale && sale.unit.trim().toLowerCase() !== "bird" ? <><p className="text-sm text-amber-950">{t("physicalWarning")}</p><label className="grid gap-2 text-sm">{t("physicalCount")}<input type="number" inputMode="numeric" className={control} min={1} required={!sale.headCount} value={row.capacity} placeholder={sale.headCount ? number(sale.headCount) : undefined} onChange={event => changeDeparture(index, {capacity: event.target.value})}/></label></> : null}</> : <label className="grid gap-2 text-sm">{t("departureReason")}<textarea className={control} required minLength={8} maxLength={2000} value={row.reason} onChange={event => changeDeparture(index, {reason: event.target.value})}/></label>}
             <label className="grid gap-2 text-sm">{t("reference")}<input className={control} required={row.kind === "other" || Boolean(sale && sale.unit.trim().toLowerCase() !== "bird" && !sale.headCount)} minLength={3} maxLength={1000} value={row.reference} onChange={event => changeDeparture(index, {reference: event.target.value})}/></label><button type="button" className={button} onClick={() => setDepartures(rows => rows.filter((_, i) => i !== index))}>{t("remove")}</button>
           </fieldset>;
         })}

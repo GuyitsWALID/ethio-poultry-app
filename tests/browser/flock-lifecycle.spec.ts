@@ -1,5 +1,6 @@
 import {expect as baseExpect, test, type Page} from '@playwright/test';
 import {toEthiopianDate} from '../../src/i18n/ethiopian-calendar';
+import messages from '../../messages/en.json';
 
 // Local dev routes compile lazily; functional assertions remain unchanged.
 const expect=baseExpect.configure({timeout:90_000});
@@ -17,6 +18,10 @@ async function login(page: Page,role='FARM_MANAGER'){
   await page.getByRole('button',{name:'Open my workspace',exact:true}).click();
   // Disposable dev stack compiles the first authenticated route on demand.
   await expect(page).toHaveURL(/\/app\//,{timeout:90_000});
+  // Locale is persisted in the profile, including across isolated browser
+  // contexts. Each case starts in English before testing its own language.
+  await page.getByRole('group',{name:/Language|ቋንቋ/}).getByRole('button',{name:'EN',exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('lang','en');
 }
 
 test('anonymous lifecycle interfaces deny access',async({page})=>{
@@ -96,6 +101,72 @@ test('Amharic inline profile persists and CEO authorized read uses the same ledg
     expect(response.status()).toBe(200);const ceo=await response.json();
     expect(ceo.results).toEqual(before.results);expect(ceo.todayTasksAvailable).toBe(false);
   }finally{await ceoContext.close();}
+});
+
+test('cycle forms block occupied houses and incomplete closure, then submit exact new placement for review',async({page,browser})=>{
+  await login(page);
+  await page.goto(`/app/batches?farm_id=${farm}&cycle=12000000-0000-4000-8000-000000000010`);
+  const card=page.locator('#batch-cycle-controls'),t=messages.FlockCycles;
+  await expect(card.getByText('BROWSER-LAYER · Item 1 House',{exact:false})).toBeVisible();
+  await expect(card.getByRole('button',{name:t.send,exact:true})).toBeDisabled();
+  await expect(card.getByText(t.missingWork,{exact:true})).toBeVisible();
+  await card.getByRole('button',{name:t.create,exact:true}).click();
+  await expect(card.getByRole('checkbox',{name:'Empty replacement house',exact:true})).toBeEnabled();
+  await expect(card.getByRole('checkbox',{name:'Item 1 House',exact:true})).toBeDisabled();
+  await card.getByRole('checkbox',{name:'Empty replacement house',exact:true}).check();
+  await expect(card.getByLabel(t.count,{exact:true})).toHaveValue('');
+  await card.getByLabel(t.count,{exact:true}).fill('75');
+  await card.getByLabel(t.batchCode,{exact:true}).fill('BROWSER-NEW-BATCH');
+  await card.getByLabel(t.flockCode,{exact:true}).fill('BROWSER-NEW-FLOCK');
+  await card.getByLabel(t.cycleCode,{exact:true}).fill('BROWSER-NEW-CYCLE');
+  await card.getByLabel(t.time,{exact:true}).fill('06:00');
+  await expect(card.getByText(t.actualDateWarning,{exact:true})).toBeVisible();
+  await card.getByRole('checkbox',{name:t.confirmDate,exact:true}).check();
+  await card.getByLabel(t.time,{exact:true}).fill('07:00');
+  await expect(card.getByRole('checkbox',{name:t.confirmDate,exact:true})).not.toBeChecked();
+  await card.getByRole('checkbox',{name:t.confirmDate,exact:true}).check();
+  await card.getByLabel(t.reason,{exact:true}).fill('Actual new arrival in the empty house.');
+  const saved=page.waitForResponse(r=>r.url().endsWith('/api/governance/requests')&&r.request().method()==='POST');
+  await card.getByRole('button',{name:t.send,exact:true}).click();
+  const response=await saved;expect(response.status()).toBe(201);
+  const body=response.request().postDataJSON();expect(body.request_type).toBe('batch_cycle_create');
+  expect(body.proposed_values.placement_total).toBe(75);expect(body.proposed_values.actual_date_confirmed).toBe(true);
+  expect(body.proposed_values.placements).toHaveLength(1);
+  expect(body.proposed_values.placements[0].starting_birds).toBe(75);
+  await expect(card.getByText(t.submitted,{exact:true})).toBeVisible();
+  const requestId=(await response.json()).request.id;
+  const ceo=await browser.newContext();
+  try{
+    const viewer=await ceo.newPage();await login(viewer,'CEO');
+    const deskResponse=await viewer.request.get('/api/governance/requests');expect(deskResponse.status()).toBe(200);
+    const desk=await deskResponse.json();
+    const proposal=desk.requests.find((row:{id:string})=>row.id===requestId);
+    expect(proposal.proposed_values).toEqual(body.proposed_values);
+    expect(JSON.stringify(proposal.context_snapshot.proposedValues)).toContain('BROWSER-NEW-BATCH');
+  }finally{await ceo.close();}
+});
+
+test('whole-flock move form preserves population and only offers cleared destination houses',async({page})=>{
+  test.setTimeout(120_000);
+  await login(page);await page.goto(`/app/flocks/${flock}`);
+  const panel=page.locator('#selected-flock-details'),t=messages.FlockMove;
+  await panel.getByRole('button',{name:t.title,exact:true}).click();
+  await expect(panel.getByText('All 100 birds will move. No partial transfers or additions.',{exact:true})).toBeVisible();
+  await panel.getByRole('combobox',{name:t.farm,exact:true}).selectOption(farm,{timeout:30_000});
+  const house=panel.getByRole('combobox',{name:t.house,exact:true});
+  await expect(house).toBeEnabled();
+  await expect(house.locator('option')).toHaveText([t.choose,'Empty replacement house']);
+  await house.selectOption('12000000-0000-4000-8000-000000000013');
+  const date=await (await page.request.get(`/api/flocks/${flock}/profile?days=30`)).json();
+  await panel.getByLabel(t.date,{exact:true}).fill(date.today);
+  await panel.getByLabel(t.time,{exact:true}).fill('06:00');
+  await panel.getByLabel(t.reason,{exact:true}).fill('Move the entire flock to its empty destination.');
+  const saved=page.waitForResponse(r=>r.url().endsWith('/api/governance/requests')&&r.request().method()==='POST');
+  await panel.getByRole('button',{name:t.submit,exact:true}).click();
+  const response=await saved;expect(response.status()).toBe(201);
+  const body=response.request().postDataJSON();expect(body.proposed_values.bird_count).toBe(100);
+  expect(body.proposed_values.flock_id).toBe(flock);
+  await expect(panel.getByText(t.submitted,{exact:false})).toBeVisible();
 });
 
 test('Today tablet controls and Amharic calendar preserve the operational date',async({page,context})=>{
