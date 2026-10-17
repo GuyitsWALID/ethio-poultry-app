@@ -11,6 +11,7 @@ import { getCurrentAlerts } from "@/lib/current-alerts";
 import { getGovernanceAlerts } from "@/lib/governance-workflow";
 import { getReconciliationAlerts, isReconciliationFindingActive } from "@/lib/reconciliation-service";
 import { publishActionEventNotifications } from "@/lib/notification-service";
+import {allAlertRows, actionReadFilter} from "./alert-pagination.ts";
 
 type Row = Record<string, unknown>;
 const db = governanceAdmin as any;
@@ -80,9 +81,10 @@ async function scope(ctx: AccessContext) {
   if (ctx.role === "ceo" || ctx.supportSessionId) return { farms: null as Set<string> | null, warehouses: null as Set<string> | null };
   const now = new Date().toISOString();
   const [farms, warehouses] = await Promise.all([
-    db.from("user_farm_access").select("farm_id").eq("org_id", ctx.orgId).eq("profile_id", ctx.userId).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`),
+    allAlertRows<Row>((from, to) => db.from("user_farm_access").select("farm_id").eq("org_id", ctx.orgId).eq("profile_id", ctx.userId).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`).order("id").range(from, to)).then(data => ({data, error: null})),
     warehouseAssignmentScope(ctx),
   ]);
+  if (farms.error) throw new Error("Farm assignments could not be checked.");
   return { farms: new Set<string>((farms.data ?? []).map((row: Row) => text(row.farm_id))), warehouses: new Set<string>((warehouses.data ?? []).map((row: Row) => text(row.warehouse_id))) };
 }
 
@@ -97,9 +99,18 @@ async function exactSourceState(ctx: AccessContext, row: Row) {
 }
 
 async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
-  const { data: stored, error } = await db.from("operational_actions").select("*").eq("org_id", ctx.orgId);
-  if (error) throw new Error(error.message);
-  const byKey = new Map<string, Row>((stored ?? []).map((row: Row) => [text(row.source_key), row]));
+  const accessible = await scope(ctx);
+  alerts = alerts.filter(alert => actionSourceInScope({farmId: alert.farmId ?? null, warehouseId: alert.warehouseId ?? null}, accessible));
+  const stored = await allAlertRows<Row>((from, to) => scopedActions(ctx, accessible, "*")
+    .in("status", activeStatuses).order("id").range(from, to));
+  // Read only resolved keys that are currently reported, not the entire archive.
+  for (let offset = 0; offset < alerts.length; offset += 200) {
+    const result = await scopedActions(ctx, accessible, "*").eq("status", "resolved")
+      .in("source_key", alerts.slice(offset, offset + 200).map(alert => alert.id)).order("id").limit(200);
+    if (result.error) throw new Error("Previous alerts could not be checked.");
+    stored.push(...result.data ?? []);
+  }
+  const byKey = new Map<string, Row>(stored.map((row: Row) => [text(row.source_key), row]));
   const now = new Date().toISOString();
 
   for (const alert of alerts) {
@@ -125,13 +136,16 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
       severity: alert.severity, farm_id: alert.farmId ?? prior.farm_id ?? null,
       warehouse_id: alert.warehouseId ?? prior.warehouse_id ?? null, source_last_seen_at: now, source_resolved_at: null, updated_at: now,
     };
+    // A refresh should not write every unchanged warning back to PostgreSQL.
+    // Source freshness timestamps advance when source content/state changes.
+    if (!wasResolved && Object.entries(changes).every(([key, value]) =>
+      key === "source_last_seen_at" || key === "updated_at" || value === prior[key])) continue;
     if (wasResolved) Object.assign(changes, { status: prior.owner_id ? "assigned" : "open", due_at: actionDeadlineAt(alert.severity), source_resolved_at: null, resolution_summary: null, resolution_evidence: null, escalated_at: null, escalation_reason: null });
     await commitAction(ctx, prior, changes, wasResolved ? "reopened" : null,
       wasResolved ? "The source system reported this issue again." : null, null, true);
   }
 
   const activeKeys = new Set(alerts.map((alert) => alert.id));
-  const accessible = await scope(ctx);
   for (const row of byKey.values()) {
     if (text(row.status) === "resolved" || activeKeys.has(text(row.source_key)) || !visible(row, accessible)) continue;
     const state = await exactSourceState(ctx, row);
@@ -149,9 +163,9 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
     await commitAction(ctx, row, {context: `${baseContext} ${sourceStatus}`, source_resolved_at: now}, null, null, null, true);
   }
 
-  const { data: overdue, error: overdueError } = await db.from("operational_actions").select("*").eq("org_id", ctx.orgId).in("status", ["open", "assigned", "acknowledged", "in_progress"]).lt("due_at", now);
-  if (overdueError) throw new Error(overdueError.message);
-  for (const row of overdue ?? []) {
+  const overdue = await allAlertRows<Row>((from, to) => scopedActions(ctx, accessible, "*")
+    .in("status", ["open", "assigned", "acknowledged", "in_progress"]).lt("due_at", now).order("id").range(from, to));
+  for (const row of overdue) {
     await commitAction(ctx, row, {status: "escalated", escalated_at: now,
       escalation_reason: "The action passed its due date without verified resolution."},
       "escalated", "Due date passed without verified resolution.", null, true);
@@ -161,12 +175,11 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
 async function ownerOptions(ctx: AccessContext): Promise<ActionOwner[]> {
   if (ctx.role !== "ceo") return [];
   const now = new Date().toISOString();
-  const { data: people, error } = await db.from("profiles").select("id,full_name").eq("org_id", ctx.orgId).eq("role", "farm_manager").eq("is_active", true).order("full_name");
-  if (error) throw new Error(error.message);
+  const people = await allAlertRows<Row>((from, to) => db.from("profiles").select("id,full_name").eq("org_id", ctx.orgId).eq("role", "farm_manager").eq("is_active", true).order("full_name").order("id").range(from, to), 200, 1000);
   const ids = (people ?? []).map((row: Row) => text(row.id));
   if (!ids.length) return [];
   const [farmAccess, warehouseAccess] = await Promise.all([
-    db.from("user_farm_access").select("profile_id,farm_id,farms(name)").eq("org_id", ctx.orgId).in("profile_id", ids).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`),
+    allAlertRows<Row>((from, to) => db.from("user_farm_access").select("profile_id,farm_id,farms(name)").eq("org_id", ctx.orgId).in("profile_id", ids).is("revoked_at", null).lte("starts_at", now).or(`expires_at.is.null,expires_at.gt.${now}`).order("id").range(from, to)).then(data => ({data})),
     Promise.all(ids.map(async (id: string) => (await managerWarehouseAccess(id, ctx.orgId)).map(row => ({profile_id: id, warehouses: {name: row.name}})))).then(groups => ({data: groups.flat()})),
   ]);
   return (people ?? []).map((person: Row) => {
@@ -176,13 +189,32 @@ async function ownerOptions(ctx: AccessContext): Promise<ActionOwner[]> {
   });
 }
 
-export async function loadActionDesk(ctx: AccessContext): Promise<ActionDesk> {
+export async function refreshActionDesk(ctx: AccessContext) {
   const alerts = await collectOperationalAlerts(ctx);
   await synchronize(ctx, alerts);
+}
+
+function scopedActions(ctx: AccessContext, ids: Awaited<ReturnType<typeof scope>>, selection: string, cursor?: {priority: number; dueAt: string; id: string}) {
+  let query = db.from("operational_action_inbox").select(selection, {count: "exact"}).eq("org_id", ctx.orgId);
+  const filter = actionReadFilter(ids, cursor);
+  if (filter) query = query.or(filter);
+  return query;
+}
+
+export async function loadActionDesk(ctx: AccessContext, options: {cursor?: string; target?: string; header?: boolean} = {}): Promise<ActionDesk> {
   const ids = await scope(ctx);
-  const { data, error } = await db.from("operational_actions").select("*,owner:profiles!operational_actions_owner_id_fkey(full_name),operational_action_events(id,event_type,actor_name_snapshot,actor_role_snapshot,note,created_at)").eq("org_id", ctx.orgId).in("status", activeStatuses).order("due_at");
+  const cursor = options.cursor ? z.object({priority: z.number().int().min(0).max(3), dueAt: z.string().datetime({offset: true}), id: z.string().uuid()}).parse(JSON.parse(options.cursor)) : undefined;
+  const pageSize = options.header ? 30 : 50;
+  const selection = options.header
+    ? "id,inbox_priority,source_key,title,severity,source_name,context,source_route,source_first_seen_at,farm_id,warehouse_id,status,owner_id,due_at,revision,owner:profiles!operational_actions_owner_id_fkey(full_name)"
+    : "*,owner:profiles!operational_actions_owner_id_fkey(full_name),operational_action_events(id,event_type,actor_name_snapshot,actor_role_snapshot,note,created_at)";
+  let query = scopedActions(ctx, ids, selection, cursor).in("status", activeStatuses).order("inbox_priority").order("due_at").order("id").limit(pageSize + 1);
+  if (options.target) query = query.eq("id", z.string().uuid().parse(options.target));
+  if (!options.header) query = query.order("created_at", {referencedTable: "operational_action_events", ascending: false})
+    .order("id", {referencedTable: "operational_action_events", ascending: false}).limit(8, {referencedTable: "operational_action_events"});
+  const { data, error, count } = await query;
   if (error) throw new Error(error.message);
-  const rows = (data ?? []).filter((row: Row) => visible(row, ids));
+  const rows = (data ?? []).filter((row: Row) => visible(row, ids)).slice(0, pageSize);
   const actions: ActionCard[] = rows.map((row: Row) => {
     const owner = row.owner as Row | null;
     const events = ((row.operational_action_events as Row[] | null) ?? []).sort((a, b) => text(b.created_at).localeCompare(text(a.created_at))).slice(0, 8).map((item): ActionEvent => ({ id: text(item.id), eventType: text(item.event_type), actorName: text(item.actor_name_snapshot), actorRole: text(item.actor_role_snapshot), note: nullable(item.note), createdAt: text(item.created_at) }));
@@ -201,7 +233,9 @@ export async function loadActionDesk(ctx: AccessContext): Promise<ActionDesk> {
   });
   const soon = Date.now() + 24 * 3600000;
   return {
-    role: ctx.role, viewerId: ctx.userId, actions, owners: await ownerOptions(ctx),
+    role: ctx.role, viewerId: ctx.userId, actions, owners: options.header ? [] : await ownerOptions(ctx),
+    page: {total: count ?? rows.length, nextCursor: (data?.length ?? 0) > pageSize && rows.length
+      ? JSON.stringify({priority: rows.at(-1)!.inbox_priority, dueAt: text(rows.at(-1)!.due_at), id: text(rows.at(-1)!.id)}) : null},
     summary: {
       unassigned: actions.filter((item) => !item.ownerId).length,
       mine: actions.filter((item) => item.ownerId === ctx.userId).length,

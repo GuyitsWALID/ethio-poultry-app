@@ -46,6 +46,7 @@ export type ActionCard = OperationalAlert & {
 };
 
 export type ActionDesk = {
+  page?: {total: number; nextCursor: string | null};
   role: "ceo" | "farm_manager" | "system_admin";
   viewerId: string;
   actions: ActionCard[];

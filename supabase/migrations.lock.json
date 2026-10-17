@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 87,
-  "latest": "20261017000000_authoritative_performance_warnings.sql",
-  "aggregateSha256": "a6738954d281258f43ea568e3d646a2cb61acf9977ec84b94494f9a36e2a2c4f",
+  "count": 88,
+  "latest": "20261017001000_bounded_alert_reads.sql",
+  "aggregateSha256": "16c215b487ea9c675c260d2b7212529946ab14817eeb0ed4e8b7fb583b4ec0d2",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -167,6 +167,7 @@
     "20261016000000_atomic_action_acknowledgement.sql": "9f92056bda9e2b9c876734d22121c2c117be7478cded1d2f089a7794a9c70f5b",
     "20261016001000_atomic_action_transitions.sql": "66cde52032ff3b7cc01045f898842d4243ec161ee265de9ce8438ea2adead525",
     "20261016002000_exact_action_source_verification.sql": "33ec8e9d120404d084447f648a2ba2bcfdd34436ed1a3117466f4bee9870c849",
-    "20261017000000_authoritative_performance_warnings.sql": "0f82020906858b11f612b13908f139204b30c4a0591b0308f35d1603f48d94e5"
+    "20261017000000_authoritative_performance_warnings.sql": "0f82020906858b11f612b13908f139204b30c4a0591b0308f35d1603f48d94e5",
+    "20261017001000_bounded_alert_reads.sql": "3e8e72c9c2bf897886ae5d20522ec21440b0b59949c3d2a088b0a64a4e068d41"
   }
 }

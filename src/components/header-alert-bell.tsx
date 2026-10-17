@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { AlertTriangle, Bell, CheckCheck, CheckCircle2, ChevronRight, Clock3, RefreshCw, Settings2 } from "lucide-react";
@@ -32,6 +31,7 @@ export function HeaderAlertBell() {
   const t = useTranslations("Notifications");
   const [center, setCenter] = useState<NotificationCenter | null>(null);
   const [attention, setAttention] = useState<ActionCard[]>([]);
+  const [attentionTotal, setAttentionTotal] = useState(0);
   const [view, setView] = useState<"attention" | "updates">("attention");
   const [open, setOpen] = useState(false);
   const [notificationLoading, setNotificationLoading] = useState(true);
@@ -39,6 +39,7 @@ export function HeaderAlertBell() {
   const [notificationError, setNotificationError] = useState(false);
   const [attentionError, setAttentionError] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
 
   const loadNotifications = useCallback(async () => {
     setNotificationError(false);
@@ -55,15 +56,18 @@ export function HeaderAlertBell() {
     try {
       const response = await fetch("/api/alerts/header", { cache: "no-store" });
       if (!response.ok) throw new Error("Attention request failed");
-      const body = await response.json() as { alerts?: ActionCard[] };
+      const body = await response.json() as { alerts?: ActionCard[]; total?: number };
       setAttention(body.alerts ?? []);
+      setAttentionTotal(body.total ?? body.alerts?.length ?? 0);
     } catch { setAttentionError(true); }
     finally { setAttentionLoading(false); }
   }, []);
 
   const load = useCallback(async () => {
-    await loadAttention();
-    await loadNotifications();
+    if (loadingRef.current || document.visibilityState === "hidden" || !navigator.onLine) return;
+    loadingRef.current = true;
+    try { await Promise.all([loadAttention(), loadNotifications()]); }
+    finally { loadingRef.current = false; }
   }, [loadAttention, loadNotifications]);
 
   const command = useCallback(async (body: Record<string, unknown>) => {
@@ -88,7 +92,7 @@ export function HeaderAlertBell() {
 
   const notifications = center?.notifications ?? [];
   const unreadCount = center?.unreadCount ?? 0;
-  const attentionCount = attention.length;
+  const attentionCount = attentionTotal;
   const badgeCount = attentionCount || unreadCount;
 
   const openNotification = (notification: NotificationItem) => {

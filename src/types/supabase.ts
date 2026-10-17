@@ -7154,6 +7154,10 @@ export type Database = {
       }
     }
     Functions: {
+      operational_low_stock_balances: {
+        Args: {p_org_id: string}
+        Returns: {item_id: string; warehouse_id: string; quantity: number}[]
+      }
       operational_performance_warnings: {
         Args: {p_org_id: string; p_flock_id?: string; p_today?: string}
         Returns: Json

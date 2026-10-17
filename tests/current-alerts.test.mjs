@@ -8,7 +8,7 @@ async function moduleFrom(path) {
   const compiled = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022}}).outputText;
   return import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 }
-const {getCurrentAlerts, alertOperatingWindow} = await moduleFrom("../src/lib/current-alerts.ts");
+const {getCurrentAlerts, alertOperatingWindow} = await import("../src/lib/current-alerts.ts");
 const {actionSourceInScope} = await moduleFrom("../src/lib/action-desk-policy.ts");
 const today = alertOperatingWindow().today;
 const at = `${today}T09:00:00Z`;
@@ -32,10 +32,21 @@ function fixture() {
   };
 }
 function database(data, failTable) {
-  return {rpc() {return Promise.resolve({data: data.performance ?? [], error: failTable === "performance" ? {message: "read failed"} : null});}, from(table) {
+  return {rpc(name) {
+    if (name === "operational_performance_warnings") return Promise.resolve({data: data.performance ?? [], error: failTable === "performance" ? {message: "read failed"} : null});
+    const balances = new Map();
+    for (const row of data.stock_ledger ?? []) {
+      const key = `${row.org_id}:${row.warehouse_id}:${row.item_id}`;
+      const balance = balances.get(key) ?? {...row, quantity: 0};
+      balance.quantity += ["issue", "transfer_out"].includes(row.transaction_type) ? -row.quantity : row.quantity;
+      balances.set(key, balance);
+    }
+    return database({...data, balances: [...balances.values()].filter(row => row.org_id === "org")}, failTable === "stock_ledger" ? "balances" : failTable).from("balances");
+  }, from(table) {
     let rows = [...(data[table] ?? [])];
     const ordering = [];
     let maximum = Infinity;
+    let first = 0;
     const query = {
       select() {return query;},
       eq(key, value) {rows = rows.filter(row => row[key] === value); return query;},
@@ -46,12 +57,13 @@ function database(data, failTable) {
       like(key) {rows = rows.filter(row => row[key]?.startsWith("SCHEDULE_STATUS|")); return query;},
       order(key, options) {ordering.push([key, options?.ascending !== false]); return query;},
       limit(count) {maximum = count; return query;},
+      range(from, to) {first = from; maximum = to - from + 1; return query;},
       then(resolve) {
         rows.sort((a, b) => {for (const [key, ascending] of ordering) {
           const comparison = String(a[key] ?? "").localeCompare(String(b[key] ?? ""));
           if (comparison) return ascending ? comparison : -comparison;
         } return 0;});
-        return Promise.resolve({data: rows.slice(0, maximum), error: table === failTable ? {message: "read failed"} : null}).then(resolve);
+        return Promise.resolve({data: rows.slice(first, first + maximum), error: table === failTable ? {message: "read failed"} : null}).then(resolve);
       },
     };
     return query;
@@ -112,7 +124,7 @@ test("other tenants and voided health records cannot contribute to warnings", as
   assert.equal(alerts.some(row => row.source === "Health" || row.id.startsWith("mortality-spike") || row.id.includes("foreign")), false);
 });
 test("failed source reads stop synchronization rather than pretending sources are clear", async () => {
-  await assert.rejects(getCurrentAlerts(database(fixture(), "stock_ledger"), "org"), /could not be checked/);
+  await assert.rejects(getCurrentAlerts(database(fixture(), "stock_ledger"), "org"), /could not check all source records/);
   await assert.rejects(getCurrentAlerts(database(fixture(), "performance"), "org"), /could not be checked/);
 });
 

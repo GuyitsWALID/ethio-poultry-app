@@ -1,3 +1,4 @@
+import {allAlertRows} from "./alert-pagination.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/types/supabase";
@@ -12,7 +13,7 @@ type InventoryItem = Pick<
 
 type StockLedgerRow = Pick<
   Database["public"]["Tables"]["stock_ledger"]["Row"],
-  "item_id" | "warehouse_id" | "quantity" | "transaction_type"
+  "item_id" | "warehouse_id" | "quantity"
 >;
 
 type PerformanceWarning = {flock_id: string; farm_id: string; house_id: string; flock_code: string;
@@ -20,11 +21,7 @@ type PerformanceWarning = {flock_id: string; farm_id: string; house_id: string; 
   severity: "high" | "medium"; actual: number | null; target: number | null;
   date_from: string; date_to: string; evidence_days: number; expected_days: number};
 
-function stockSignedQuantity(row: StockLedgerRow) {
-  return row.transaction_type === "issue" || row.transaction_type === "transfer_out"
-    ? -row.quantity
-    : row.quantity;
-}
+function stockSignedQuantity(row: StockLedgerRow) { return row.quantity; }
 
 export function alertOperatingWindow(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {timeZone: "Africa/Addis_Ababa", year: "numeric", month: "2-digit", day: "2-digit"}).formatToParts(now);
@@ -59,42 +56,38 @@ export async function getCurrentAlerts(
     scheduleMissRes,
     warehousesRes,
   ] = await Promise.all([
-    supabaseAdmin
+    allAlertRows((from, to) => supabaseAdmin
       .from("alerts")
       .select("id, message, priority, category, created_at, triggered_at, triggered_value")
       .eq("org_id", orgId)
       .neq("status", "resolved")
       .order("created_at", { ascending: false })
-      .limit(20),
-    supabaseAdmin
+      .order("id").range(from, to)).then(data => ({data, error: null})),
+    allAlertRows((from, to) => supabaseAdmin
       .from("inventory_items")
       .select("id, name, unit, reorder_level, updated_at")
       .eq("org_id", orgId)
-      .limit(500),
-    supabaseAdmin
-      .from("stock_ledger")
-      .select("item_id, warehouse_id, quantity, transaction_type")
-      .eq("org_id", orgId)
-      .limit(5000),
-    supabaseAdmin
+      .order("id").range(from, to)).then(data => ({data, error: null})),
+    allAlertRows((from, to) => supabaseAdmin.rpc("operational_low_stock_balances", {p_org_id: orgId}).order("warehouse_id").order("item_id").range(from, to)).then(data => ({data, error: null})),
+    allAlertRows((from, to) => supabaseAdmin
       .from("mortality_events")
       .select("flock_id, record_date, count")
       .eq("org_id", orgId)
       .gte("record_date", sevenDaysAgo)
-      .lte("record_date", today),
-    supabaseAdmin
+      .lte("record_date", today).order("id").range(from, to)).then(data => ({data, error: null})),
+    allAlertRows((from, to) => supabaseAdmin
       .from("daily_farm_records")
       .select("flock_id")
       .eq("org_id", orgId)
       .is("voided_at", null)
       .eq("record_date", today)
-      .limit(2000),
+      .order("id").range(from, to)).then(data => ({data, error: null})),
     supabaseAdmin.rpc("operational_performance_warnings", {p_org_id: orgId, p_today: today}),
-    supabaseAdmin
+    allAlertRows((from, to) => supabaseAdmin
       .from("flocks")
       .select("id, farm_id, house_id, flock_code, current_count, status, placement_date, completed_at")
-      .eq("org_id", orgId),
-    supabaseAdmin
+      .eq("org_id", orgId).order("id").range(from, to)).then(data => ({data, error: null})),
+    allAlertRows((from, to) => supabaseAdmin
       .from("health_events")
       .select("id, flock_id, event_date, description, diagnosis, created_at")
       .eq("org_id", orgId)
@@ -103,8 +96,8 @@ export async function getCurrentAlerts(
       .like("description", "SCHEDULE_STATUS|%")
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
-      .limit(2000),
-    supabaseAdmin.from("warehouses").select("id,name,farm_id").eq("org_id", orgId).eq("status", "active").limit(500),
+      .range(from, to)).then(data => ({data, error: null})),
+    allAlertRows((from, to) => supabaseAdmin.from("warehouses").select("id,name,farm_id").eq("org_id", orgId).eq("status", "active").order("id").range(from, to)).then(data => ({data, error: null}))
   ]);
 
   // A failed read is not evidence that a warning disappeared.

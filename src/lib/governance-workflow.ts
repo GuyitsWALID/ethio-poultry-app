@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {warehouseAssignmentScope} from "@/lib/warehouse-access";
 import "server-only";
+import {allAlertRows} from "./alert-pagination.ts";
 
 import type { AccessContext } from "@/lib/access-context";
 import { canAccessFarm, canAccessWarehouse, governanceAdmin } from "@/lib/access-context";
@@ -205,8 +206,11 @@ export function governanceAlertTitle(row:Row,role:string){
 }
 
 export async function getGovernanceAlerts(ctx:AccessContext){
-  const desk=await loadGovernanceDesk(ctx);const actionable=new Set(ctx.role==="ceo"?["pending","conflict"]:["approved","returned","conflict","expired"]);
-  return desk.requests.filter((row:Row)=>actionable.has(String(row.status))).slice(0,20).map((row:Row)=>({
+  const actionable=ctx.role==="ceo"?["pending","conflict"]:["approved","returned","conflict","expired"];
+  const rows=await allAlertRows<Row>((from,to)=>db.from("governance_requests")
+    .select("id,status,request_type,requester_name_snapshot,context_snapshot,approval_expires_at,decision_note,reason,latest_submitted_at,decided_at,updated_at,requested_at,farm_id,warehouse_id")
+    .eq("org_id",ctx.orgId).in("status",actionable).order("id").range(from,to));
+  return rows.map((row:Row)=>({
     id:`governance-${row.id}`,
     title:governanceAlertTitle(row,ctx.role),
     severity:(row.status==="conflict"||row.status==="expired"?"high":"medium") as "high"|"medium",

@@ -1,5 +1,6 @@
 import {warehouseAssignmentScope} from "@/lib/warehouse-access";
 import "server-only";
+import {allAlertRows} from "./alert-pagination.ts";
 
 import {
   canAccessFarm,
@@ -1064,7 +1065,7 @@ export async function recordPhysicalCount(
 export async function getReconciliationAlerts(ctx: AccessContext) {
   await ensureFreshReconciliation(ctx, false);
   const ids = await scopeIds(ctx);
-  const { data, error } = await governanceAdmin
+  const data = await allAlertRows((from, to) => governanceAdmin
     .from("reconciliation_findings")
     .select(
       "id,rule_code,domain,status,title,severity,explanation,recommended_action,farm_id,warehouse_id,record_date,last_seen_at",
@@ -1072,12 +1073,9 @@ export async function getReconciliationAlerts(ctx: AccessContext) {
     .eq("org_id", ctx.orgId)
     .in("status", activeStatuses)
     .in("severity", ["critical", "high", "medium"])
-    .order("last_seen_at", { ascending: false })
-    .limit(60);
-  if (error) throw new Error(error.message);
+    .order("id").range(from, to));
   return (data ?? [])
     .filter((row) => visible(row, ids))
-    .slice(0, 20)
     .map((row) => {
       const workflow = reconciliationWorkflow(
         {

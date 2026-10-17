@@ -223,6 +223,9 @@
   },
   "AlertsPage": {
     "inbox": {
+      "loaded": "{loaded} of {total} alerts loaded. Filters and counts above apply to loaded alerts.",
+      "more": "Load more alerts",
+      "refreshFailed": "Source checks could not finish. Showing saved alerts; some new problems may be missing. Refresh to try again.",
       "eyebrow": "Alerts",
       "title": "What needs your attention?",
       "help": "Fix the problem, then tell the CEO what you changed. Record normal daily work in Today.",

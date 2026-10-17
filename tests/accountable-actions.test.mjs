@@ -97,5 +97,5 @@ test("a corrected assigned task remains visible for manager completion and CEO v
   assert.match(notificationService, /Source corrected:/);
   assert.match(notificationService, /\["assigned", "resolution_submitted"\]\.includes\(notification\.eventType\)/);
   assert.match(bell, /if \(!open\) load\(\)/);
-  assert.match(bell, /await loadAttention\(\);\s*await loadNotifications\(\)/);
+  assert.match(bell, /Promise.all\(\[loadAttention\(\), loadNotifications\(\)\]\)/);
 });

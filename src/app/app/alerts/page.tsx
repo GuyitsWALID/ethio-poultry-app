@@ -6,7 +6,7 @@ import { useFarmScope } from "@/components/farm-scope-context";
 
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, BellRing, CheckCircle2, Clock3, History, RefreshCw, Search, ShieldAlert, UserCheck, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -46,16 +46,29 @@ export default function AlertsPage() {
   const [evidence, setEvidence] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [linkedActionId, setLinkedActionId] = useState("");
+  const loadSequence = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (refresh = true, cursor?: string) => {
+    const sequence = ++loadSequence.current;
     setLoading(true); setError("");
     try {
-      const response = await fetch("/api/alerts/actions", { cache: "no-store" });
+      let refreshError = "";
+      if (refresh) {
+        const check = await fetch("/api/alerts/actions", {method: "POST", cache: "no-store"});
+        if (!check.ok) refreshError = t("inbox.refreshFailed");
+      }
+      const params = new URLSearchParams();
+      if (cursor) params.set("cursor", cursor);
+      const target = window.location.hash.startsWith("#action-") ? window.location.hash.slice(8) : "";
+      if (target) params.set("action_id", target);
+      const response = await fetch(`/api/alerts/actions?${params}`, { cache: "no-store" });
       const body = await response.json();
+      if (sequence !== loadSequence.current) return;
       if (!response.ok) throw new Error(body?.error ?? t("errors.load"));
-      setDesk(body as ActionDesk);
-    } catch (value) { setError(value instanceof Error ? value.message : t("errors.load")); }
-    finally { setLoading(false); }
+      setDesk(previous => cursor && previous ? {...body, actions: [...new Map([...previous.actions, ...body.actions].map((action: ActionCard) => [action.actionId, action])).values()], page: {...body.page, total: previous.page?.total ?? body.page?.total}} : body as ActionDesk);
+      if (refreshError) setError(refreshError);
+    } catch (value) { if (sequence === loadSequence.current) setError(value instanceof Error ? value.message : t("errors.load")); }
+    finally { if (sequence === loadSequence.current) setLoading(false); }
   }, [t]);
 
   useEffect(() => { void load(); }, [load]);
@@ -65,9 +78,10 @@ export default function AlertsPage() {
       setLinkedActionId(window.location.hash.startsWith("#action-") ? window.location.hash.slice(8) : "");
     };
     readHash();
-    window.addEventListener("hashchange", readHash);
-    return () => window.removeEventListener("hashchange", readHash);
-  }, []);
+    const changed = () => {readHash(); void load(false);};
+    window.addEventListener("hashchange", changed);
+    return () => window.removeEventListener("hashchange", changed);
+  }, [load]);
   useEffect(() => {
     const id = settingsOpen ? "notification-settings" : !loading && linkedActionId ? `action-${linkedActionId}` : null;
     if (id) window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({block: "start"}));
@@ -81,7 +95,7 @@ export default function AlertsPage() {
       const response = await fetch(`/api/alerts/actions/${actionId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({expectedRevision, ...body}) });
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error ?? t("errors.update"));
-      setDialog(null); setNote(""); setEvidence(""); await load();
+      setDialog(null); setNote(""); setEvidence(""); await load(false);
     } catch (value) { setError(value instanceof Error ? value.message : t("errors.update")); }
     finally { setBusy(null); }
   }, [load, t, desk, dialog]);
@@ -157,7 +171,7 @@ export default function AlertsPage() {
 
     {linkedActionId ? <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sand-200 bg-white p-4">
       <p>{t(actions.some(action => action.actionId === linkedActionId) ? "inbox.linked" : "inbox.unavailable")}</p>
-      <button type="button" onClick={() => {setLinkedActionId(""); window.history.replaceState(null, "", window.location.pathname + window.location.search);}} className="min-h-11 rounded-xl border border-sand-300 px-4 font-semibold">{t("inbox.showInbox")}</button>
+      <button type="button" onClick={() => {setLinkedActionId(""); window.history.replaceState(null, "", window.location.pathname + window.location.search); void load(false);}} className="min-h-11 rounded-xl border border-sand-300 px-4 font-semibold">{t("inbox.showInbox")}</button>
     </div> : null}
     {isManager && !linkedActionId ? <nav aria-label={t("inbox.views")} className="flex flex-wrap gap-2">
       {(["mine", "unassigned", "verification"] as const).map(tab => <button key={tab} type="button" aria-pressed={managerView === tab} onClick={() => setView(tab)} className={`min-h-12 rounded-xl border px-4 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${managerView === tab ? "border-forest-900 bg-forest-900 text-white" : "border-sand-300 bg-white text-forest-900"}`}>
@@ -174,6 +188,10 @@ export default function AlertsPage() {
       </article>) : <div className="p-10 text-center"><CheckCircle2 className="mx-auto h-7 w-7 text-leaf-500" /><p className="mt-2 font-semibold text-forest-900">{t(isManager ? "inbox.emptyTitle" : "empty.title")}</p><p className="mt-1 text-sm text-forest-600">{t(isManager ? "inbox.emptyHelp" : "empty.copy")}</p>{isManager ? <div className="mt-4 flex flex-wrap items-center justify-center gap-3"><ResetPageFilters/><Link href="/app/today" className="inline-flex min-h-11 items-center rounded-xl bg-forest-900 px-4 font-semibold text-white">{t("destinations.today")}</Link></div> : null}</div>}</div>
     </section>
 
+    {desk?.page?.nextCursor && !linkedActionId ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sand-200 bg-white p-4">
+      <p className="text-sm text-forest-600">{t("inbox.loaded", {loaded: actions.length, total: desk.page.total})}</p>
+      <button type="button" disabled={loading} onClick={() => void load(false, desk.page?.nextCursor ?? undefined)} className="min-h-11 rounded-xl border border-sand-300 px-4 font-semibold">{t("inbox.more")}</button>
+    </div> : null}
     <details open={settingsOpen} onToggle={event => setSettingsOpen(event.currentTarget.open)} className="rounded-xl border border-sand-200 bg-white p-4">
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-forest-900">{t("inbox.settings")}</summary>
       {settingsOpen ? <NotificationSettingsPanel /> : null}

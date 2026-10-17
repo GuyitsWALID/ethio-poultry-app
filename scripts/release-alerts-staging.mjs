@@ -19,9 +19,10 @@ const names = {
   3: '20261016001000_atomic_action_transitions.sql',
   4: '20261016002000_exact_action_source_verification.sql',
   5: '20261017000000_authoritative_performance_warnings.sql',
+  7: '20261017001000_bounded_alert_reads.sql',
 };
 const name = names[finding];
-assert.ok(name, 'Only findings 1, 3, 4 and 5 have database migrations.');
+assert.ok(name, 'Only findings 1, 3, 4, 5 and 7 have database migrations.');
 const version = name.split('_')[0];
 function sql(input) {
   const result = spawnSync('psql', ['-X', '-Atq', '-v', 'ON_ERROR_STOP=1', '--dbname', connection],
@@ -64,6 +65,7 @@ if (mode === 'deploy') {
     3: 'public.apply_operational_action_transition(uuid,uuid,uuid,bigint,jsonb,text,text,text,boolean,uuid)',
     4: 'public.operational_action_source_state(uuid,uuid)',
     5: 'public.operational_performance_warnings(uuid,uuid,date)',
+    7: 'public.operational_low_stock_balances(uuid)',
   }[finding];
   assert.equal(sql(`select has_function_privilege('service_role','${signature}','execute')
     and not has_function_privilege('authenticated','${signature}','execute')

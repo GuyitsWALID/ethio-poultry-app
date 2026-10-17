@@ -96,12 +96,44 @@ in order. This is separate from the completed navigation/report tasks.
    Twenty-two focused inbox/action/localization tests, changed-file lint and
    whitespace checks and TypeScript pass; authenticated
    browser/tablet validation is deferred to the release pass. No new migration.
-7. Lightweight bell reads and bounded synchronization/history — pending.
+7. Lightweight bell reads and bounded synchronization/history — implemented
+   locally. Bell GET is read-only: at most 30 scoped active actions, no event
+   history, no CEO owner choices and no source reconciliation. Polling skips
+   hidden/offline tabs and overlapping requests. Displayed attention/unread
+   counts use full filtered database counts, not the 30/50 displayed rows.
+   Source refresh is explicit POST when Alerts opens or its Refresh button is
+   pressed; normal reads, paging and saving action progress do not rebuild all
+   warnings. A failed refresh keeps saved actions and shows a visible warning.
+   There is no new unattended background source-refresh job in this release.
+   Inbox pages contain 50 actions plus a continuation cursor, ordered globally
+   by overdue/escalated, urgency, due time and ID. Each action fetches only its
+   latest eight history events. Exact notification targets bypass paging, not
+   authorization. Manager/CEO counts and filters explicitly describe loaded
+   pages; Load more preserves the current scope. Private/no-store headers apply.
+   Source scans use stable 500-row pages and fail explicitly above 10,000 rows
+   rather than returning misleading partial evidence. Owner choices have a
+   1,000-person ceiling. Governance warning discovery no longer loads its full
+   desk, evidence and labels; Record Checks and warning sources no longer drop
+   entries at the old 20/60/500 limits. Resolved actions are looked up only for
+   currently reported keys instead of scanning the archive. Unchanged source
+   content is not written back on every refresh. Existing transition/verification
+   transactions remain authoritative.
+   Complete ledger balances are aggregated in PostgreSQL before paging low-stock
+   results. The new service-only read view preserves global priority ordering;
+   its direct browser access is revoked. Docker rollback regression passes with
+   more than 6,000 ledger entries, tenant/store isolation and urgent/overdue order.
+   Forty focused tests, the TypeScript run, changed-file lint and migration
+   checks pass. The migration is applied to staging; a service-authenticated,
+   read-only API smoke check passes for the inbox view, owner/history
+   relationships, eight-event history limit and stock aggregate RPC.
+   CEO/manager browser checks and application deployment validation remain
+   pending; this is not a pilot or load-test sign-off.
 
 New forward migrations: `20261016000000_atomic_action_acknowledgement.sql`,
 `20261016001000_atomic_action_transitions.sql` and
 `20261016002000_exact_action_source_verification.sql` and
 `20261017000000_authoritative_performance_warnings.sql`.
+Finding 7 adds `20261017001000_bounded_alert_reads.sql` (applied to staging).
 Regression: `tests/database/action-acknowledgement.integration.sql` checks
 successful history/audit, forced history-write rollback, stale retry rejection,
 revoked assignment and denial of direct browser execution.
@@ -109,17 +141,18 @@ The transition regression is `tests/database/action-transitions.integration.sql`
 Exact checks are in `tests/database/action-source-verification.integration.sql`.
 Performance checks are in `tests/database/performance-warnings.integration.sql`.
 
-Release update (2026-10-17): all four Alerts migrations (findings 1, 3, 4 and 5)
+Release update (2026-10-17): all five Alerts migrations (findings 1, 3, 4, 5 and 7)
 were applied individually to staging `uzmhpecehmlwojdmitgj`. Each passed internal
 function permission checks and unchanged operational/action/audit fingerprints.
-Production was not accessed. Findings 1–6 are separated into ordered commits on
+Production was not accessed. Findings 1–7 are separated into ordered commits on
 `notmain`. The combined focused inbox/action/warning/localization suite passes
-32 tests. Cloudflare deployment and authenticated browser validation remain
+40 tests. Cloudflare deployment and authenticated browser validation remain
 separate release checks; they are not claimed by the migration result.
 
-Remaining boundaries: finding 7
-must replace bounded/unpaginated source reads and expensive bell synchronization.
-These are not certified fixed by the scope regressions.
+Remaining boundaries: source refresh is on-demand, not an unattended scheduled
+worker. The explicit source/owner ceilings fail closed and need workload review
+if reached. This does not certify very large tenant throughput or simultaneous
+multi-worker refresh performance. Browser/staging checks are still required.
 Initial alert discovery still uses the existing unique-key insert/history path;
 it is not claimed transactional by the transition fix. Notification publishing
 remains after commit for Alerts; delivery/publishing recovery is not certified
