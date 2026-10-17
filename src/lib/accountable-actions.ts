@@ -265,6 +265,17 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
   const { data: row, error } = await db.from("operational_actions").select("*").eq("id", actionId).eq("org_id", ctx.orgId).maybeSingle();
   if (error || !row) throw new Error(error?.message ?? "Action not found.");
   await assertScope(ctx, row);
+  if (command.command === "acknowledge") {
+    const {data, error: acknowledgementError} = await db.rpc("acknowledge_operational_action", {
+      p_actor_id: ctx.userId, p_org_id: ctx.orgId, p_action_id: actionId,
+      p_expected_updated_at: row.updated_at, p_expected_status: row.status,
+      p_expected_owner_id: row.owner_id, p_note: command.note, p_support_session_id: ctx.supportSessionId,
+    });
+    if (acknowledgementError) throw new Error(acknowledgementError.message);
+    if (!data?.action || !data?.event) throw new Error("Acknowledgement could not be recorded.");
+    await publishActionEventNotifications({action: data.action, event: data.event});
+    return data.action;
+  }
   const before = text(row.status) as ActionStatus;
   if (before === "resolved") throw new Error("This action has already been verified and resolved.");
   const now = new Date().toISOString();
@@ -288,7 +299,6 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
     eventType = "due_date_changed";
   } else {
     if (ctx.role === "farm_manager" && text(row.owner_id) !== ctx.userId) throw new Error("This action must be assigned to you before you can update it.");
-    if (command.command === "acknowledge") changes = { ...changes, status: actionStatusAfter("acknowledge", before), acknowledged_by: ctx.userId, acknowledged_at: now };
     if (command.command === "start") { changes = { ...changes, status: actionStatusAfter("start", before) }; eventType = "work_started"; }
     if (command.command === "submit_resolution") {
       changes = { ...changes, status: actionStatusAfter("submit_resolution", before), resolution_summary: command.note, resolution_evidence: command.evidence, resolution_submitted_by: ctx.userId, resolution_submitted_at: now };

@@ -58,3 +58,9 @@ test("a corrected assigned task remains visible for manager completion and CEO v
   assert.match(bell, /if \(!open\) load\(\)/);
   assert.match(bell, /await loadAttention\(\);\s*await loadNotifications\(\)/);
 });
+
+test("acknowledgement uses the atomic RPC and canonical history label", () => {
+  assert.ok(actionService.includes('db.rpc("acknowledge_operational_action"'));
+  assert.ok(actionService.includes("p_expected_updated_at: row.updated_at"));
+  assert.ok(page.includes('acknowledged: "events.acknowledge"'));
+});

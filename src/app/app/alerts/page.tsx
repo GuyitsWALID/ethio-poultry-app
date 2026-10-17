@@ -18,7 +18,7 @@ import type { AppLocale } from "@/i18n/locale";
 const tone = { high: "border-red-200 bg-red-50 text-red-700", medium: "border-amber-200 bg-amber-50 text-amber-800", low: "border-sand-200 bg-sand-50 text-forest-700" };
 const statusTone: Record<ActionStatus, string> = { open: "bg-sand-100 text-forest-700", assigned: "bg-sky-50 text-sky-700", acknowledged: "bg-sky-50 text-sky-700", in_progress: "bg-amber-50 text-amber-800", awaiting_verification: "bg-violet-50 text-violet-700", escalated: "bg-red-50 text-red-700", resolved: "bg-green-50 text-green-700" };
 const roleMessageKeys = { ceo: "roles.ceo", farm_manager: "roles.farm_manager", system_admin: "roles.system_admin" } as const;
-const eventMessageKeys = { assigned: "events.assigned", claimed: "events.claimed", acknowledge: "events.acknowledge", work_started: "events.work_started", due_date_changed: "events.due_date_changed", resolution_submitted: "events.resolution_submitted", verification_failed: "events.verification_failed", system_verified: "events.system_verified" } as const;
+const eventMessageKeys = { assigned: "events.assigned", claimed: "events.claimed", acknowledged: "events.acknowledge", work_started: "events.work_started", due_date_changed: "events.due_date_changed", resolution_submitted: "events.resolution_submitted", verification_failed: "events.verification_failed", system_verified: "events.system_verified" } as const;
 
 function dateTime(value: string, locale: AppLocale, unavailable: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? unavailable : formatOperationDateTime(date, locale); }
 
