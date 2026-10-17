@@ -89,10 +89,16 @@ export default function AlertsPage() {
   });
 
   const openDialog = (action: ActionCard, command: NonNullable<DialogState>["command"]) => { setDialog({ action, command }); setNote(""); setEvidence(""); };
+  const retireLegacy = (action: ActionCard) => {
+    const reason = window.prompt(t("legacy.reason"))?.trim();
+    if (!reason) return;
+    if (reason.length < 8) {setError(t("legacy.reason")); return;}
+    void update(action.actionId, {command: "retire_legacy", note: reason, expectedRevision: action.revision});
+  };
   const dialogTitle = dialog?.command === "submit_resolution" ? t("dialog.completeTitle") : dialog?.command === "start" ? t("dialog.startTitle") : t("dialog.acknowledgeTitle");
   const statusLabel = (value: ActionStatus) => tNotifications(`status.${value}`);
   const roleLabel = (value: string) => value in roleMessageKeys ? t(roleMessageKeys[value as keyof typeof roleMessageKeys]) : value.replaceAll("_", " ");
-  const eventLabel = (value: string) => value in eventMessageKeys ? t(eventMessageKeys[value as keyof typeof eventMessageKeys]) : value.replaceAll("_", " ");
+  const eventLabel = (value: string) => value === "legacy_retired" ? t("legacy.retired") : value in eventMessageKeys ? t(eventMessageKeys[value as keyof typeof eventMessageKeys]) : value.replaceAll("_", " ");
 
   return <main className="space-y-5 pb-8">
       <div className="flex justify-end"><ResetPageFilters /></div>
@@ -120,6 +126,14 @@ export default function AlertsPage() {
     </section>
 
     <NotificationSettingsPanel />
+
+    {desk?.role === "ceo" && actions.some(action => action.canRetireLegacy) ? <details className="rounded-xl border border-sand-200 bg-white p-4">
+      <summary className="cursor-pointer font-semibold">{t("legacy.title")}</summary>
+      <p className="mt-2 text-sm text-forest-600">{t("legacy.help")}</p>
+      <div className="mt-3 grid gap-2">{actions.filter(action => action.canRetireLegacy).map(action => <div key={action.actionId} className="flex flex-wrap items-center justify-between gap-3 border-t border-sand-100 pt-3">
+        <p className="text-sm">{action.title}</p><button type="button" disabled={busy === action.actionId} onClick={() => retireLegacy(action)} className="min-h-11 rounded-xl border border-sand-300 px-4 text-sm font-semibold">{t("legacy.retire")}</button>
+      </div>)}</div>
+    </details> : null}
 
     <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-sand-200 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-forest-500">{t("queue.eyebrow")}</p><h2 className="mt-1 font-display text-2xl font-semibold text-forest-900">{t("queue.title")}</h2><p className="mt-1 text-sm text-forest-600">{loading ? t("queue.refreshing") : t("queue.count", { visible: visible.length, total: actions.length })}</p></div><div className="flex flex-wrap gap-2"><label className="relative min-w-0 flex-1 sm:flex-none"><span className="sr-only">{t("queue.search")}</span><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-forest-500" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("queue.search")} className="h-11 w-full min-w-0 rounded-xl border border-sand-200 pl-9 pr-3 text-sm" /></label><select aria-label={t("queue.filter")} value={view} onChange={(event) => setView(event.target.value as typeof view)} className="min-h-11 max-w-full rounded-xl border border-sand-200 px-3 py-2 text-sm"><option value="all">{t("queue.all")}</option><option value="mine">{t("queue.mine")}</option><option value="unassigned">{t("queue.unassigned")}</option><option value="escalated">{t("queue.escalated")}</option><option value="verification">{t("queue.verification")}</option></select></div></div>

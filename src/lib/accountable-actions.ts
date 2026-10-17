@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { canAccessFarm, canAccessWarehouse, governanceAdmin, type AccessContext } from "@/lib/access-context";
 import type { ActionCard, ActionDesk, ActionEvent, ActionOwner, ActionStatus, OperationalAlert } from "@/lib/action-desk-contract";
-import { actionDeadlineAt, actionStatusAfter, actionSourceInScope } from "@/lib/action-desk-policy";
+import { actionDeadlineAt, actionStatusAfter, actionSourceInScope, isLegacyUnscopedWarning } from "@/lib/action-desk-policy";
 import { getCurrentAlerts } from "@/lib/current-alerts";
 import { getGovernanceAlerts } from "@/lib/governance-workflow";
 import { getReconciliationAlerts, isReconciliationFindingActive } from "@/lib/reconciliation-service";
@@ -23,6 +23,7 @@ const commandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("start"), note: z.string().trim().min(4).max(1000) }),
   z.object({ command: z.literal("submit_resolution"), note: z.string().trim().min(8).max(2000), evidence: z.string().trim().max(4000).optional() }),
   z.object({ command: z.literal("verify") }),
+  z.object({ command: z.literal("retire_legacy"), note: z.string().trim().min(8).max(2000) }),
   z.object({ command: z.literal("set_due"), dueAt: z.string().datetime(), note: z.string().trim().min(4).max(1000) }),
 ]);
 
@@ -89,23 +90,10 @@ function visible(row: Row, ids: Awaited<ReturnType<typeof scope>>) {
   return actionSourceInScope({farmId: nullable(row.farm_id), warehouseId: nullable(row.warehouse_id)}, ids);
 }
 
-async function inventoryAlertActive(ctx: AccessContext, row: Row): Promise<boolean | null> {
-  const sourceKey = text(row.source_key);
-  if (text(row.source_name) !== "Inventory" || !sourceKey.startsWith("inv-")) return null;
-  if (!row.warehouse_id || !sourceKey.startsWith(`inv-${row.warehouse_id}-`)) return null;
-  const itemId = sourceKey.slice(42);
-  const [itemResult, ledgerResult] = await Promise.all([
-    db.from("inventory_items").select("reorder_level").eq("id", itemId).eq("org_id", ctx.orgId).maybeSingle(),
-    db.from("stock_ledger").select("quantity,transaction_type").eq("warehouse_id", row.warehouse_id).eq("item_id", itemId).eq("org_id", ctx.orgId),
-  ]);
-  if (itemResult.error) throw new Error(itemResult.error.message);
-  if (ledgerResult.error) throw new Error(ledgerResult.error.message);
-  if (!itemResult.data || itemResult.data.reorder_level == null) return false;
-  const balance = (ledgerResult.data ?? []).reduce((sum: number, movement: Row) => {
-    const quantity = Number(movement.quantity) || 0;
-    return sum + (["issue", "transfer_out"].includes(text(movement.transaction_type)) ? -quantity : quantity);
-  }, 0);
-  return balance <= Number(itemResult.data.reorder_level);
+async function exactSourceState(ctx: AccessContext, row: Row) {
+  const {data, error} = await db.rpc("operational_action_source_state", {p_org_id: ctx.orgId, p_action_id: row.id});
+  if (error) throw new Error("Could not verify the warning source. Refresh and try again.");
+  return z.object({state: z.enum(["active", "clear", "unavailable", "superseded"])}).parse(data).state;
 }
 
 async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
@@ -146,12 +134,15 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
   const accessible = await scope(ctx);
   for (const row of byKey.values()) {
     if (text(row.status) === "resolved" || activeKeys.has(text(row.source_key)) || !visible(row, accessible)) continue;
-    const reconciliationId = text(row.source_key).startsWith("reconciliation-") ? text(row.source_key).slice("reconciliation-".length) : null;
-    if (reconciliationId) {
-      if (await isReconciliationFindingActive(ctx, reconciliationId, false)) continue;
-    } else if (await inventoryAlertActive(ctx, row) !== false) continue;
-    if (row.source_resolved_at) continue;
+    const state = await exactSourceState(ctx, row);
     const baseContext = text(row.context).split(" Source status:", 1)[0];
+    if (state !== "clear") {
+      const context = state === "superseded" ? `${baseContext} Source status: This older warning was replaced by scoped checks. CEO review is required to retire it.`
+        : state === "unavailable" ? `${baseContext} Source status: Could not verify this problem. Its exact source needs review.` : baseContext;
+      if (context !== row.context || row.source_resolved_at) await commitAction(ctx, row, {context, source_resolved_at: null}, null, null, null, true);
+      continue;
+    }
+    if (row.source_resolved_at) continue;
     const sourceStatus = text(row.status) === "awaiting_verification"
       ? "Source status: The source check is clear. The CEO can now review and verify this completed task."
       : "Source status: The source check is clear. Confirm completion and send this task to the CEO for review.";
@@ -202,6 +193,7 @@ export async function loadActionDesk(ctx: AccessContext): Promise<ActionDesk> {
       source: text(row.source_name), context: text(row.context), route: text(row.source_route), createdAt: text(row.source_first_seen_at),
       farmId: nullable(row.farm_id), warehouseId: nullable(row.warehouse_id), status: text(row.status) as ActionStatus,
       ownerId: nullable(row.owner_id), ownerName: nullable(owner?.full_name), revision: String(row.revision),
+      canRetireLegacy: ctx.role === "ceo" && isLegacyUnscopedWarning(text(row.source_key), nullable(row.warehouse_id)),
       dueAt: text(row.due_at), acknowledgedAt: nullable(row.acknowledged_at),
       resolutionSummary: nullable(row.resolution_summary), resolutionEvidence: nullable(row.resolution_evidence), escalatedAt: nullable(row.escalated_at),
       canAssign: ctx.role === "ceo" && Boolean(row.farm_id || row.warehouse_id), canClaim: ctx.role === "farm_manager" && unownedInScope, canWork: (ctx.role === "farm_manager" && isOwner) || ctx.role === "ceo", events,
@@ -301,6 +293,9 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
     if (ctx.role !== "ceo") throw new Error("Only the CEO can change an action due date.");
     changes = { ...changes, due_at: command.dueAt, status: before === "escalated" ? (row.owner_id ? "assigned" : "open") : before, escalated_at: null, escalation_reason: null };
     eventType = "due_date_changed";
+  } else if (command.command === "retire_legacy") {
+    if (ctx.role !== "ceo") throw new Error("Only the CEO can retire older warnings.");
+    changes = {...changes, status: "resolved"}; eventType = "legacy_retired";
   } else {
     if (ctx.role === "farm_manager" && text(row.owner_id) !== ctx.userId) throw new Error("This action must be assigned to you before you can update it.");
     if (command.command === "acknowledge") {
@@ -319,14 +314,11 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
     if (command.command === "verify") {
       if (ctx.role !== "ceo") throw new Error("Only the CEO can verify and close completed actions.");
       if (before !== "awaiting_verification") throw new Error("The Farm Manager must complete and submit this task before CEO verification.");
-      const inventoryActive = await inventoryAlertActive(ctx, row);
       const findingId = text(row.source_key).startsWith("reconciliation-") ? text(row.source_key).slice("reconciliation-".length) : null;
-      const sourceActive = findingId ? await isReconciliationFindingActive(ctx, findingId, true) : inventoryActive ?? (await collectOperationalAlerts(ctx)).some((alert) => alert.id === text(row.source_key));
-      if (sourceActive) {
-        changes = { ...changes, status: actionStatusAfter("verify", before, true) }; eventType = "verification_failed"; note = "The originating check still reports this issue.";
-      } else {
-        changes = { ...changes, status: actionStatusAfter("verify", before, false), source_resolved_at: now }; eventType = "system_verified"; note = "The originating check no longer reports this issue.";
-      }
+      // Refresh Record Checks first. The locked SQL save then checks the exact
+      // source again and decides verified/failed; no warning-list membership.
+      if (findingId) await isReconciliationFindingActive(ctx, findingId, true);
+      changes = {...changes, status: "resolved"}; eventType = "system_verified";
     }
   }
   return commitAction(ctx, row, changes, eventType, note, evidence);

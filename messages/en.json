@@ -222,6 +222,13 @@
     }
   },
   "AlertsPage": {
+    "legacy": {
+      "title": "Older warnings need review",
+      "help": "These old organization-wide warnings were replaced by farm and warehouse checks. Retiring one keeps its history. It does not confirm that the farm work was fixed.",
+      "reason": "Why are you retiring this older warning? Enter at least 8 characters. This does not verify a farm correction.",
+      "retire": "Retire older warning",
+      "retired": "Older warning retired (not a verified correction)"
+    },
     "filters": {
       "farms": "Farms",
       "owners": "Owners",

@@ -11,8 +11,44 @@ const migration = await readFile(new URL("../supabase/migrations/20260901000000_
 const page = await readFile(new URL("../src/app/app/alerts/page.tsx", import.meta.url), "utf8");
 const actionService = await readFile(new URL("../src/lib/accountable-actions.ts", import.meta.url), "utf8");
 const notificationService = await readFile(new URL("../src/lib/notification-service.ts", import.meta.url), "utf8");
-const transitions = await readFile(new URL("../supabase/migrations/20261016001000_atomic_action_transitions.sql", import.meta.url), "utf8");
 const bell = await readFile(new URL("../src/components/header-alert-bell.tsx", import.meta.url), "utf8");
+const acknowledgement = await readFile(new URL("../supabase/migrations/20261016000000_atomic_action_acknowledgement.sql", import.meta.url), "utf8");
+const transitions = await readFile(new URL("../supabase/migrations/20261016001000_atomic_action_transitions.sql", import.meta.url), "utf8");
+const sourceChecks = await readFile(new URL("../supabase/migrations/20261016002000_exact_action_source_verification.sql", import.meta.url), "utf8");
+
+test("verification cannot use absence from an alert list as proof of resolution", () => {
+  assert.doesNotMatch(actionService, /collectOperationalAlerts\(ctx\)\)\.some/);
+  assert.match(actionService, /operational_action_source_state/);
+  assert.match(sourceChecks, /Could not verify this problem/);
+  assert.match(sourceChecks, /v_source:=public\.operational_action_source_state/);
+  assert.doesNotMatch(sourceChecks, /\blimit\s+\d+/i);
+  assert.match(sourceChecks, /'approved'.*'conflict'.*'expired'/);
+  assert.match(sourceChecks, /'legacy_retired'/);
+  assert.equal(policy.isLegacyUnscopedWarning("daily-missing", null), true);
+  assert.equal(policy.isLegacyUnscopedWarning("daily-missing-flock-2026-10-17", null), false);
+  assert.match(page, /desk\?\.role === "ceo" && actions.some\(action => action.canRetireLegacy\)/);
+});
+
+test("all action saves and background refreshes use the revision-guarded atomic boundary", () => {
+  assert.doesNotMatch(actionService, /from\("operational_actions"\)\.update\(/);
+  assert.match(actionService, /p_expected_revision: row\.revision/);
+  assert.match(transitions, /v_before\.revision<>p_expected_revision/);
+  assert.match(transitions, /for update/i);
+  assert.match(transitions, /public\.apply_operational_action_transition\(p_actor_id,v_org_id,v_action\.id/);
+  assert.match(page, /expectedRevision/);
+  assert.match(transitions, /source_last_seen_at/);
+});
+
+test("Alerts acknowledges through one atomic status/history/audit boundary", () => {
+  assert.match(actionService, /db\.rpc\("apply_operational_action_transition"/);
+  assert.doesNotMatch(actionService, /if \(command.command === "acknowledge"\) changes/);
+  assert.match(acknowledgement, /for update/i);
+  assert.match(acknowledgement, /is distinct from p_expected_updated_at/);
+  assert.match(acknowledgement, /'acknowledged',p_actor_id/);
+  assert.match(acknowledgement, /insert into public\.governance_audit_events/);
+  assert.match(acknowledgement, /from public,anon,authenticated/);
+  assert.match(page, /acknowledged: "events\.acknowledge"/);
+});
 
 test("severity deadlines are explicit and predictable", () => {
   const start = new Date("2026-09-01T00:00:00.000Z");
@@ -42,30 +78,22 @@ test("action desk exposes assignment, evidence, source inspection, and verificat
   assert.equal(en.AlertsPage.card.inspectSource, "Inspect source");
   assert.equal(en.AlertsPage.card.verify, "Verify and close");
   assert.match(en.AlertsPage.dialog.evidenceHelp, /CEO must verify that the originating check is clear/i);
-  for (const key of ["chooseManager", "complete", "inspectSource", "verify"]) assert.match(page, new RegExp(`t\\(\"card\\.${key}\"\\)`));
+  for (const key of ["chooseManager", "verify"]) assert.match(page, new RegExp(`t\\(\"card\\.${key}\"\\)`));
+  assert.ok(page.includes('t("card.inspectSource")'));
+  assert.ok(page.includes('t("card.complete")'));
   assert.match(page, /t\("dialog\.evidenceHelp"\)/);
 });
 
 test("a corrected assigned task remains visible for manager completion and CEO verification", () => {
   assert.match(actionService, /Source status: The source check is clear/);
-  assert.match(actionService, /async function inventoryAlertActive/);
+  assert.match(actionService, /async function exactSourceState/);
   assert.match(actionService, /isReconciliationFindingActive/);
   assert.match(actionService, /if \(ctx\.role !== "ceo"\) throw new Error\("Only the CEO can verify and close completed actions\."\)/);
-  assert.match(page, /t\("card\.complete"\)/);
+  assert.ok(page.includes('t("card.complete")'));
   assert.match(page, /t\("card\.verify"\)/);
   assert.match(notificationService, /Task completed by \$\{actorName\}/);
   assert.match(notificationService, /Source corrected:/);
   assert.match(notificationService, /\["assigned", "resolution_submitted"\]\.includes\(notification\.eventType\)/);
   assert.match(bell, /if \(!open\) load\(\)/);
   assert.match(bell, /await loadAttention\(\);\s*await loadNotifications\(\)/);
-});
-
-test("all action saves and background refreshes use the revision-guarded atomic boundary", () => {
-  assert.doesNotMatch(actionService, /from\("operational_actions"\)\.update\(/);
-  assert.match(actionService, /p_expected_revision: row\.revision/);
-  assert.match(transitions, /v_before\.revision<>p_expected_revision/);
-  assert.match(transitions, /for update/i);
-  assert.match(transitions, /public\.apply_operational_action_transition\(p_actor_id,v_org_id,v_action\.id/);
-  assert.match(page, /expectedRevision/);
-  assert.match(transitions, /source_last_seen_at/);
 });

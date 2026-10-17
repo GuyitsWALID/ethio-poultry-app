@@ -2,6 +2,20 @@ import type { ActionSeverity, ActionStatus } from "@/lib/action-desk-contract";
 
 export type WorkflowCommand = "assign" | "claim" | "acknowledge" | "start" | "submit_resolution" | "verify";
 
+export function isLegacyUnscopedWarning(sourceKey: string, warehouseId: string | null) {
+  return ["daily-missing", "mortality-spike", "schedule-missed"].includes(sourceKey) ||
+    (!warehouseId && /^inv-[0-9a-f-]{36}$/.test(sourceKey));
+}
+
+export function actionSourceInScope(
+  source: {farmId: string | null; warehouseId: string | null},
+  scope: {farms: Set<string> | null; warehouses: Set<string> | null},
+) {
+  if (scope.farms === null) return true; // CEO or approved support session.
+  return Boolean((source.farmId && scope.farms.has(source.farmId)) ||
+    (source.warehouseId && scope.warehouses?.has(source.warehouseId)));
+}
+
 export function actionDeadlineAt(severity: ActionSeverity, reference = new Date()) {
   const hours = severity === "high" ? 24 : severity === "medium" ? 72 : 168;
   return new Date(reference.getTime() + hours * 3600000).toISOString();
@@ -14,13 +28,4 @@ export function actionStatusAfter(command: WorkflowCommand, current: ActionStatu
   if (command === "start") return "in_progress";
   if (command === "submit_resolution") return "awaiting_verification";
   return sourceStillActive ? "in_progress" : "resolved";
-}
-
-export function actionSourceInScope(
-  source: {farmId: string | null; warehouseId: string | null},
-  scope: {farms: Set<string> | null; warehouses: Set<string> | null},
-) {
-  if (scope.farms === null) return true; // CEO or approved support session.
-  return Boolean((source.farmId && scope.farms.has(source.farmId)) ||
-    (source.warehouseId && scope.warehouses?.has(source.warehouseId)));
 }
