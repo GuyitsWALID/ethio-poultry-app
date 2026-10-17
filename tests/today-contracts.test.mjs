@@ -36,7 +36,7 @@ test("every version-one command has a usable validated interface", () => {
     {...base, type: "record_stock_count", payload: {warehouse_id: warehouseId, rows: [{item_id: itemId, counted_quantity: 10}]}},
     {...base, type: "record_sale", payload: {product_category: "egg", product_label: "Egg trays", quantity: 2, unit_price: 100, unit: "tray"}},
     {...base, type: "record_expense", payload: {category: "transport", description: "Delivery", amount: 500}},
-    {...base, type: "update_assigned_action", payload: {action_id: actionId, event_type: "started", note: "Started the assigned work"}},
+    {...base, type: "update_assigned_action", expected_resource_revision: "0", payload: {action_id: actionId, event_type: "started", note: "Started the assigned work"}},
     {...base, type: "finish_operating_day", expected_resource_revision: "day-revision", payload: {}},
   ];
   assert.deepEqual(commands.map((command) => parseTodayCommand(command).type), todayCommandTypes);
@@ -61,6 +61,12 @@ test("Finish day requires a resource revision", () => {
     payload: {},
   });
   assert.equal(command.type, "finish_operating_day");
+});
+
+test("assigned fixes require the displayed action version", () => {
+  const command = {...base, type: "update_assigned_action", payload: {action_id: base.flock_id, event_type: "started", note: "Starting the work"}};
+  assert.throws(() => parseTodayCommand(command));
+  assert.equal(parseTodayCommand({...command, expected_resource_revision: "2"}).expected_resource_revision, "2");
 });
 
 test("no-activity confirmation requires a supported task and fingerprint", () => {

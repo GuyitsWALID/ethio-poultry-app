@@ -29,6 +29,7 @@ export type ActionEvent = {
 
 export type ActionCard = OperationalAlert & {
   actionId: string;
+  revision: string;
   status: ActionStatus;
   ownerId: string | null;
   ownerName: string | null;

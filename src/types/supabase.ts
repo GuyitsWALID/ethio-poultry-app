@@ -4902,6 +4902,7 @@ export type Database = {
       }
       operational_actions: {
         Row: {
+          revision: number
           acknowledged_at: string | null
           acknowledged_by: string | null
           assigned_at: string | null
@@ -4945,6 +4946,7 @@ export type Database = {
           id?: string
           org_id: string
           owner_id?: string | null
+          revision?: number
           resolution_evidence?: string | null
           resolution_submitted_at?: string | null
           resolution_submitted_by?: string | null
@@ -4975,6 +4977,7 @@ export type Database = {
           id?: string
           org_id?: string
           owner_id?: string | null
+          revision?: number
           resolution_evidence?: string | null
           resolution_submitted_at?: string | null
           resolution_submitted_by?: string | null

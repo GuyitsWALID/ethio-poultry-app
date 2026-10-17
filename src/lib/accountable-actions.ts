@@ -7,7 +7,6 @@ import { z } from "zod";
 import { canAccessFarm, canAccessWarehouse, governanceAdmin, type AccessContext } from "@/lib/access-context";
 import type { ActionCard, ActionDesk, ActionEvent, ActionOwner, ActionStatus, OperationalAlert } from "@/lib/action-desk-contract";
 import { actionDeadlineAt, actionStatusAfter, actionSourceInScope } from "@/lib/action-desk-policy";
-import { recordAuditEvent } from "@/lib/audit-ledger";
 import { getCurrentAlerts } from "@/lib/current-alerts";
 import { getGovernanceAlerts } from "@/lib/governance-workflow";
 import { getReconciliationAlerts, isReconciliationFindingActive } from "@/lib/reconciliation-service";
@@ -59,6 +58,21 @@ async function event(ctx: AccessContext, actionId: string, eventType: string, be
   if (error) throw new Error(`Action history could not be recorded: ${error.message}`);
   const { data: action } = await db.from("operational_actions").select("*,owner:profiles!operational_actions_owner_id_fkey(full_name)").eq("id", actionId).maybeSingle();
   if (action && created) await publishActionEventNotifications({ action, event: created });
+}
+
+async function commitAction(ctx: AccessContext, row: Row, changes: Row, eventType: string | null,
+  note: string | null = null, evidence: string | null = null, automated = false) {
+  const {data, error} = await db.rpc("apply_operational_action_transition", {
+    p_actor_id: ctx.userId, p_org_id: ctx.orgId, p_action_id: row.id,
+    p_expected_revision: row.revision, p_changes: changes, p_event_type: eventType,
+    p_note: note, p_evidence: evidence, p_automated: automated, p_support_session_id: ctx.supportSessionId,
+  });
+  // A background refresh must never overwrite or fail the user's newer work.
+  // The next refresh can re-read the row; human saves receive an explicit conflict.
+  if (error?.code === "40001" && automated) return null;
+  if (error) throw new Error(error.message);
+  if (data.event) await publishActionEventNotifications({action: data.action, event: data.event});
+  return data.action;
 }
 
 async function scope(ctx: AccessContext) {
@@ -124,9 +138,8 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
       warehouse_id: alert.warehouseId ?? prior.warehouse_id ?? null, source_last_seen_at: now, source_resolved_at: null, updated_at: now,
     };
     if (wasResolved) Object.assign(changes, { status: prior.owner_id ? "assigned" : "open", due_at: actionDeadlineAt(alert.severity), source_resolved_at: null, resolution_summary: null, resolution_evidence: null, escalated_at: null, escalation_reason: null });
-    const { error: updateError } = await db.from("operational_actions").update(changes).eq("id", prior.id);
-    if (updateError) throw new Error(updateError.message);
-    if (wasResolved) await event(ctx, text(prior.id), "reopened", "resolved", text(changes.status) as ActionStatus, "The source system reported this issue again.", null, true);
+    await commitAction(ctx, prior, changes, wasResolved ? "reopened" : null,
+      wasResolved ? "The source system reported this issue again." : null, null, true);
   }
 
   const activeKeys = new Set(alerts.map((alert) => alert.id));
@@ -142,16 +155,15 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
     const sourceStatus = text(row.status) === "awaiting_verification"
       ? "Source status: The source check is clear. The CEO can now review and verify this completed task."
       : "Source status: The source check is clear. Confirm completion and send this task to the CEO for review.";
-    const { error: clearError } = await db.from("operational_actions").update({ context: `${baseContext} ${sourceStatus}`, source_resolved_at: now, updated_at: now }).eq("id", row.id).is("source_resolved_at", null);
-    if (clearError) throw new Error(clearError.message);
+    await commitAction(ctx, row, {context: `${baseContext} ${sourceStatus}`, source_resolved_at: now}, null, null, null, true);
   }
 
-  const { data: overdue, error: overdueError } = await db.from("operational_actions").select("id,status").eq("org_id", ctx.orgId).in("status", ["open", "assigned", "acknowledged", "in_progress"]).lt("due_at", now);
+  const { data: overdue, error: overdueError } = await db.from("operational_actions").select("*").eq("org_id", ctx.orgId).in("status", ["open", "assigned", "acknowledged", "in_progress"]).lt("due_at", now);
   if (overdueError) throw new Error(overdueError.message);
   for (const row of overdue ?? []) {
-    const { data: changed, error: escalationError } = await db.from("operational_actions").update({ status: "escalated", escalated_at: now, escalation_reason: "The action passed its due date without verified resolution.", updated_at: now }).eq("id", row.id).eq("status", row.status).select("id").maybeSingle();
-    if (escalationError) throw new Error(escalationError.message);
-    if (changed) await event(ctx, text(row.id), "escalated", text(row.status) as ActionStatus, "escalated", "Due date passed without verified resolution.", null, true);
+    await commitAction(ctx, row, {status: "escalated", escalated_at: now,
+      escalation_reason: "The action passed its due date without verified resolution."},
+      "escalated", "Due date passed without verified resolution.", null, true);
   }
 }
 
@@ -189,7 +201,8 @@ export async function loadActionDesk(ctx: AccessContext): Promise<ActionDesk> {
       actionId: text(row.id), id: text(row.source_key), title: text(row.title), severity: text(row.severity) as ActionCard["severity"],
       source: text(row.source_name), context: text(row.context), route: text(row.source_route), createdAt: text(row.source_first_seen_at),
       farmId: nullable(row.farm_id), warehouseId: nullable(row.warehouse_id), status: text(row.status) as ActionStatus,
-      ownerId: nullable(row.owner_id), ownerName: nullable(owner?.full_name), dueAt: text(row.due_at), acknowledgedAt: nullable(row.acknowledged_at),
+      ownerId: nullable(row.owner_id), ownerName: nullable(owner?.full_name), revision: String(row.revision),
+      dueAt: text(row.due_at), acknowledgedAt: nullable(row.acknowledged_at),
       resolutionSummary: nullable(row.resolution_summary), resolutionEvidence: nullable(row.resolution_evidence), escalatedAt: nullable(row.escalated_at),
       canAssign: ctx.role === "ceo" && Boolean(row.farm_id || row.warehouse_id), canClaim: ctx.role === "farm_manager" && unownedInScope, canWork: (ctx.role === "farm_manager" && isOwner) || ctx.role === "ceo", events,
     };
@@ -265,17 +278,8 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
   const { data: row, error } = await db.from("operational_actions").select("*").eq("id", actionId).eq("org_id", ctx.orgId).maybeSingle();
   if (error || !row) throw new Error(error?.message ?? "Action not found.");
   await assertScope(ctx, row);
-  if (command.command === "acknowledge") {
-    const {data, error: acknowledgementError} = await db.rpc("acknowledge_operational_action", {
-      p_actor_id: ctx.userId, p_org_id: ctx.orgId, p_action_id: actionId,
-      p_expected_updated_at: row.updated_at, p_expected_status: row.status,
-      p_expected_owner_id: row.owner_id, p_note: command.note, p_support_session_id: ctx.supportSessionId,
-    });
-    if (acknowledgementError) throw new Error(acknowledgementError.message);
-    if (!data?.action || !data?.event) throw new Error("Acknowledgement could not be recorded.");
-    await publishActionEventNotifications({action: data.action, event: data.event});
-    return data.action;
-  }
+  const expected = z.object({expectedRevision: z.string().regex(/^\d+$/).optional()}).parse(input).expectedRevision;
+  if (expected !== undefined && expected !== String(row.revision)) throw new Error("Action changed. Refresh before continuing.");
   const before = text(row.status) as ActionStatus;
   if (before === "resolved") throw new Error("This action has already been verified and resolved.");
   const now = new Date().toISOString();
@@ -299,6 +303,10 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
     eventType = "due_date_changed";
   } else {
     if (ctx.role === "farm_manager" && text(row.owner_id) !== ctx.userId) throw new Error("This action must be assigned to you before you can update it.");
+    if (command.command === "acknowledge") {
+      changes = {...changes, status: "acknowledged", acknowledged_by: ctx.userId, acknowledged_at: now};
+      eventType = "acknowledged";
+    }
     if (command.command === "start") { changes = { ...changes, status: actionStatusAfter("start", before) }; eventType = "work_started"; }
     if (command.command === "submit_resolution") {
       changes = { ...changes, status: actionStatusAfter("submit_resolution", before), resolution_summary: command.note, resolution_evidence: command.evidence, resolution_submitted_by: ctx.userId, resolution_submitted_at: now };
@@ -321,10 +329,5 @@ export async function transitionAction(ctx: AccessContext, actionId: string, inp
       }
     }
   }
-  const after = text(changes.status ?? before) as ActionStatus;
-  const { data: updated, error: updateError } = await db.from("operational_actions").update(changes).eq("id", actionId).eq("org_id", ctx.orgId).select("*").single();
-  if (updateError) throw new Error(updateError.message);
-  await event(ctx, actionId, eventType, before, after, note, evidence);
-  await recordAuditEvent(ctx, { eventType: `operational_action.${eventType}`, operation: eventType === "assigned" ? "decision" : "update", entityTable: "operational_actions", entityId: actionId, reason: note ?? `Action ${eventType}`, before: row, after: updated, farmId: nullable(row.farm_id), warehouseId: nullable(row.warehouse_id), metadata: { sourceKey: text(row.source_key) } });
-  return updated;
+  return commitAction(ctx, row, changes, eventType, note, evidence);
 }

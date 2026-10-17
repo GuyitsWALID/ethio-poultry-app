@@ -228,6 +228,7 @@ const commandSchemas = {
   }),
   update_assigned_action: baseCommand.extend({
     type: z.literal("update_assigned_action"),
+    expected_resource_revision: z.string().regex(/^\d+$/),
     payload: z.object({
       action_id: uuid,
       event_type: z.enum(["acknowledged", "started", "completion_submitted"]),

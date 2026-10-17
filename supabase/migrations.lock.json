@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 84,
-  "latest": "20261016000000_atomic_action_acknowledgement.sql",
-  "aggregateSha256": "77f3dfe3237ca0f60c2be8441d8f48f6e5922df1d308fcb879aee27947e41a01",
+  "count": 85,
+  "latest": "20261016001000_atomic_action_transitions.sql",
+  "aggregateSha256": "de7dfbd8d43d0dbdb9c4e978eb61b185f7da2af2d32f0f74978e28e0b0e77e9c",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -164,6 +164,7 @@
     "20261010000000_reviewed_archived_cycle_corrections.sql": "15861a263700b5c9722427c5653601dbe820efa864e56d14834ede44f8be0e1a",
     "20261010001000_archived_cycle_accounting_amendments.sql": "8ee06d514dd8a6260ee8b4edd39f4832f344a96822995cbc7bf03d1fcaa840c6",
     "20261013000000_today_receipt_chains.sql": "1855d67961963e174bbdca90108eb08692eb67585bfa8a98aff2c8a929507675",
-    "20261016000000_atomic_action_acknowledgement.sql": "9f92056bda9e2b9c876734d22121c2c117be7478cded1d2f089a7794a9c70f5b"
+    "20261016000000_atomic_action_acknowledgement.sql": "9f92056bda9e2b9c876734d22121c2c117be7478cded1d2f089a7794a9c70f5b",
+    "20261016001000_atomic_action_transitions.sql": "66cde52032ff3b7cc01045f898842d4243ec161ee265de9ce8438ea2adead525"
   }
 }

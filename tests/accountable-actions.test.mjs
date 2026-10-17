@@ -11,6 +11,7 @@ const migration = await readFile(new URL("../supabase/migrations/20260901000000_
 const page = await readFile(new URL("../src/app/app/alerts/page.tsx", import.meta.url), "utf8");
 const actionService = await readFile(new URL("../src/lib/accountable-actions.ts", import.meta.url), "utf8");
 const notificationService = await readFile(new URL("../src/lib/notification-service.ts", import.meta.url), "utf8");
+const transitions = await readFile(new URL("../supabase/migrations/20261016001000_atomic_action_transitions.sql", import.meta.url), "utf8");
 const bell = await readFile(new URL("../src/components/header-alert-bell.tsx", import.meta.url), "utf8");
 
 test("severity deadlines are explicit and predictable", () => {
@@ -59,8 +60,12 @@ test("a corrected assigned task remains visible for manager completion and CEO v
   assert.match(bell, /await loadAttention\(\);\s*await loadNotifications\(\)/);
 });
 
-test("acknowledgement uses the atomic RPC and canonical history label", () => {
-  assert.ok(actionService.includes('db.rpc("acknowledge_operational_action"'));
-  assert.ok(actionService.includes("p_expected_updated_at: row.updated_at"));
-  assert.ok(page.includes('acknowledged: "events.acknowledge"'));
+test("all action saves and background refreshes use the revision-guarded atomic boundary", () => {
+  assert.doesNotMatch(actionService, /from\("operational_actions"\)\.update\(/);
+  assert.match(actionService, /p_expected_revision: row\.revision/);
+  assert.match(transitions, /v_before\.revision<>p_expected_revision/);
+  assert.match(transitions, /for update/i);
+  assert.match(transitions, /public\.apply_operational_action_transition\(p_actor_id,v_org_id,v_action\.id/);
+  assert.match(page, /expectedRevision/);
+  assert.match(transitions, /source_last_seen_at/);
 });

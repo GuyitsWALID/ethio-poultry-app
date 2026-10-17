@@ -64,13 +64,15 @@ export default function AlertsPage() {
   const update = useCallback(async (actionId: string, body: Record<string, unknown>) => {
     setBusy(actionId); setError("");
     try {
-      const response = await fetch(`/api/alerts/actions/${actionId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const expectedRevision = dialog?.action.actionId === actionId ? dialog.action.revision
+        : desk?.actions.find(action => action.actionId === actionId)?.revision;
+      const response = await fetch(`/api/alerts/actions/${actionId}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({expectedRevision, ...body}) });
       const result = await response.json();
       if (!response.ok) throw new Error(result?.error ?? t("errors.update"));
       setDialog(null); setNote(""); setEvidence(""); await load();
     } catch (value) { setError(value instanceof Error ? value.message : t("errors.update")); }
     finally { setBusy(null); }
-  }, [load, t]);
+  }, [load, t, desk, dialog]);
 
   const actions = desk?.actions ?? [];
   const visible = actions.filter((item) => {

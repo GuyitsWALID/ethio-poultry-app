@@ -177,7 +177,7 @@ export async function loadTodayTaskDetail(
 
   if (task === "assigned_fixes") {
     const result = await governanceAdmin.from("operational_actions")
-      .select("id,title,context,status,severity,due_at,source_route,source_resolved_at")
+      .select("id,title,context,status,severity,due_at,source_route,source_resolved_at,revision")
       .eq("org_id", context.orgId).eq("owner_id", context.userId).eq("farm_id", input.farmId).not("status", "in", "(resolved)").order("due_at");
     return {...base, task, data: {actions: rows(result, "Assigned fixes")}};
   }
