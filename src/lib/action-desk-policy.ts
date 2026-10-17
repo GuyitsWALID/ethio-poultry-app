@@ -15,3 +15,12 @@ export function actionStatusAfter(command: WorkflowCommand, current: ActionStatu
   if (command === "submit_resolution") return "awaiting_verification";
   return sourceStillActive ? "in_progress" : "resolved";
 }
+
+export function actionSourceInScope(
+  source: {farmId: string | null; warehouseId: string | null},
+  scope: {farms: Set<string> | null; warehouses: Set<string> | null},
+) {
+  if (scope.farms === null) return true; // CEO or approved support session.
+  return Boolean((source.farmId && scope.farms.has(source.farmId)) ||
+    (source.warehouseId && scope.warehouses?.has(source.warehouseId)));
+}

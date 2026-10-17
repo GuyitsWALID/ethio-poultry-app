@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { canAccessFarm, canAccessWarehouse, governanceAdmin, type AccessContext } from "@/lib/access-context";
 import type { ActionCard, ActionDesk, ActionEvent, ActionOwner, ActionStatus, OperationalAlert } from "@/lib/action-desk-contract";
-import { actionDeadlineAt, actionStatusAfter } from "@/lib/action-desk-policy";
+import { actionDeadlineAt, actionStatusAfter, actionSourceInScope } from "@/lib/action-desk-policy";
 import { recordAuditEvent } from "@/lib/audit-ledger";
 import { getCurrentAlerts } from "@/lib/current-alerts";
 import { getGovernanceAlerts } from "@/lib/governance-workflow";
@@ -71,19 +71,18 @@ async function scope(ctx: AccessContext) {
   return { farms: new Set<string>((farms.data ?? []).map((row: Row) => text(row.farm_id))), warehouses: new Set<string>((warehouses.data ?? []).map((row: Row) => text(row.warehouse_id))) };
 }
 
-function visible(row: Row, ctx: AccessContext, ids: Awaited<ReturnType<typeof scope>>) {
-  if (ids.farms === null) return true;
-  const farmId = text(row.farm_id), warehouseId = text(row.warehouse_id);
-  return Boolean((farmId && ids.farms.has(farmId)) || (warehouseId && ids.warehouses?.has(warehouseId)));
+function visible(row: Row, ids: Awaited<ReturnType<typeof scope>>) {
+  return actionSourceInScope({farmId: nullable(row.farm_id), warehouseId: nullable(row.warehouse_id)}, ids);
 }
 
 async function inventoryAlertActive(ctx: AccessContext, row: Row): Promise<boolean | null> {
   const sourceKey = text(row.source_key);
   if (text(row.source_name) !== "Inventory" || !sourceKey.startsWith("inv-")) return null;
-  const itemId = sourceKey.slice(4);
+  if (!row.warehouse_id || !sourceKey.startsWith(`inv-${row.warehouse_id}-`)) return null;
+  const itemId = sourceKey.slice(42);
   const [itemResult, ledgerResult] = await Promise.all([
     db.from("inventory_items").select("reorder_level").eq("id", itemId).eq("org_id", ctx.orgId).maybeSingle(),
-    db.from("stock_ledger").select("quantity,transaction_type").eq("item_id", itemId).eq("org_id", ctx.orgId),
+    db.from("stock_ledger").select("quantity,transaction_type").eq("warehouse_id", row.warehouse_id).eq("item_id", itemId).eq("org_id", ctx.orgId),
   ]);
   if (itemResult.error) throw new Error(itemResult.error.message);
   if (ledgerResult.error) throw new Error(ledgerResult.error.message);
@@ -133,7 +132,7 @@ async function synchronize(ctx: AccessContext, alerts: OperationalAlert[]) {
   const activeKeys = new Set(alerts.map((alert) => alert.id));
   const accessible = await scope(ctx);
   for (const row of byKey.values()) {
-    if (text(row.status) === "resolved" || activeKeys.has(text(row.source_key)) || !visible(row, ctx, accessible)) continue;
+    if (text(row.status) === "resolved" || activeKeys.has(text(row.source_key)) || !visible(row, accessible)) continue;
     const reconciliationId = text(row.source_key).startsWith("reconciliation-") ? text(row.source_key).slice("reconciliation-".length) : null;
     if (reconciliationId) {
       if (await isReconciliationFindingActive(ctx, reconciliationId, false)) continue;
@@ -180,19 +179,19 @@ export async function loadActionDesk(ctx: AccessContext): Promise<ActionDesk> {
   const ids = await scope(ctx);
   const { data, error } = await db.from("operational_actions").select("*,owner:profiles!operational_actions_owner_id_fkey(full_name),operational_action_events(id,event_type,actor_name_snapshot,actor_role_snapshot,note,created_at)").eq("org_id", ctx.orgId).in("status", activeStatuses).order("due_at");
   if (error) throw new Error(error.message);
-  const rows = (data ?? []).filter((row: Row) => visible(row, ctx, ids));
+  const rows = (data ?? []).filter((row: Row) => visible(row, ids));
   const actions: ActionCard[] = rows.map((row: Row) => {
     const owner = row.owner as Row | null;
     const events = ((row.operational_action_events as Row[] | null) ?? []).sort((a, b) => text(b.created_at).localeCompare(text(a.created_at))).slice(0, 8).map((item): ActionEvent => ({ id: text(item.id), eventType: text(item.event_type), actorName: text(item.actor_name_snapshot), actorRole: text(item.actor_role_snapshot), note: nullable(item.note), createdAt: text(item.created_at) }));
     const isOwner = text(row.owner_id) === ctx.userId;
-    const unownedInScope = !row.owner_id && visible(row, ctx, ids);
+    const unownedInScope = !row.owner_id && visible(row, ids);
     return {
       actionId: text(row.id), id: text(row.source_key), title: text(row.title), severity: text(row.severity) as ActionCard["severity"],
       source: text(row.source_name), context: text(row.context), route: text(row.source_route), createdAt: text(row.source_first_seen_at),
       farmId: nullable(row.farm_id), warehouseId: nullable(row.warehouse_id), status: text(row.status) as ActionStatus,
       ownerId: nullable(row.owner_id), ownerName: nullable(owner?.full_name), dueAt: text(row.due_at), acknowledgedAt: nullable(row.acknowledged_at),
       resolutionSummary: nullable(row.resolution_summary), resolutionEvidence: nullable(row.resolution_evidence), escalatedAt: nullable(row.escalated_at),
-      canAssign: ctx.role === "ceo", canClaim: ctx.role === "farm_manager" && unownedInScope, canWork: (ctx.role === "farm_manager" && isOwner) || ctx.role === "ceo", events,
+      canAssign: ctx.role === "ceo" && Boolean(row.farm_id || row.warehouse_id), canClaim: ctx.role === "farm_manager" && unownedInScope, canWork: (ctx.role === "farm_manager" && isOwner) || ctx.role === "ceo", events,
     };
   });
   const soon = Date.now() + 24 * 3600000;
@@ -248,6 +247,7 @@ async function assertScope(ctx: AccessContext, row: Row) {
 }
 
 async function assertAssignableOwner(ctx: AccessContext, row: Row, ownerId: string) {
+  if (!row.farm_id && !row.warehouse_id) throw new Error("This organization-wide warning has no farm or warehouse target and cannot be assigned to a Farm Manager.");
   const { data: profile } = await db.from("profiles").select("id,role,is_active").eq("id", ownerId).eq("org_id", ctx.orgId).maybeSingle();
   if (!profile || profile.role !== "farm_manager" || !profile.is_active) throw new Error("Choose an active Farm Manager.");
   const now = new Date().toISOString();
