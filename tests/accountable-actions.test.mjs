@@ -81,8 +81,8 @@ test("action desk exposes assignment, evidence, source inspection, and verificat
   assert.equal(en.AlertsPage.card.verify, "Verify and close");
   assert.match(en.AlertsPage.dialog.evidenceHelp, /CEO must verify that the originating check is clear/i);
   for (const key of ["chooseManager", "verify"]) assert.match(page, new RegExp(`t\\(\"card\\.${key}\"\\)`));
-  assert.ok(page.includes('t("card.inspectSource")'));
-  assert.ok(page.includes('t("card.complete")'));
+  assert.match(page, /destinations\.\$\{alertDestinationKey\(item.route\)\}/);
+  assert.match(page, /t\("inbox\.send"\)/);
   assert.match(page, /t\("dialog\.evidenceHelp"\)/);
 });
 
@@ -91,7 +91,7 @@ test("a corrected assigned task remains visible for manager completion and CEO v
   assert.match(actionService, /async function exactSourceState/);
   assert.match(actionService, /isReconciliationFindingActive/);
   assert.match(actionService, /if \(ctx\.role !== "ceo"\) throw new Error\("Only the CEO can verify and close completed actions\."\)/);
-  assert.ok(page.includes('t("card.complete")'));
+  assert.match(page, /t\("inbox\.send"\)/);
   assert.match(page, /t\("card\.verify"\)/);
   assert.match(notificationService, /Task completed by \$\{actorName\}/);
   assert.match(notificationService, /Source corrected:/);

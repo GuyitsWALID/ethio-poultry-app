@@ -222,6 +222,40 @@
     }
   },
   "AlertsPage": {
+    "inbox": {
+      "eyebrow": "Alerts",
+      "title": "What needs your attention?",
+      "help": "Fix the problem, then tell the CEO what you changed. Record normal daily work in Today.",
+      "refresh": "Refresh alerts",
+      "queue": "Problems to check",
+      "views": "Choose work to show",
+      "mine": "My work",
+      "unassigned": "Available work",
+      "verification": "Sent for review",
+      "filters": "More filters",
+      "settings": "Notification settings",
+      "linked": "Showing the alert you opened from a notification.",
+      "unavailable": "This alert is no longer active or is not available to your account.",
+      "showInbox": "Show my inbox",
+      "take": "Take this work",
+      "accept": "Accept this work",
+      "send": "Send fix for review",
+      "emptyTitle": "No work in this view",
+      "emptyHelp": "Check Available work, clear filters, or continue your daily work in Today."
+    },
+    "destinations": {
+      "today": "Open Today",
+      "flock": "Review flock performance",
+      "feed": "Review feeding record",
+      "daily": "Review daily record",
+      "stock": "Check warehouse stock",
+      "health": "Review health record",
+      "deaths": "Review bird deaths",
+      "approval": "Review approval request",
+      "check": "Review record mismatch",
+      "sale": "Review sale",
+      "record": "Review problem details"
+    },
     "legacy": {
       "title": "Older warnings need review",
       "help": "These old organization-wide warnings were replaced by farm and warehouse checks. Retiring one keeps its history. It does not confirm that the farm work was fixed.",
@@ -300,8 +334,8 @@
     },
     "dialog": {
       "completeTitle": "Confirm task completion",
-      "startTitle": "Start investigation",
-      "acknowledgeTitle": "Acknowledge responsibility",
+      "startTitle": "Start checking this problem",
+      "acknowledgeTitle": "Accept this work",
       "eyebrow": "Accountable action",
       "close": "Close",
       "completeHelp": "Confirm that you corrected the source record. The CEO will receive a notification, review the updated source, and run the final system check.",
