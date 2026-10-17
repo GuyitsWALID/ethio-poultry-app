@@ -15,10 +15,10 @@ type StockLedgerRow = Pick<
   "item_id" | "warehouse_id" | "quantity" | "transaction_type"
 >;
 
-type DailyRow = Pick<
-  Database["public"]["Tables"]["daily_farm_records"]["Row"],
-  "record_date" | "deaths" | "total_eggs" | "flock_id" | "created_at"
->;
+type PerformanceWarning = {flock_id: string; farm_id: string; house_id: string; flock_code: string;
+  kind: "production" | "mortality"; state: "active" | "clear" | "unavailable";
+  severity: "high" | "medium"; actual: number | null; target: number | null;
+  date_from: string; date_to: string; evidence_days: number; expected_days: number};
 
 function stockSignedQuantity(row: StockLedgerRow) {
   return row.transaction_type === "issue" || row.transaction_type === "transfer_out"
@@ -26,9 +26,13 @@ function stockSignedQuantity(row: StockLedgerRow) {
     : row.quantity;
 }
 
-function pct(numerator: number, denominator: number) {
-  if (denominator <= 0) return 0;
-  return Math.round((numerator / denominator) * 10000) / 100;
+export function alertOperatingWindow(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {timeZone: "Africa/Addis_Ababa", year: "numeric", month: "2-digit", day: "2-digit"}).formatToParts(now);
+  const value = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  const today = `${value.year}-${value.month}-${value.day}`;
+  const start = new Date(`${today}T00:00:00Z`);
+  start.setUTCDate(start.getUTCDate() - 6); // Seven inclusive operating dates.
+  return {today, sevenDaysAgo: start.toISOString().slice(0, 10)};
 }
 
 function toSeverity(priority: string | null | undefined): CurrentAlert["severity"] {
@@ -39,12 +43,10 @@ function toSeverity(priority: string | null | undefined): CurrentAlert["severity
 
 export async function getCurrentAlerts(
   supabaseAdmin: SupabaseClient<Database>,
-  orgId: string
+  orgId: string,
+  now = new Date(),
 ): Promise<CurrentAlert[]> {
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const thirtyDaysAgo = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const {today, sevenDaysAgo} = alertOperatingWindow(now);
 
   const [
     openAlertsRes,
@@ -52,7 +54,7 @@ export async function getCurrentAlerts(
     ledgerRes,
     mortalityRes,
     dailyTodayRes,
-    dailyPeriodRes,
+    performanceRes,
     flocksRes,
     scheduleMissRes,
     warehousesRes,
@@ -84,15 +86,10 @@ export async function getCurrentAlerts(
       .from("daily_farm_records")
       .select("flock_id")
       .eq("org_id", orgId)
+      .is("voided_at", null)
       .eq("record_date", today)
       .limit(2000),
-    supabaseAdmin
-      .from("daily_farm_records")
-      .select("record_date, deaths, total_eggs, flock_id, created_at")
-      .eq("org_id", orgId)
-      .gte("record_date", thirtyDaysAgo)
-      .lte("record_date", today)
-      .limit(2000),
+    supabaseAdmin.rpc("operational_performance_warnings", {p_org_id: orgId, p_today: today}),
     supabaseAdmin
       .from("flocks")
       .select("id, farm_id, house_id, flock_code, current_count, status, placement_date, completed_at")
@@ -111,7 +108,7 @@ export async function getCurrentAlerts(
   ]);
 
   // A failed read is not evidence that a warning disappeared.
-  if ([openAlertsRes, inventoryRes, ledgerRes, mortalityRes, dailyTodayRes, dailyPeriodRes, flocksRes, scheduleMissRes, warehousesRes].some(result => result.error)) {
+  if ([openAlertsRes, inventoryRes, ledgerRes, mortalityRes, dailyTodayRes, performanceRes, flocksRes, scheduleMissRes, warehousesRes].some(result => result.error)) {
     throw new Error("Operational warnings could not be checked. Refresh and try again.");
   }
 
@@ -207,38 +204,17 @@ export async function getCurrentAlerts(
   });
   }
 
-  const dailyRows = (dailyPeriodRes.data ?? []) as DailyRow[];
-  const liveBirds = (flocksRes.data ?? [])
-    .filter((flock) => flock.status === "active")
-    .reduce((sum, flock) => sum + (flock.current_count ?? 0), 0);
-  const deaths = dailyRows.reduce((sum, row) => sum + (row.deaths ?? 0), 0);
-  const totalEggs = dailyRows.reduce((sum, row) => sum + (row.total_eggs ?? 0), 0);
-  const mortalityRate = pct(deaths, liveBirds + deaths);
-  const productionRate = pct(totalEggs, liveBirds);
-  const latestDailyAt = dailyRows.at(-1)?.created_at ?? now.toISOString();
-
-  if (mortalityRate >= 3) {
-    alerts.push({
-      id: "kpi-mortality-rate",
-      title: `Mortality rate is ${mortalityRate}% in the last 30 days`,
-      severity: "high",
-      source: "Mortality",
-      context: `${deaths.toLocaleString()} deaths against ${liveBirds.toLocaleString()} live birds`,
-      route: "/app/daily-records",
-      createdAt: latestDailyAt,
-    });
-  }
-
-  if (productionRate > 0 && productionRate < 60) {
-    alerts.push({
-      id: "kpi-production-rate",
-      title: `Production rate is below target at ${productionRate}%`,
-      severity: "medium",
-      source: "Production",
-      context: `${totalEggs.toLocaleString()} eggs against ${liveBirds.toLocaleString()} live birds`,
-      route: "/app/daily-records",
-      createdAt: latestDailyAt,
-    });
+  if (!Array.isArray(performanceRes.data)) throw new Error("Performance warnings could not be checked.");
+  for (const warning of performanceRes.data as unknown as PerformanceWarning[]) {
+    if (warning.state !== "active") continue;
+    const params = new URLSearchParams({flock: warning.flock_id, details: "1", filter_farmId: warning.farm_id,
+      filter_houseId: warning.house_id, filter_flockId: warning.flock_id});
+    alerts.push({id: `performance-${warning.kind}-${warning.flock_id}`,
+      title: `${warning.kind === "production" ? "Egg production below target" : "Mortality above target"}: ${warning.flock_code}`,
+      severity: warning.severity, source: warning.kind === "production" ? "Production" : "Mortality",
+      farmId: warning.farm_id, route: `/app/flocks?${params}`,
+      context: `${warning.actual}% against ${warning.target}% age-specific target; ${warning.date_from} to ${warning.date_to}. Evidence: ${warning.evidence_days}/${warning.expected_days} days${warning.evidence_days < warning.expected_days ? " (partial coverage)" : ""}. Rates use recorded bird-days.`,
+      createdAt: now.toISOString()});
   }
 
   const unique = new Map<string, CurrentAlert>();

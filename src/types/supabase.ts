@@ -7154,6 +7154,10 @@ export type Database = {
       }
     }
     Functions: {
+      operational_performance_warnings: {
+        Args: {p_org_id: string; p_flock_id?: string; p_today?: string}
+        Returns: Json
+      }
       accept_reconciliation_exception: {
         Args: { p_evidence: Json; p_finding_id: string; p_note: string }
         Returns: {

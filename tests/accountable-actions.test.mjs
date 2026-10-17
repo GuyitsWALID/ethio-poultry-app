@@ -25,6 +25,8 @@ test("verification cannot use absence from an alert list as proof of resolution"
   assert.match(sourceChecks, /'approved'.*'conflict'.*'expired'/);
   assert.match(sourceChecks, /'legacy_retired'/);
   assert.equal(policy.isLegacyUnscopedWarning("daily-missing", null), true);
+  assert.equal(policy.isLegacyUnscopedWarning("kpi-production-rate", null), true);
+  assert.equal(policy.isLegacyUnscopedWarning("kpi-mortality-rate", null), true);
   assert.equal(policy.isLegacyUnscopedWarning("daily-missing-flock-2026-10-17", null), false);
   assert.match(page, /desk\?\.role === "ceo" && actions.some\(action => action.canRetireLegacy\)/);
 });

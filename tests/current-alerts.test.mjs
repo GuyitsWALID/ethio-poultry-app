@@ -8,9 +8,9 @@ async function moduleFrom(path) {
   const compiled = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022}}).outputText;
   return import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 }
-const {getCurrentAlerts} = await moduleFrom("../src/lib/current-alerts.ts");
+const {getCurrentAlerts, alertOperatingWindow} = await moduleFrom("../src/lib/current-alerts.ts");
 const {actionSourceInScope} = await moduleFrom("../src/lib/action-desk-policy.ts");
-const today = new Date().toISOString().slice(0, 10);
+const today = alertOperatingWindow().today;
 const at = `${today}T09:00:00Z`;
 const flock = (id, farm) => ({id, org_id: "org", farm_id: farm, house_id: `house-${id}`, flock_code: id,
   placement_date: "2020-01-01", completed_at: null, current_count: 1000, status: "active"});
@@ -113,6 +113,40 @@ test("other tenants and voided health records cannot contribute to warnings", as
 });
 test("failed source reads stop synchronization rather than pretending sources are clear", async () => {
   await assert.rejects(getCurrentAlerts(database(fixture(), "stock_ledger"), "org"), /could not be checked/);
+  await assert.rejects(getCurrentAlerts(database(fixture(), "performance"), "org"), /could not be checked/);
+});
+
+test("Addis midnight and seven inclusive dates do not follow UTC's previous day", () => {
+  assert.deepEqual(alertOperatingWindow(new Date("2026-10-16T20:59:59Z")), {today: "2026-10-16", sevenDaysAgo: "2026-10-10"});
+  assert.deepEqual(alertOperatingWindow(new Date("2026-10-16T21:00:00Z")), {today: "2026-10-17", sevenDaysAgo: "2026-10-11"});
+  assert.deepEqual(alertOperatingWindow(new Date("2026-01-01T00:00:00Z")), {today: "2026-01-01", sevenDaysAgo: "2025-12-26"});
+});
+
+test("seven-day mortality excludes day eight; voided daily records do not complete work", async () => {
+  const data = fixture();
+  data.mortality_events[0].record_date = "2026-10-10";
+  data.daily_farm_records[0].record_date = "2026-10-17";
+  data.daily_farm_records[0].voided_at = at;
+  const alerts = await getCurrentAlerts(database(data), "org", new Date("2026-10-16T21:00:00Z"));
+  assert.equal(alerts.some(row => row.id.startsWith("mortality-spike")), false);
+  assert.ok(alerts.some(row => row.id === "daily-missing-flock-b-2026-10-17"));
+});
+
+test("performance warnings use the authoritative result and exact flock/period with coverage", async () => {
+  const data = fixture();
+  data.performance = [{flock_id: "flock-a", farm_id: "farm-a", house_id: "house-flock-a", flock_code: "A",
+    kind: "production", state: "active", severity: "medium", actual: 80, target: 85,
+    date_from: "2026-09-18", date_to: "2026-10-17", evidence_days: 20, expected_days: 30},
+    {kind: "mortality", state: "unavailable"}, {kind: "production", state: "clear"}];
+  const alerts = await getCurrentAlerts(database(data), "org");
+  const performance = alerts.filter(row => row.id.startsWith("performance-"));
+  assert.equal(performance.length, 1);
+  assert.ok(visible(performance[0]));
+  assert.match(performance[0].context, /80% against 85%.*20\/30 days \(partial coverage\)/);
+  assert.equal(new URL(performance[0].route, "http://test").searchParams.get("filter_flockId"), "flock-a");
+  assert.equal(new URL(performance[0].route, "http://test").searchParams.get("flock"), "flock-a");
+  assert.equal(new URL(performance[0].route, "http://test").pathname, "/app/flocks");
+  assert.equal(alerts.some(row => row.id.startsWith("kpi-")), false);
 });
 
 test("a completed schedule replaces its old missed warning without hiding a different schedule", async () => {

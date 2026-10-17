@@ -13,7 +13,7 @@ declare o uuid:=gen_random_uuid(); ceo uuid:=gen_random_uuid(); manager uuid:=ge
   farm uuid:=gen_random_uuid(); house uuid:=gen_random_uuid(); batch uuid:=gen_random_uuid(); flock uuid:=gen_random_uuid();
   store uuid:=gen_random_uuid(); other_store uuid:=gen_random_uuid(); item uuid:=gen_random_uuid(); request uuid:=gen_random_uuid();
   rule uuid:=gen_random_uuid(); finding uuid:=gen_random_uuid(); a uuid; legacy uuid; result jsonb; rev bigint; definition text;
-  today date:=(now() at time zone 'UTC')::date;
+  today date:=(now() at time zone 'Africa/Addis_Ababa')::date;
 begin
   insert into public.organizations(id,name) values(o,'Exact warning test');
   insert into public.profiles(id,org_id,full_name,role,is_active) values(ceo,o,'CEO','ceo',true),(manager,o,'Manager','farm_manager',true);
@@ -73,6 +73,10 @@ begin
   insert into public.mortality_events(org_id,flock_id,record_date,count,cause) values(o,flock,today,20,'Natural death');
   a:=pg_temp.warning(o,'mortality-spike-'||flock::text,farm);
   if public.operational_action_source_state(o,a)->>'state'<>'active' then raise exception 'Exact mortality source not recognized'; end if;
+  update public.mortality_events set record_date=today-7 where org_id=o and flock_id=flock;
+  if public.operational_action_source_state(o,a)->>'state'<>'clear' then raise exception 'Mortality window includes eighth day'; end if;
+  update public.mortality_events set record_date=today-6 where org_id=o and flock_id=flock;
+  if public.operational_action_source_state(o,a)->>'state'<>'active' then raise exception 'Mortality window excludes seventh day'; end if;
   a:=pg_temp.warning(o,'schedule-missed-'||flock::text,farm);
   insert into public.health_events(org_id,flock_id,event_date,event_type,description,created_at) values
     (o,flock,today,'observation','SCHEDULE_STATUS|schedule|missed|vaccination',now()-interval '1 minute');

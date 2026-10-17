@@ -3,7 +3,7 @@ import type { ActionSeverity, ActionStatus } from "@/lib/action-desk-contract";
 export type WorkflowCommand = "assign" | "claim" | "acknowledge" | "start" | "submit_resolution" | "verify";
 
 export function isLegacyUnscopedWarning(sourceKey: string, warehouseId: string | null) {
-  return ["daily-missing", "mortality-spike", "schedule-missed"].includes(sourceKey) ||
+  return ["daily-missing", "mortality-spike", "schedule-missed", "kpi-production-rate", "kpi-mortality-rate"].includes(sourceKey) ||
     (!warehouseId && /^inv-[0-9a-f-]{36}$/.test(sourceKey));
 }
 
