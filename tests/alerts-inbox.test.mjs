@@ -7,6 +7,20 @@ import am from "../messages/am.json" with {type: "json"};
 
 const action = (changes = {}) => ({actionId: "a", ownerId: "manager", canClaim: false,
   status: "assigned", severity: "low", dueAt: "2026-10-20T00:00:00Z", ...changes});
+test("filters live inside the green card before refresh; manager assignment is CEO-only", async () => {
+  const page = await readFile(new URL("../src/app/app/alerts/page.tsx", import.meta.url), "utf8");
+  const hero = page.indexOf('<section className="relative overflow-hidden');
+  const filters = page.indexOf('<fieldset aria-label={t("inbox.filters")}');
+  const refresh = page.indexOf('{t("inbox.refresh")}');
+  const end = page.indexOf('</section>', hero);
+  assert.ok(hero >= 0 && hero < filters && filters < refresh && refresh < end);
+  assert.match(page, /desk\?\.role === "ceo" \? <AlertFilter label=\{t\("filters\.owners"\)\}/);
+  assert.equal(en.AlertsPage.filters.owners, "Assigned manager");
+  for (const locale of [en, am]) for (const key of ["allFarms", "allManagers", "allPriorities", "allStatuses", "ownerHelp"])
+    assert.ok(locale.AlertsPage.filters[key]);
+  assert.match(page, /xl:flex-row xl:items-end/);
+  assert.match(page, /text-sand-100/);
+});
 test("manager default shows unfinished own work, not sent or another manager's work", () => {
   assert.equal(managerInboxMatches(action(), "manager", "mine"), true);
   assert.equal(managerInboxMatches(action({status: "awaiting_verification"}), "manager", "mine"), false);

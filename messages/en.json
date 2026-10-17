@@ -268,7 +268,12 @@
     },
     "filters": {
       "farms": "Farms",
-      "owners": "Owners",
+      "owners": "Assigned manager",
+      "ownerHelp": "Show alerts assigned to this Farm Manager. This does not change who manages the farm.",
+      "allFarms": "All farms",
+      "allManagers": "All managers",
+      "allPriorities": "All priorities",
+      "allStatuses": "All statuses",
       "priorities": "Priorities",
       "statuses": "Statuses",
       "high": "High",

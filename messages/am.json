@@ -268,7 +268,12 @@
     },
     "filters": {
       "farms": "እርሻዎች",
-      "owners": "ኃላፊዎች",
+      "owners": "የተመደበ አስተዳዳሪ",
+      "ownerHelp": "ለዚህ የእርሻ አስተዳዳሪ የተመደቡ ማስጠንቀቂያዎችን ያሳያል። የእርሻውን አስተዳዳሪ አይቀይርም።",
+      "allFarms": "ሁሉም እርሻዎች",
+      "allManagers": "ሁሉም አስተዳዳሪዎች",
+      "allPriorities": "ሁሉም ቅድሚያዎች",
+      "allStatuses": "ሁሉም ሁኔታዎች",
       "priorities": "ቅድሚያዎች",
       "statuses": "ሁኔታዎች",
       "high": "ከፍተኛ",
