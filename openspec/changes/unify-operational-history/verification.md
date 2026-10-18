@@ -12,10 +12,10 @@
 
 ## Still required before release acceptance
 
-- Verify the resulting staging application deployment.
-- Authenticated staging History checks for CEO and Farm Manager. Read-only regression is included in the staging gate alongside existing Reports comparisons; it must not create sample records or silently enable rollout to pass.
-- GitHub CLI authentication was refreshed successfully by the release owner. The initial implementation's Cloudflare staging build and GitHub verify job both passed. Signed-in staging checks must run after the supply-label follow-up deployment; no staging account passwords are copied into chat.
+- Signed-in staging History passed for both CEO and Farm Manager in run [39119039378](https://github.com/GuyitsWALID/ethio-poultry-app/actions/runs/39119039378), after the runtime implementation's successful Cloudflare deployment. It checked all eight category APIs, private/no-store responses, populated in-page Daily Record details and reload persistence. No test records or corrections were submitted.
+- GitHub CLI authentication was refreshed successfully by the release owner. No staging account passwords were copied into chat.
 - Follow-up `ca6b51d` passed GitHub Quality gate and Cloudflare staging deployment. Staging run `39118804292` failed the pre-existing Reports populated-egg assertion for both roles because its source metric was null; History was skipped by the failed preceding step. The History step now runs independently without hiding or weakening that Reports failure. No fixture data was created or changed to pass.
+- Run `39119039378` remains failed overall solely because that unchanged Reports step failed again. Its History step passed. Diagnose Reports scope/data coverage before full regression acceptance; do not present a null metric as zero or silently add fixture data.
 - Physical-device usability sign-off and partner review of newly added terminology are not established by emulated Chromium checks.
 
 No stock quantities, source record values, reporting formulas or pilot-acceptance settings were changed. The Cloudflare skill was used to verify the existing local Worker build path; no deployment configuration was changed.

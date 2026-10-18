@@ -11,3 +11,5 @@
 - [x] 3.1 Add focused contract, authorization, paging, deep-link and responsive regressions.
 - [x] 3.2 Run focused tests, TypeScript, lint, production/Cloudflare builds and OpenSpec validation. See verification.md for checked revisions and remaining staging acceptance.
 - [ ] 3.3 Validate authenticated staging, deploy any required reviewed indexes and release to notmain. Production requires separate approval.
+  - History migration, notmain release, quality gate, Cloudflare deployment and signed-in CEO/Farm Manager History checks passed (staging run 39119039378).
+  - Overall acceptance remains open: the unchanged populated Reports check returns a null egg metric for both roles. Diagnose its scope/data coverage before declaring all regression gates passed; do not manufacture records or weaken the assertion.
