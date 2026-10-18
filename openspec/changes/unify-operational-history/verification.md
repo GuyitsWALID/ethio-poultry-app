@@ -1,5 +1,9 @@
 # Verification — 2026-10-18
 
+## Follow-up: inline details at all widths (local, not yet released)
+
+User feedback supersedes the initial desktop split view. Details now expand directly beneath the selected record on every screen size, with one open record and click-again collapse. Existing styling and authorization/correction behaviour are retained. Focused Chromium checks passed at 1440x1000, 768x1024 and 1024x768, including selection far down a long list without jumping to the top, switching rows, collapse, Amharic display and correction returns. No migration or ledger change is required. The staging evidence below refers to the earlier released layout, not this unpushed follow-up.
+
 ## Passed
 
 - Full unit suite: 430 passed, zero failures/skips. Focused History/navigation contracts: 26 passed.

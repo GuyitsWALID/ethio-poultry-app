@@ -22,8 +22,13 @@ History SHALL use existing authorized correction workflows, preserve exact recor
 Today-enabled manager navigation SHALL show Today, Flocks, Alerts, History and Reports, with Approvals, Record Checks and Feed templates under More. Enabled CEO navigation SHALL consolidate operational history without activating the broader CEO redesign. Disabled organizations and Admin MUST retain their existing navigation.
 
 #### Scenario: Tablet in Amharic
-- **WHEN** an Amharic-speaking user opens a record below 1280px
-- **THEN** one detail expands beneath its row, controls have 48px touch targets and dates display in the Ethiopian calendar while API dates remain Gregorian
+- **WHEN** a user opens a record at any screen width, in English or Amharic
+- **THEN** one detail expands beneath its row, controls have 48px touch targets and Amharic dates display in the Ethiopian calendar while API dates remain Gregorian
+
+#### Scenario: Browse older records without losing position
+- **WHEN** a user selects a record after scrolling down the list
+- **THEN** its details open immediately below that row without a separate side panel or a jump to the top
+- **AND** selecting a different row closes the previous detail; selecting the open row again collapses it
 
 ### Requirement: No protected History caching
 History APIs MUST be private/no-store. History MUST NOT write business records or protected evidence into service-worker or offline outbox storage.

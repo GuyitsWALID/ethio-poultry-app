@@ -41,7 +41,9 @@ try {
     await expect(page.getByRole("button",{name:/View details/})).toBeVisible();
     assert.equal(await page.locator("body").evaluate(el=>el.scrollWidth<=innerWidth),true,"no horizontal overflow");
     await page.getByRole("button",{name:/View details/}).click();
-    const panel=viewport.width>=1280?page.getByRole("complementary",{name:"Selected record"}):page.locator("article").filter({has:page.getByRole("button",{name:/View details/})});
+    const panel=page.locator("article").filter({has:page.getByRole("button",{name:/View details/})}).getByRole("region",{name:"Selected record"});
+    await expect(page.getByRole("complementary",{name:"Selected record"})).toHaveCount(0);
+    await expect(page.getByRole("region",{name:"Selected record"})).toHaveCount(1);
     await expect(panel.getByText("Birds at the end",{exact:true})).toBeVisible();
     await expect(panel.getByText("Unavailable",{exact:true})).toBeVisible();
     const url=page.url();assert.ok(url.includes("history_record="));
@@ -50,6 +52,21 @@ try {
     await expect(page.getByRole("button",{name:/View details/})).toHaveCount(1);
     failMore=false;await page.getByRole("button",{name:"Retry loading more"}).click();
     await expect(page.getByRole("button",{name:/View details/})).toHaveCount(2);
+    const rows=page.locator("article");
+    // Reproduce selecting an older record well below the top of a long list.
+    await rows.nth(0).evaluate(element=>{element.style.minHeight="1400px";});
+    await rows.nth(1).getByRole("button",{name:/View details/}).scrollIntoViewIfNeeded();
+    const beforeExpand=await page.evaluate(()=>scrollY);
+    assert.ok(beforeExpand>0);
+    await rows.nth(1).getByRole("button",{name:/View details/}).click();
+    await expect(rows.nth(0).getByRole("region",{name:"Selected record"})).toHaveCount(0);
+    await expect(rows.nth(1).getByRole("region",{name:"Selected record"})).toBeVisible();
+    await expect(rows.nth(1).getByRole("region",{name:"Selected record"})).toBeInViewport();
+    assert.ok(await page.evaluate(()=>scrollY)>=beforeExpand-8,"opening older details must not jump back to the top");
+    await rows.nth(1).getByRole("button",{name:/View details/}).click();
+    await expect(page.getByRole("region",{name:"Selected record"})).toHaveCount(0);
+    await rows.nth(0).evaluate(element=>{element.style.removeProperty("min-height");});
+    await rows.nth(0).getByRole("button",{name:/View details/}).click();
     await page.getByRole("link",{name:"Request a correction"}).filter({visible:true}).click();
     assert.equal(new URL(page.url()).searchParams.get("source_id"),item.id);
     await page.getByRole("link",{name:"Back to History"}).click();

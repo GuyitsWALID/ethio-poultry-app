@@ -4,7 +4,7 @@
 History filters -> authorized server-only readers -> existing tables -> summaries/details.
 No business writes. Correction links -> existing authorized editor -> validated local History return.
 
-The list defaults to Daily records, 30 inclusive Addis Ababa operating dates and all authorized farms. URL state takes precedence over remembered page filters. Exactly one detail is selected; a split view at 1280px becomes inline expansion below that width. No modal or analytics dashboard.
+The list defaults to Daily records, 30 inclusive Addis Ababa operating dates and all authorized farms. URL state takes precedence over remembered page filters. Exactly one detail expands directly beneath its selected row at every screen width. Clicking the selected row again closes it without scrolling to the top. This replaces the initial desktop split view following usability feedback. No modal or analytics dashboard.
 
 ## Sources
 | Category | Authoritative evidence |
