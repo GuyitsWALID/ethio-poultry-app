@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       reports_only:
-        description: Run read-only populated Reports comparisons only (not the full release gate)
+        description: Run read-only Reports and History comparisons (not the full release gate)
         type: boolean
         default: false
 
@@ -91,4 +91,5 @@ jobs:
       - name: Compare populated CEO and assigned-manager Reports with source readers
         run: npx playwright test tests/browser/report-staging.spec.ts --workers=1 --retries=0 --trace=off
       - name: Verify read-only populated History for CEO and assigned manager
+        if: ${{ !cancelled() }}
         run: npx playwright test tests/browser/history-staging.spec.ts --workers=1 --retries=0 --trace=off

@@ -14,12 +14,14 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     await page.locator('input[name="password"]').fill(password!);
     await page.locator('form button[type="submit"]').click();
     await expect(page).toHaveURL(/\/app\/(ceo|farm-manager|today)/);
+    const get = async (url: string) => {
+      try {return await page.request.get(url);}
+      catch {throw new Error("History staging read transport failed; credentials withheld.");}
+    };
     const range = historyPeriod(90);
     let selected: {kind: string; id: string} | undefined;
     for (const category of historyCategories) {
-      let response;
-      try {response = await page.request.get(`/api/history/records?${new URLSearchParams({category, ...range})}`);}
-      catch {throw new Error(`History staging read transport failed: ${category}; credentials withheld.`);}
+      const response = await get(`/api/history/records?${new URLSearchParams({category, ...range})}`);
       expect(response.status(), `Authorized History category ${category}`).toBe(200);
       expect(response.headers()["cache-control"]).toContain("no-store");
       const body = await response.json();
@@ -35,7 +37,7 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     await expect(page).toHaveURL(/\/app\/history\?/);
     await page.reload();
     await expect(workspace.getByRole("heading", {level: 2, name: new RegExp(`^(${messages.History.kinds.daily_record}|${am.History.kinds.daily_record})$`)}).filter({visible: true})).toBeVisible();
-    const detail = await page.request.get(`/api/history/records/${selected!.kind}/${selected!.id}`);
+    const detail = await get(`/api/history/records/${selected!.kind}/${selected!.id}`);
     expect(detail.status()).toBe(200);
     expect(detail.headers()["cache-control"]).toContain("no-store");
   });
