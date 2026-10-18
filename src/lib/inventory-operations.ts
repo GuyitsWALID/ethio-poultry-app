@@ -8,6 +8,8 @@ import { type AccessContext, canAccessWarehouse, governanceAdmin } from "@/lib/a
 import { recordAuditEvent } from "@/lib/audit-ledger";
 import { ensureFreshReconciliation } from "@/lib/reconciliation-service";
 import { listInventoryWarehouses } from "@/lib/warehouse-management";
+import {readReportQuery} from "@/lib/report-pagination";
+import {reportTimestampBounds} from "@/lib/report-safety";
 
 const categories = ["feed", "medicine", "vaccine", "vitamin", "supplement", "equipment", "spare_parts", "packaging", "miscellaneous"] as const;
 const openingRow = z.object({
@@ -60,16 +62,18 @@ export async function loadInventoryWorkspace(ctx:AccessContext, warehouseId:stri
   const selected=warehouseId ? active.find(row=>row.id===warehouseId) : active.length===1 ? active[0] : null;
   if (warehouseId && !selected) throw new InventoryOperationsError("The selected warehouse is inactive or outside your assignment.",403);
   const {start,next}=monthBounds(month);
+  const last = new Date(Date.parse(`${next}T00:00:00Z`) - 86400000).toISOString().slice(0,10);
+  const bounds = reportTimestampBounds(start, last);
   if (!selected) return { meta:{role:ctx.role,month,canOperate:ctx.role==="farm_manager"||Boolean(ctx.supportSessionId),canManage:ctx.role==="ceo",warehouseRequired:active.length>0}, warehouses:active, selectedWarehouse:null, catalogItems:[], items:[], movements:[], latestCountSession:null, expenses:[], recurringTemplates:[] };
 
   const db=governanceAdmin as any;
   const [itemsResult,ledgerResult,countsResult,sessionResult,costsResult,templatesResult,initializationResult]=await Promise.all([
-    governanceAdmin.from("inventory_items").select("id,name,category,unit,reorder_level,unit_cost").eq("org_id",ctx.orgId).order("name"),
-    governanceAdmin.from("stock_ledger").select("item_id,warehouse_id,transaction_type,quantity,unit_cost,transaction_date,source_kind,source_key,reference_doc,notes").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).order("transaction_date",{ascending:false}).limit(20000),
-    governanceAdmin.from("inventory_physical_counts").select("item_id,count_date,ledger_quantity,counted_quantity,variance,notes,created_at").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).order("count_date",{ascending:false}).limit(5000),
+    readReportQuery(() => governanceAdmin.from("inventory_items").select("id,name,category,unit,reorder_level,unit_cost").eq("org_id",ctx.orgId).order("name").order("id")),
+    readReportQuery(() => governanceAdmin.from("stock_ledger").select("item_id,warehouse_id,transaction_type,quantity,unit_cost,transaction_date,source_kind,source_key,reference_doc,notes").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).order("transaction_date",{ascending:false}).order("id")),
+    readReportQuery(() => governanceAdmin.from("inventory_physical_counts").select("item_id,count_date,ledger_quantity,counted_quantity,variance,notes,created_at").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).order("count_date",{ascending:false}).order("id")),
     db.from("inventory_count_sessions").select("id,count_month,counted_on,status,notes,created_at").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).order("count_month",{ascending:false}).limit(12),
-    db.from("cost_entries").select("id,entry_date,entry_kind,category,description,amount,supplier_name,invoice_number,recurring_template_id,confirmation_month").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).gte("entry_date",start).lt("entry_date",next).order("entry_date",{ascending:false}),
-    db.from("recurring_cost_templates").select("id,category,description,default_amount,supplier_name,is_active").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).eq("is_active",true).order("description"),
+    readReportQuery<any>(() => db.from("cost_entries").select("id,entry_date,entry_kind,category,description,amount,supplier_name,invoice_number,recurring_template_id,confirmation_month").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).gte("entry_date",start).lt("entry_date",next).order("entry_date",{ascending:false}).order("id")),
+    readReportQuery<any>(() => db.from("recurring_cost_templates").select("id,category,description,default_amount,supplier_name,is_active").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).eq("is_active",true).order("description").order("id")),
     db.from("warehouse_inventory_initializations").select("id,opened_on,row_count,created_at").eq("org_id",ctx.orgId).eq("warehouse_id",selected.id).maybeSingle(),
   ]);
   const failure=[itemsResult,ledgerResult,countsResult,sessionResult,costsResult,templatesResult,initializationResult].find(result=>result.error)?.error;
@@ -77,7 +81,7 @@ export async function loadInventoryWorkspace(ctx:AccessContext, warehouseId:stri
   const items=(itemsResult.data??[]) as Item[]; const ledger=(ledgerResult.data??[]) as Ledger[];
   const latestCounts=new Map<string,any>(); for(const count of countsResult.data??[]) if(!latestCounts.has(String(count.item_id))) latestCounts.set(String(count.item_id),count);
   const stockRows=items.map(item=>{
-    const rows=ledger.filter(row=>row.item_id===item.id); const before=rows.filter(row=>row.transaction_date<start).reduce((sum,row)=>sum+delta(row),0); const during=rows.filter(row=>row.transaction_date>=start&&row.transaction_date<next);
+    const rows=ledger.filter(row=>row.item_id===item.id); const before=rows.filter(row=>Date.parse(row.transaction_date)<Date.parse(bounds.start)).reduce((sum,row)=>sum+delta(row),0); const during=rows.filter(row=>Date.parse(row.transaction_date)>=Date.parse(bounds.start)&&Date.parse(row.transaction_date)<Date.parse(bounds.end));
     const bucket=(test:(row:Ledger)=>boolean)=>during.filter(test).reduce((sum,row)=>sum+Math.abs(delta(row)),0);
     const current=rows.reduce((sum,row)=>sum+delta(row),0); const latest=latestCounts.get(item.id)??null;
     const received=bucket(row=>row.transaction_type==="receipt"||row.transaction_type==="opening_balance");

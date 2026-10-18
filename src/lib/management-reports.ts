@@ -8,6 +8,7 @@ import { canAccessFarm, governanceAdmin, type AccessContext } from "@/lib/access
 import { recordAuditEvent } from "@/lib/audit-ledger";
 import { loadOperationsAnalytics } from "@/lib/operations-analytics-service";
 import type { OperationsAnalyticsResponse } from "@/lib/operational-analytics";
+import {reportCsvCell} from "@/lib/report-safety";
 
 const db = governanceAdmin as any;
 const REPORT_VERSION = "management-report-v1";
@@ -182,7 +183,12 @@ export async function dispatchScheduledManagementReports(origin: string) {
     const ctx: AccessContext = { userId: String(schedule.created_by), homeOrgId: String(schedule.org_id), orgId: String(schedule.org_id), role: "ceo", capabilities: [], supportSessionId: null, supportExpiresAt: null };
     const period = reportPeriod(schedule.cadence, Number(schedule.lookback_days));
     let succeeded = false;
-    try { await generateManagementReport(ctx, origin, { name: schedule.name, scope: schedule.scope, ...period, recipientIds: schedule.recipient_ids, scheduleId: schedule.id }, { scheduled: true }); completed += 1; succeeded = true; }
+    try {
+      const {data: creator, error: creatorError} = await db.from("profiles").select("role,is_active").eq("org_id", ctx.orgId).eq("id", ctx.userId).maybeSingle();
+      if (creatorError || !creator?.is_active || creator.role !== "ceo") throw new Error("Report schedule requires its creator's current CEO authority.");
+      ctx.role = creator.role;
+      await generateManagementReport(ctx, origin, { name: schedule.name, scope: schedule.scope, ...period, recipientIds: schedule.recipient_ids, scheduleId: schedule.id }, { scheduled: true }); completed += 1; succeeded = true;
+    }
     catch { failed += 1; }
     await db.from("management_report_schedules").update({ last_run_at: new Date().toISOString(), next_run_at: succeeded ? nextRun(schedule.cadence, Number(schedule.run_day), Number(schedule.run_hour)) : new Date(Date.now() + 60 * 60 * 1000).toISOString(), updated_at: new Date().toISOString() }).eq("id", schedule.id);
   }
@@ -207,9 +213,8 @@ export function renderManagementReportHtml(run: Row) {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${html(run.report_name)}</title><style>body{margin:0;background:#f7f4ed;color:#15271b;font:14px Arial,sans-serif}.wrap{max-width:920px;margin:auto;padding:40px}.hero{background:#14281b;color:white;padding:34px;border-radius:22px}.eyebrow{color:#f3b61f;text-transform:uppercase;letter-spacing:.18em;font-size:11px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}.card,.section{background:white;border:1px solid #ded6c5;border-radius:14px;padding:18px}.card strong{display:block;font:700 24px Georgia,serif;margin-top:8px}.section{margin-top:16px}.issue{border-left:4px solid #e6a315;padding:10px 14px;margin:10px 0;background:#fbf8f0}.muted{color:#5a695e}footer{margin-top:24px;font-size:12px;color:#5a695e}@media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}.wrap{padding:16px}}</style></head><body><div class="wrap"><div class="hero"><div class="eyebrow">${html(run.organization_name)} · Management report</div><h1>${html(run.report_name)}</h1><p>${html(data.meta.scopeLabel)} · ${html(run.period_from)} to ${html(run.period_to)}</p></div><div class="grid">${cards.map(([label, value]) => `<div class="card"><span class="muted">${html(label)}</span><strong>${html(value)}</strong></div>`).join("")}</div><div class="section"><h2>Management attention</h2>${data.insights.map((item) => `<div class="issue"><strong>${html(item.title)}</strong><p>${html(item.detail)}</p></div>`).join("") || "<p>No priority exception was identified.</p>"}</div><div class="section"><h2>Data confidence</h2><p>Daily Records: ${html(display(data.dataTrust.recordCoveragePct, "%"))} · Feed synchronization: ${html(display(data.dataTrust.feedDataCoveragePct, "%"))} · Mortality causes: ${html(display(data.dataTrust.mortalityCauseCoveragePct, "%"))}</p>${data.dataTrust.notes.map((note) => `<p class="muted">${html(note)}</p>`).join("")}</div><footer>Generated ${html(run.generated_at)} · Africa/Addis_Ababa · Snapshot ${html(String(run.snapshot_sha256).slice(0, 12))} · ${REPORT_VERSION}</footer></div></body></html>`;
 }
 
-function csv(value: unknown) { return `"${String(value ?? "Unavailable").replaceAll('"', '""')}"`; }
 export function renderManagementReportCsv(run: Row) {
   const data = run.report_snapshot as OperationsAnalyticsResponse; const current = data.summary.current;
   const rows: unknown[][] = [[run.organization_name], [run.report_name], ["Scope", data.meta.scopeLabel], ["Period", `${run.period_from} to ${run.period_to}`], [], ["Metric", "Value"], ["Live birds", data.summary.liveBirds], ["Active flocks", data.summary.activeFlocks], ["Eggs", current.eggs], ["HDEP %", current.hdep], ["Feed g/bird", current.feedPerBirdGrams], ["Mortality/1k bird-days", current.mortalityPer1000BirdDays], ["Record coverage %", current.recordCoveragePct], [], ["Priority", "Assessment"], ...data.insights.map((item) => [item.title, item.detail])];
-  return `\uFEFF${rows.map((row) => row.map(csv).join(",")).join("\r\n")}`;
+  return `\uFEFF${rows.map((row) => row.map(reportCsvCell).join(",")).join("\r\n")}`;
 }

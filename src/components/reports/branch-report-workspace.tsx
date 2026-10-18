@@ -2,6 +2,7 @@
 "use client";
 
 import {OperationDateInput} from "@/components/operation-date-input";
+import {reportCsvCell as csvCell} from "@/lib/report-safety";
 import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
 
 import Link from "next/link";
@@ -113,11 +114,6 @@ function StatusBadge({ status }: { status: FlockAnalyticsRow["status"] }) {
         ? "border-leaf-500/30 bg-leaf-500/10 text-forest-700"
         : "border-sky-500/30 bg-sky-500/10 text-sky-700";
   return <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[.08em] ${classes}`}>{status}</span>;
-}
-
-function csvCell(value: unknown) {
-  const text = value === null || value === undefined ? "Unavailable" : String(value);
-  return `"${text.replaceAll('"', '""')}"`;
 }
 
 function downloadCsv(filename: string, rows: unknown[][]) {

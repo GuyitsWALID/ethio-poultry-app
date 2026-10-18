@@ -1,4 +1,8 @@
 import { NextRequest } from "next/server";
+import {managerWarehouseAccess} from "@/lib/warehouse-access";
+import {reportOperatingDate, reportTimestampBounds, reportWarehouseAllowed} from "@/lib/report-safety";
+import {readReportQuery} from "@/lib/report-pagination";
+import {selectEvidenceScope, ReportEvidenceError} from "@/lib/report-evidence";
 
 import {
   applySalesFilters,
@@ -83,13 +87,18 @@ export async function GET(request: NextRequest) {
 
     const params = request.nextUrl.searchParams;
     const today = new Date();
-    const defaultFrom = new Date(today);
-    defaultFrom.setDate(today.getDate() - 89);
+    const todayDate = reportOperatingDate(today.toISOString())!;
+    const defaultFrom = new Date(`${todayDate}T00:00:00Z`);
+    defaultFrom.setUTCDate(defaultFrom.getUTCDate() - 89);
     const dateFrom = params.get("date_from") ?? defaultFrom.toISOString().slice(0, 10);
-    const dateTo = params.get("date_to") ?? today.toISOString().slice(0, 10);
+    const dateTo = params.get("date_to") ?? todayDate;
+    let bounds: ReturnType<typeof reportTimestampBounds>;
+    try { bounds = reportTimestampBounds(dateFrom, dateTo); }
+    catch { return json({error: "Choose a valid report period of at most 366 days."}, 400); }
+    const warehouseIds = ctx.role === "farm_manager" && !ctx.supportSessionId ? new Set((await managerWarehouseAccess(ctx.userId, ctx.orgId)).map(row => row.id)) : null;
 
     const [salesRes, dailyRes, batchRes, inventoryRes, stockRes, flockRes, farmRes, lockedPeriodsRes, costEntriesRes] = await Promise.all([
-      supabaseAdmin
+      readReportQuery(() => supabaseAdmin
         .from("daily_sales_records")
         .select("*")
         .eq("org_id", ctx.orgId)
@@ -97,32 +106,32 @@ export async function GET(request: NextRequest) {
         .gte("sale_date", dateFrom)
         .lte("sale_date", dateTo)
         .order("sale_date", { ascending: true })
-        .limit(10000),
-      supabaseAdmin
+        .order("id")),
+      readReportQuery(() => supabaseAdmin
         .from("daily_farm_records")
         .select("record_date, flock_id, normal_eggs, broken_eggs, total_eggs, feed_intake_grams")
         .eq("org_id", ctx.orgId)
         .is("voided_at",null)
         .gte("record_date", dateFrom)
         .lte("record_date", dateTo)
-        .limit(10000),
-      supabaseAdmin
+        .order("record_date").order("id")),
+      readReportQuery(() => supabaseAdmin
         .from("batches")
-        .select("id, batch_code, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
+        .select("id, org_id, farm_id, house_id, batch_code, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
         .eq("org_id", ctx.orgId)
-        .limit(10000),
-      supabaseAdmin.from("inventory_items").select("id, category, unit_cost").eq("org_id", ctx.orgId).limit(10000),
-      supabaseAdmin
+        .order("id")),
+      readReportQuery(() => supabaseAdmin.from("inventory_items").select("id, category, unit_cost").eq("org_id", ctx.orgId).order("id")),
+      readReportQuery(() => supabaseAdmin
         .from("stock_ledger")
-        .select("item_id, quantity, transaction_type, unit_cost, transaction_date, branch_id, farm_id, house_id, flock_id, batch_id")
+        .select("item_id, quantity, transaction_type, unit_cost, transaction_date, branch_id, farm_id, house_id, flock_id, batch_id, warehouse_id")
         .eq("org_id", ctx.orgId)
         .in("transaction_type", ["issue", "return"])
-        .gte("transaction_date", dateFrom)
-        .lte("transaction_date", dateTo)
-        .limit(10000),
-      supabaseAdmin.from("flocks").select("id, flock_code, farm_id, house_id, batch_id").eq("org_id", ctx.orgId).limit(10000),
-      supabaseAdmin.from("farms").select("id, name, branch_id").eq("org_id", ctx.orgId).limit(10000),
-      supabaseAdmin
+        .gte("transaction_date", bounds.start)
+        .lt("transaction_date", bounds.end)
+        .order("transaction_date").order("id")),
+      readReportQuery(() => supabaseAdmin.from("flocks").select("id, org_id, flock_code, farm_id, house_id, batch_id").eq("org_id", ctx.orgId).order("id")),
+      readReportQuery(() => supabaseAdmin.from("farms").select("id, org_id, name, branch_id").eq("org_id", ctx.orgId).order("id")),
+      readReportQuery(() => supabaseAdmin
         .from("monthly_cost_periods")
         .select("*")
         .eq("org_id", ctx.orgId)
@@ -130,27 +139,15 @@ export async function GET(request: NextRequest) {
         .lte("period_start", dateTo)
         .gte("period_end", dateFrom)
         .order("period_start", { ascending: false })
-        .limit(50),
-      supabaseAdmin
+        .order("id")),
+      readReportQuery(() => supabaseAdmin
         .from("cost_entries")
-        .select("amount, category, entry_date, branch_id, farm_id, house_id, flock_id, batch_id")
+        .select("amount, category, entry_date, branch_id, farm_id, house_id, flock_id, batch_id, warehouse_id")
         .eq("org_id", ctx.orgId)
         .gte("entry_date", dateFrom)
         .lte("entry_date", dateTo)
-        .limit(10000),
+        .order("entry_date").order("id")),
     ]);
-
-    const firstError =
-      salesRes.error ??
-      dailyRes.error ??
-      batchRes.error ??
-      inventoryRes.error ??
-      stockRes.error ??
-      flockRes.error ??
-      farmRes.error ??
-      lockedPeriodsRes.error ??
-      costEntriesRes.error;
-    if (firstError) return json({ error: firstError.message }, 500);
 
     const scopedSales = ((salesRes.data ?? []) as DailySalesRecord[]).filter((record) => hasScopedAccess(ctx, record));
     const records = applySalesFilters(scopedSales, params);
@@ -161,7 +158,10 @@ export async function GET(request: NextRequest) {
       flock_id: params.get("flock_id"),
       batch_id: params.get("batch_id"),
     };
-    const hasRequestedScope = Object.values(requestedScope).some(Boolean);
+    const houses = requestedScope.house_id ? (await readReportQuery(() => supabaseAdmin.from("houses").select("id,org_id,farm_id").eq("org_id", ctx.orgId).eq("id", requestedScope.house_id!).order("id"))).data : undefined;
+    selectEvidenceScope(ctx.orgId, ctx.role === "farm_manager" && !ctx.supportSessionId,
+      farmRes.data.filter(row => hasScopedAccess(ctx, {farm_id: row.id})), flockRes.data,
+      {dateFrom, dateTo, branchId: requestedScope.branch_id ?? undefined, farmId: requestedScope.farm_id ?? undefined, houseId: requestedScope.house_id ?? undefined, flockId: requestedScope.flock_id ?? undefined, batchId: requestedScope.batch_id ?? undefined}, {houses, batches: batchRes.data});
     const scopedBatchIds = new Set(records.map((record) => record.batch_id).filter(Boolean) as string[]);
     const scopeMatches = (row: {
       branch_id?: string | null;
@@ -187,6 +187,7 @@ export async function GET(request: NextRequest) {
     const productionFlockIds = new Set(
       (flockRes.data ?? [])
         .filter((flock) => {
+          if (!hasScopedAccess(ctx, flock)) return false;
           if (requestedScope.flock_id && flock.id !== requestedScope.flock_id) return false;
           if (requestedScope.batch_id && flock.batch_id !== requestedScope.batch_id) return false;
           if (requestedScope.house_id && flock.house_id !== requestedScope.house_id) return false;
@@ -205,6 +206,7 @@ export async function GET(request: NextRequest) {
     );
     const issuedInventoryCostByCategory = new Map<string, number>();
     (stockRes.data ?? []).forEach((row) => {
+      if (!reportWarehouseAllowed(row.warehouse_id, warehouseIds) || !hasScopedAccess(ctx, row)) return;
       if (!costedInventoryItemIds.has(row.item_id)) return;
       if ((row.transaction_type !== "issue" && row.transaction_type !== "return") || !scopeMatches(row)) return;
       const category = inventoryCategoryByItem.get(row.item_id) ?? "";
@@ -212,17 +214,17 @@ export async function GET(request: NextRequest) {
       issuedInventoryCostByCategory.set(category, (issuedInventoryCostByCategory.get(category) ?? 0) + consumptionDelta);
     });
     const normalEggs = (dailyRes.data ?? []).reduce((sum, row) => {
-      if (hasRequestedScope && !productionFlockIds.has(row.flock_id)) return sum;
+      if (!productionFlockIds.has(row.flock_id)) return sum;
       return sum + (row.normal_eggs ?? row.total_eggs ?? 0);
     }, 0);
     const brokenEggs = (dailyRes.data ?? []).reduce((sum, row) => {
-      if (hasRequestedScope && !productionFlockIds.has(row.flock_id)) return sum;
+      if (!productionFlockIds.has(row.flock_id)) return sum;
       return sum + (row.broken_eggs ?? 0);
     }, 0);
     const inventoryCostCategories = new Set(["feed", "medicine", "vaccine", "vitamin", "supplement", "packaging"]);
     const manualInventoryCostByCategory = new Map<string, number>();
     let overheadCost = 0;
-    (costEntriesRes.data ?? []).filter(scopeMatches).forEach((row) => {
+    (costEntriesRes.data ?? []).filter(row => scopeMatches(row) && hasScopedAccess(ctx, row) && (!row.warehouse_id || reportWarehouseAllowed(row.warehouse_id, warehouseIds))).forEach((row) => {
       const category = String(row.category);
       if (inventoryCostCategories.has(category)) {
         manualInventoryCostByCategory.set(category, (manualInventoryCostByCategory.get(category) ?? 0) + (row.amount ?? 0));
@@ -240,6 +242,7 @@ export async function GET(request: NextRequest) {
     });
 
     const lockedPeriod = (lockedPeriodsRes.data ?? [])
+      .filter(row => hasScopedAccess(ctx, row))
       .filter(lockedScopeMatches)
       .sort((a, b) => {
         const specificity =
@@ -368,7 +371,7 @@ export async function GET(request: NextRequest) {
     return json({
       filters: { dateFrom, dateTo },
       kpis: {
-        todayRevenue: round(records.filter((record) => record.sale_date === today.toISOString().slice(0, 10)).reduce((sum, record) => sum + record.gross_amount, 0)),
+        todayRevenue: round(records.filter((record) => record.sale_date === todayDate).reduce((sum, record) => sum + record.gross_amount, 0)),
         revenue: round(totalRevenue),
         paid: round(totalPaid),
         balanceDue: round(totalBalance),
@@ -416,6 +419,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: unknown) {
+    if (error instanceof ReportEvidenceError) return json({error: error.code}, error.status);
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
   }
 }

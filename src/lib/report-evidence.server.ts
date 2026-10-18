@@ -3,6 +3,7 @@ import "server-only";
 import {governanceAdmin, type AccessContext} from "@/lib/access-context";
 import {reportRequest, type ReportInput} from "@/lib/report-workspace";
 import {projectReportEvidence, readAllEvidence, selectEvidenceScope, ReportEvidenceError} from "@/lib/report-evidence";
+import {effectiveWarehouseIds} from "@/lib/warehouse-access";
 
 export async function loadReportEvidence(ctx: AccessContext, section: "health" | "finance", input: ReportInput) {
   if (!ctx.supportSessionId && ctx.role !== "ceo" && ctx.role !== "farm_manager") throw new ReportEvidenceError("REPORT_SCOPE_DENIED", 403);
@@ -33,6 +34,7 @@ export async function loadReportEvidence(ctx: AccessContext, section: "health" |
     input.branchId && !restricted ? all(() => db.from("branches").select("id,org_id").eq("org_id", ctx.orgId).order("id")) : Promise.resolve(undefined),
   ]);
   const scope = selectEvidenceScope(ctx.orgId, restricted, farms, flocks, input, {houses, batches, branches});
+  scope.warehouseIds = restricted ? new Set(await effectiveWarehouseIds(ctx)) : null;
   if (section === "health") {
     if (!scope.flockIds.length) return projectReportEvidence(section, input, scope, {});
     const events = await all(() => db.from("health_events").select("id,org_id,flock_id,event_date,event_type,description,diagnosis,treatment,voided_at").eq("org_id", ctx.orgId).in("flock_id", scope.flockIds).is("voided_at", null).gte("event_date", input.dateFrom).lte("event_date", input.dateTo).order("event_date", {ascending: false}).order("id"));
@@ -46,7 +48,7 @@ export async function loadReportEvidence(ctx: AccessContext, section: "health" |
     return query;
   };
   const [expenses, periods] = await Promise.all([
-    all(() => filter(db.from("cost_entries").select("id,org_id,branch_id,farm_id,house_id,flock_id,batch_id,entry_date,description,amount").eq("org_id", ctx.orgId).gte("entry_date", input.dateFrom).lte("entry_date", input.dateTo)).order("entry_date", {ascending: false}).order("id")),
+    all(() => filter(db.from("cost_entries").select("id,org_id,branch_id,farm_id,house_id,flock_id,batch_id,warehouse_id,entry_date,description,amount").eq("org_id", ctx.orgId).gte("entry_date", input.dateFrom).lte("entry_date", input.dateTo)).order("entry_date", {ascending: false}).order("id")),
     all(() => filter(db.from("monthly_cost_periods").select("id,org_id,branch_id,farm_id,house_id,flock_id,batch_id,period_start,period_end,status,total_absorbed_cost,unallocated_cost,reconciliation_warnings").eq("org_id", ctx.orgId).gte("period_end", input.dateFrom).lte("period_start", input.dateTo)).order("period_start", {ascending: false}).order("id")),
   ]);
   return projectReportEvidence(section, input, scope, {expenses, periods});

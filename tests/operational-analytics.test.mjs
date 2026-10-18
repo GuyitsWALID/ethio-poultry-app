@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildDailySeries,
   buildFlockAnalytics,
+  expectedRecordsForPeriod,
   mortalityCausePareto,
   previousPeriod,
   summarizePeriod,
@@ -74,6 +75,29 @@ test("previous period has equal length and excludes the selected period", () => 
     previousTo: "2026-06-30",
     days: 30,
   });
+});
+
+test("verified cycle completion bounds historical coverage without counting sale clearance as deaths", () => {
+  const archived = {...layer, currentBirds: 0, completionDate: "2026-07-22"};
+  assert.equal(expectedRecordsForPeriod([archived], "2026-07-21", "2026-07-30"), 2);
+  assert.equal(expectedRecordsForPeriod([archived], "2026-07-23", "2026-07-30"), 0);
+  const row = daily({record_date: "2026-07-22", opening_birds: 1000, closing_birds: 0, deaths: 2});
+  const summary = summarizePeriod([row], new Set([layer.id]), 1);
+  assert.equal(summary.deaths, 2);
+  assert.equal(summary.eggs, 800);
+  const points = buildDailySeries([row], [archived], "2026-07-22", "2026-07-23");
+  assert.equal(points[0].expectedRecords, 1);
+  assert.equal(points[1].expectedRecords, 0);
+  const targets = new Map([[layer.breedId, [{week_number: 28, target_hdep_pct: 90, target_feed_g: 110, target_mortality_pct: 0.14}]]]);
+  assert.equal(buildDailySeries([row], [archived], "2026-07-22", "2026-07-22", targets)[0].hdepTarget, 90);
+});
+
+test("a historical weight is compared with its measurement-age target, not report-end age", () => {
+  const result = buildFlockAnalytics({flock: {...layer, type: "broiler"}, rows: [daily()], previousRows: [],
+    weights: [{record_date: "2026-07-01", average_weight_g: 2000, uniformity_pct: 90}],
+    targets: [{week_number: 25, target_weight_g: 2100}, {week_number: 28, target_weight_g: 3300}],
+    dateFrom: "2026-07-01", dateTo: "2026-07-21", warningVariancePct: 5, criticalVariancePct: 10});
+  assert.equal(result.target, 2100);
 });
 
 test("daily series exposes an empty day as a gap", () => {

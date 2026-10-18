@@ -61,7 +61,7 @@ type BatchRow = Pick<
 >;
 
 export function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), { status });
+  return Response.json(data, { status, headers: {"Cache-Control": "private, no-store"} });
 }
 
 export async function getSalesContext(): Promise<SalesContext | Response> {

@@ -1,7 +1,8 @@
 import type {ReportInput} from "./report-workspace";
+import {reportWarehouseAllowed} from "./report-safety.ts";
 
 export type EvidenceRow = Record<string, unknown>;
-export type EvidenceScope = {orgId: string; farmIds: string[]; flockIds: string[]; farmNames: Map<string, string>; flockNames: Map<string, string>; restricted: boolean};
+export type EvidenceScope = {orgId: string; farmIds: string[]; flockIds: string[]; farmNames: Map<string, string>; flockNames: Map<string, string>; restricted: boolean; warehouseIds?: ReadonlySet<string> | null};
 export type EvidenceItem = {kind: "disease" | "treatment" | "observation" | "vaccination" | "expense" | "period"; label: string; date: string; endDate?: string; context: string; note?: string; status?: "draft" | "reconciled" | "locked"; amount?: number; unallocated?: number; warnings?: number};
 export type ReportEvidence = {dateFrom: string; dateTo: string; items: EvidenceItem[]; expenseTotal?: number};
 export class ReportEvidenceError extends Error {
@@ -46,7 +47,8 @@ export function projectReportEvidence(section: "health" | "finance", input: Repo
       result.items.push({kind: "vaccination", label: text(vaccine.vaccine_name), date: text(row.event_date), context: scope.flockNames.get(text(row.flock_id)) || ""});
     }
   } else {
-    const allowed = (row: EvidenceRow) => row.org_id === scope.orgId && (!scope.restricted || scope.farmIds.includes(text(row.farm_id))) && (!input.branchId || row.branch_id === input.branchId) && (!input.houseId || row.house_id === input.houseId) && (!input.flockId || row.flock_id === input.flockId) && (!input.batchId || row.batch_id === input.batchId);
+    const warehouseIds = scope.warehouseIds === undefined ? (scope.restricted ? new Set<string>() : null) : scope.warehouseIds;
+    const allowed = (row: EvidenceRow) => row.org_id === scope.orgId && (!scope.restricted || scope.farmIds.includes(text(row.farm_id))) && (!row.warehouse_id || reportWarehouseAllowed(row.warehouse_id, warehouseIds)) && (!input.branchId || row.branch_id === input.branchId) && (!input.houseId || row.house_id === input.houseId) && (!input.flockId || row.flock_id === input.flockId) && (!input.batchId || row.batch_id === input.batchId);
     const expenses = (sources.expenses ?? []).filter(row => allowed(row) && within(text(row.entry_date)));
     result.expenseTotal = expenses.every(row => amount(row.amount) !== undefined) ? expenses.reduce((sum, row) => sum + Number(row.amount), 0) : undefined;
     result.items = expenses.map(row => ({kind: "expense", label: text(row.description), date: text(row.entry_date), context: scope.farmNames.get(text(row.farm_id)) || "", amount: amount(row.amount)}));

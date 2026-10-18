@@ -29,6 +29,7 @@ export type AnalyticsFlock = {
   houseId: string;
   houseName: string;
   placementDate: string;
+  completionDate?: string | null;
   ageAtPlacementDays: number | null;
   currentBirds: number;
   breedId: string | null;
@@ -258,7 +259,8 @@ export function expectedRecordsForPeriod(flocks: AnalyticsFlock[], dateFrom: str
   return flocks.reduce((total, flock) => {
     if (flock.placementDate > dateTo) return total;
     const effectiveFrom = flock.placementDate > dateFrom ? flock.placementDate : dateFrom;
-    return total + daysBetween(effectiveFrom, dateTo) + 1;
+    const effectiveTo = flock.completionDate && flock.completionDate < dateTo ? flock.completionDate : dateTo;
+    return effectiveTo < effectiveFrom ? total : total + daysBetween(effectiveFrom, effectiveTo) + 1;
   }, 0);
 }
 
@@ -364,12 +366,15 @@ export function buildDailySeries(
   const layerIds = new Set(flocks.filter((flock) => flock.type === "layer" || flock.type === "parent_stock").map((flock) => flock.id));
   return dateRange(dateFrom, dateTo).map((date) => {
     const dayRows = rows.filter((row) => row.record_date === date);
-    const activeFlocks = flocks.filter((flock) => flock.placementDate <= date);
+    const activeFlocks = flocks.filter((flock) => flock.placementDate <= date && (!flock.completionDate || flock.completionDate >= date));
     const expected = activeFlocks.length;
     const summary = summarizePeriod(dayRows, layerIds, expected);
     const targetFor = (flock: AnalyticsFlock) => standardsByBreed.get(flock.breedId ?? "")?.find((item) => item.week_number === Math.floor(ageOnDate(flock.placementDate, flock.ageAtPlacementDays, date) / 7)) ?? null;
     const weightedTarget = (eligible: AnalyticsFlock[], value: (target: BreedTarget) => number | null) => {
-      const available = eligible.map((flock) => ({ value: targetFor(flock) ? value(targetFor(flock)!) : null, weight: flock.currentBirds })).filter((item): item is { value: number; weight: number } => item.value !== null && item.weight > 0);
+      const available = eligible.map((flock) => {
+        const recorded = dayRows.find(row => row.flock_id === flock.id);
+        return {value: targetFor(flock) ? value(targetFor(flock)!) : null, weight: recorded?.opening_birds ?? recorded?.closing_birds ?? 0};
+      }).filter((item): item is { value: number; weight: number } => item.value !== null && item.weight > 0);
       const totalWeight = available.reduce((sum, item) => sum + item.weight, 0);
       return totalWeight ? round(available.reduce((sum, item) => sum + item.value * item.weight, 0) / totalWeight) : null;
     };
@@ -422,14 +427,16 @@ export function buildFlockAnalytics(input: {
   const expected = expectedRecordsForPeriod([flock], input.dateFrom, input.dateTo);
   const summary = summarizePeriod(input.rows, layerIds, expected);
   const previous = summarizePeriod(input.previousRows, layerIds, input.previousRows.length || expected);
-  const ageDays = ageOnDate(flock.placementDate, flock.ageAtPlacementDays, input.dateTo);
+  const effectiveTo = flock.completionDate && flock.completionDate < input.dateTo ? flock.completionDate : input.dateTo;
+  const ageDays = ageOnDate(flock.placementDate, flock.ageAtPlacementDays, effectiveTo);
   const ageWeeks = Math.floor(ageDays / 7);
   const target = input.targets.find((item) => item.week_number === ageWeeks) ?? null;
-  const weights = input.weights.filter((row) => row.record_date <= input.dateTo && row.average_weight_g !== null).sort((a, b) => b.record_date.localeCompare(a.record_date));
+  const weights = input.weights.filter((row) => row.record_date >= flock.placementDate && row.record_date <= effectiveTo && row.average_weight_g !== null).sort((a, b) => b.record_date.localeCompare(a.record_date));
   const latestWeight = weights[0] ?? null;
   const previousWeight = weights[1] ?? null;
   const primaryValue = layerMode ? summary.hdep : latestWeight?.average_weight_g ?? null;
-  const primaryTarget = layerMode ? target?.target_hdep_pct ?? null : target?.target_weight_g ?? null;
+  const measurementTarget = latestWeight ? input.targets.find(item => item.week_number === Math.floor(ageOnDate(flock.placementDate, flock.ageAtPlacementDays, latestWeight.record_date) / 7)) : null;
+  const primaryTarget = layerMode ? target?.target_hdep_pct ?? null : measurementTarget?.target_weight_g ?? null;
   const baseline = layerMode ? previous.hdep : previousWeight?.average_weight_g ?? null;
   const targetGap = primaryValue !== null && primaryTarget !== null ? round(primaryValue - primaryTarget) : null;
   const targetAttainmentPct = primaryValue !== null && primaryTarget !== null && primaryTarget > 0 ? percent(primaryValue, primaryTarget) : null;

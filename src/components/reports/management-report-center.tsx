@@ -30,18 +30,19 @@ export function ManagementReportCenter({ scope, dateFrom, dateTo, scopeLabel }: 
 
   const act = async (key: string, body: unknown) => {
     setBusy(key); setError(null);
-    try { await requestJson("/api/reports/management", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); await load(); }
+    try { await requestJson("/api/reports/management", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); await load(); return true; }
     catch (caught) {
       const message = caught instanceof Error ? caught.message : "The report request failed.";
       await load();
       setError(message);
+      return false;
     }
     finally { setBusy(null); }
   };
   const generate = () => act("generate", { action: "run_now", report: { name: `${scopeLabel} management brief`, scope: cleanScope, periodFrom: dateFrom, periodTo: dateTo, recipientIds } });
   const createSchedule = async () => {
-    await act("schedule", { action: "create_schedule", schedule: { name, cadence, runDay, runHour: 7, lookbackDays: cadence === "weekly" ? 7 : 30, scope: cleanScope, recipientIds } });
-    setShowSchedule(false);
+    const saved = await act("schedule", { action: "create_schedule", schedule: { name, cadence, runDay, runHour: 7, lookbackDays: cadence === "weekly" ? 7 : 30, scope: cleanScope, recipientIds } });
+    if (saved) setShowSchedule(false);
   };
 
   return (

@@ -1,0 +1,31 @@
+# Design
+
+## Delivery sequence
+Correct shared readers first; build the shared read model next; then visual workspace, saved reports/schedules and integrated staging release. Unfinished safeguards must not be hidden by a UI rollout.
+
+## Authorization and evidence
+Use current farm assignments and effective warehouse access, never branch membership as a warehouse grant. Check expenses as well as stock. Reject contradictory or unavailable targets. Include flocks operating in the selected interval, using verified placement/movement/completion evidence; final sales are not mortality. Missing evidence remains unavailable.
+
+Use inclusive Addis Ababa operating dates with an exclusive next-day timestamp bound. Calculations read complete, stably ordered pages or fail explicitly; do not return partial totals. Preserve authoritative weighted formulas, separate deaths/culls, incompatible units/FCR types, current balances, period-end balances and period movements.
+
+## Shared read model
+`GET /api/reports/performance` returns typed metrics, chart series, units, coverage and explanation codes from a server-only allowlisted module. Authorize before calculations; private/no-store responses and no service-worker/outbox evidence caching. Failures remain distinguishable from missing evidence and empty results.
+
+Source mapping: Daily Records for production/bird-days/deaths/culls, weight records plus breed/week standards for growth, feeding sessions/closed feed days for planned/actual feed, health events and completed vaccination evidence for health, stock ledger/physical counts for inventory, sales records for selected-sale collections/balances and cost entries/locked periods for qualified costs. Supporting events never duplicate official losses or inventory receipts.
+
+## Presentation
+One URL `/app/reports`, seven in-page views: Overview, Production, Feeding, Health, Stock, Sales & Costs, Saved reports. Default 30 inclusive operating days; 7/30/90/custom, maximum 366. Shared authorized branch/farm/house/flock/batch filters; stock warehouse selector; no mandatory batch for Feeding or hidden month substitution. URL retains view, filters and exact saved selection. Clear incompatible children.
+
+Production shows output/quality/growth and targets; Feeding shows actual/planned, feed/bird and valid FCR; Health shows deaths/culls/causes/treatments/completed vaccinations; Stock shows opening/end/current balances, receipts/use/low stock/qualified values; Sales & Costs shows revenue, collections against selected sales, outstanding balances and qualified margins. Overview compares key results and coverage against the previous equal-length period.
+
+Every visual states units/scope, supported takeaway, missing evidence/target caveats and relevant checks. No health diagnosis or claim that lower feed is necessarily better. Warehouse balances are explicitly warehouse-level. Figures expand in-page with accessible text/table alternatives and secondary exact History links.
+
+## Saved reports
+Extend management-report interfaces with authorized pagination, retry-safe generation and versioned snapshots. Add `GET /api/reports/management/[id]`; retain download routes. Capture a consistent server evidence set with permission provenance, coverage, comparison basis and generation time, not browser values. Finalize snapshot and audit in one transaction. Claim scheduled executions; revalidate creator/recipients, preserve weekly/monthly semantics and explicit periods. Failed forms stay open.
+
+Managers save one assigned farm (auto-selected if unique); CEOs can save wider scopes. Sharing cannot expand permissions. Immutable v1 reports retain version-specific readers; unverifiable legacy cross-store snapshots are CEO-only, including database reads. Frozen previews are clearly distinct from live results. HTML is printable with visual summaries; CSV escapes formulas in user text while retaining numeric values.
+
+## Compatibility and release
+Today-enabled CEOs/managers get one Farm performance sidebar entry; disabled organizations/Admin remain unchanged. Resolve Analytics/advanced/saved links in-page without interstitials. Preserve exact finding/approval/financial-period/cost-entry targets. Translate labels, controls, explanations and errors EN/AM, use Ethiopian display in Amharic, Gregorian API dates, Addis boundaries, user content untranslated, 48px targets, focus and keyboard access.
+
+Focused regressions during implementation; full suite, TS/lint and production/Cloudflare builds once integrated. Investigate staging Unavailable eggs without fabricated records or weakened assertions. Any new migrations are forward-only, Docker-tested then staging-tested before notmain. Production separately approved.

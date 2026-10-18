@@ -74,6 +74,17 @@ test("invalid money remains unavailable; overlapping close periods never inflate
   assert.equal(result.items.length, 2);
 });
 
+test("farm access never grants unassigned shared-store expenses", () => {
+  const selected = {...scope(true), warehouseIds: new Set(["farm-store", "permitted-shared"])};
+  const expense = {org_id: "o", farm_id: "f1", entry_date: "2026-09-05", amount: 100};
+  const expenses = [expense, {...expense, warehouse_id: "farm-store"}, {...expense, warehouse_id: "permitted-shared"}, {...expense, warehouse_id: "unassigned-shared", amount: 999}, {...expense, warehouse_id: "revoked", amount: 999}];
+  assert.equal(projectReportEvidence("finance", input, selected, {expenses}).expenseTotal, 300);
+  assert.equal(projectReportEvidence("finance", input, scope(true), {expenses}).expenseTotal, 100);
+  assert.equal(projectReportEvidence("finance", input, scope(), {expenses}).expenseTotal, 2298);
+  const ceoFarmInput = {...input, farmId: "f1"};
+  assert.equal(projectReportEvidence("finance", ceoFarmInput, {...scope(false, ceoFarmInput), warehouseIds: null}, {expenses}).expenseTotal, 2298);
+});
+
 test("evidence pagination completes totals or rejects, never silently truncates", async () => {
   const rows = Array.from({length: 1101}, (_, id) => ({id}));
   const calls = [];
