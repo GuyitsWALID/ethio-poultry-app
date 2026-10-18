@@ -188,7 +188,14 @@ export async function historyDetail(ctx: AccessContext, kind: string, id: string
         const result = await movements.eq("daily_record_id", id).order("id").limit(101);
         if (result.error) throw new HistoryError("LOAD_FAILED", 503);
         if ((result.data?.length ?? 0) > 100) throw new HistoryError("DETAIL_TOO_LARGE", 422);
-        detail.supporting.push(...((result.data ?? []) as unknown as HistoryRow[]).map(movement => ({kind: "stock_movement", fields: historyFields(historySources.find(value => value.kind === "stock_movement")!, movement)})));
+        const movementRows = (result.data ?? []) as unknown as HistoryRow[];
+        const itemIds = [...new Set(movementRows.map(movement => text(movement.item_id)).filter(value => historyUuid.test(value)))];
+        const products = itemIds.length ? await db.from("inventory_items").select("id,name,unit").eq("org_id", ctx.orgId).in("id", itemIds).limit(101) : {data: [], error: null};
+        if (products.error) throw new HistoryError("LOAD_FAILED", 503);
+        detail.supporting.push(...movementRows.map(movement => {
+          const product = (products.data as HistoryRow[] | null)?.find(value => value.id === movement.item_id);
+          return {kind: "stock_movement", fields: [{key: "item", value: text(product?.name) || null}, {key: "unit", value: text(product?.unit) || null}, ...historyFields(historySources.find(value => value.kind === "stock_movement")!, movement)]};
+        }));
       }
     }
   }

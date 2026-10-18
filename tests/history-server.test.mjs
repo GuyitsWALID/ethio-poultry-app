@@ -118,8 +118,12 @@ test("only supported manager corrections are linked and official losses are not 
   const tables = fixtures(); tables.flocks[0].status="active";
   tables.daily_farm_records = [row(200, {flock_id: flock, record_date: "2026-10-01", deaths: 2, culls: 1})];
   tables.mortality_events = [row(201, {flock_id: flock, record_date: "2026-10-01", count: 2, cause: "Natural"})];
+  tables.history_stock_movements = [row(202, {daily_record_id: uuid(200), warehouse_id: store, item_id: uuid(203), operating_date: "2026-10-01", quantity: 3})];
+  tables.inventory_items = [row(203, {name: "Routine supplement", unit: "kg"})];
   const detail = await historyDetail(ctx, "daily_record", uuid(200), historyDb(tables), warehouses);
   assert.equal(detail.fields.find(f=>f.key==="deaths").value, 2); assert.equal(detail.supporting[0].fields.find(f=>f.key==="count").value, 2);
+  assert.equal(detail.supporting.find(value=>value.kind==="stock_movement").fields.find(field=>field.key==="item").value, "Routine supplement");
+  assert.equal(detail.supporting.find(value=>value.kind==="stock_movement").fields.find(field=>field.key==="unit").value, "kg");
   const correction = new URL(detail.correctionHref, "https://test.invalid");
   assert.equal(correction.searchParams.get("source_id"), uuid(200)); assert.equal(correction.searchParams.get("request_type"), "locked_correction");
   assert.ok(correction.searchParams.get("correction_route").startsWith("/app/daily-records?"));

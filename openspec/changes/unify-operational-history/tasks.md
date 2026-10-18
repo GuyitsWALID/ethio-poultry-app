@@ -9,5 +9,5 @@
 - [x] 2.4 Translate all controls/values and verify Ethiopian-calendar display. New terminology remains pending partner review, not falsely included in the earlier glossary approval.
 ## 3. Verification and release
 - [x] 3.1 Add focused contract, authorization, paging, deep-link and responsive regressions.
-- [ ] 3.2 Run focused tests, TypeScript, lint, production/Cloudflare builds and OpenSpec validation.
+- [x] 3.2 Run focused tests, TypeScript, lint, production/Cloudflare builds and OpenSpec validation. See verification.md for checked revisions and remaining staging acceptance.
 - [ ] 3.3 Validate authenticated staging, deploy any required reviewed indexes and release to notmain. Production requires separate approval.
