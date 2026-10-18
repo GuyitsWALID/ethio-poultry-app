@@ -27,6 +27,12 @@ export const managerTodayMessageKeys = [
   "Navigation.sales",
   "Navigation.alerts",
   "Navigation.historyMore",
+  "Navigation.history",
+  "Navigation.reports",
+  "Navigation.more",
+  "Navigation.approvals",
+  "Navigation.templates",
+  "Navigation.recordChecks",
   "Today.eyebrow",
   "Today.title",
   "Today.question",
@@ -312,6 +318,12 @@ export const managerTodayMessageKeys = [
 ] as const;
 
 export const pendingTerminologyReviewKeys = [
+  "Navigation.history",
+  "Navigation.reports",
+  "Navigation.more",
+  "Navigation.approvals",
+  "Navigation.templates",
+  "Navigation.recordChecks",
   "Today.offline.loadingDraft",
   "Today.offline.recovered",
   "Today.offline.expired",

@@ -11,10 +11,13 @@ import type {AppLocale} from "@/i18n/locale";
 import {profilePeriods, type FlockProfile, type ProfileDays} from "@/lib/flock-lifecycle/profile";
 import type {TodayTaskCode} from "@/lib/today-workspace/contracts";
 import {todayTaskMessageKeys} from "@/i18n/today-copy";
+import {buildHistoryHref} from "@/lib/history/contracts";
+import {useFarmScope} from "@/components/farm-scope-context";
 
 export function InlineFlockProfile({flockId, open}: {flockId: string; open: boolean}) {
   const t = useTranslations("FlockProfile"), todayT = useTranslations("Today");
   const locale = useLocale() as AppLocale;
+  const {todayWorkspaceEnabled} = useFarmScope();
   const [days, setDays] = useState<ProfileDays>(30);
   const [loaded, setLoaded] = useState<{id: string; days: number; data: FlockProfile} | null>(null);
   const [error, setError] = useState<{id: string; days: number; code: "unavailable" | "loadFailed"} | null>(null);
@@ -83,7 +86,9 @@ export function InlineFlockProfile({flockId, open}: {flockId: string; open: bool
           <section><h4 className="font-semibold text-forest-900">{t("nextSteps")}</h4><ul className="mt-3 space-y-3">{profile.steps.map(step => <li key={step.code} className={`rounded-xl border p-4 ${step.severity === "critical" ? "border-ember-300 bg-ember-50" : "border-sand-200 bg-sand-50"}`}><p className="text-xs font-semibold text-forest-700">{t(`severity.${step.severity}`)}{step.date ? ` · ${date(step.date)}` : ""}</p><p className="mt-1 text-sm leading-6 text-forest-900">{t(`steps.${step.code}`)}</p><Link href={step.href} className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg font-semibold text-forest-800 underline underline-offset-4">{t(`actions.${step.href.startsWith("/app/today") ? step.code === "missing_records" ? "todayBirds" : "todayFeeding" : step.code}`)}<ChevronRight className="size-4"/></Link></li>)}</ul>{!profile.steps.length ? <p className="mt-2 text-sm text-forest-600">{t("noConcerns")}</p> : null}</section>
         </article>
       </>}
-      <footer className="border-t border-sand-200 pt-4"><button type="button" disabled title={t("historyHelp")} className="min-h-11 cursor-not-allowed rounded-xl border border-sand-300 bg-sand-50 px-4 text-sm text-forest-600">{t("history")}</button><p className="mt-2 text-xs text-forest-600">{t("historyHelp")}</p>{profile&&!archived?<WholeFlockMove flockId={profile.flock.id}/>:null}</footer>
+      <footer className="border-t border-sand-200 pt-4">{todayWorkspaceEnabled && profile ? <Link href={buildHistoryHref({flock: profile.flock.id, ...(profile.period.from && profile.period.to ? {from: profile.period.from, to: profile.period.to} : {})})} className="inline-flex min-h-12 items-center rounded-xl border border-sand-300 px-4 font-semibold text-forest-900 underline underline-offset-4"><HistoryLabel/></Link> : <><button type="button" disabled title={t("historyHelp")} className="min-h-12 cursor-not-allowed rounded-xl border border-sand-300 bg-sand-50 px-4 text-forest-600">{t("history")}</button><p className="mt-2 text-xs text-forest-600">{t("historyHelp")}</p></>}{profile&&!archived?<WholeFlockMove flockId={profile.flock.id}/>:null}</footer>
     </div></div>
   </section>;
 }
+
+function HistoryLabel() {const t = useTranslations("History"); return t("title");}

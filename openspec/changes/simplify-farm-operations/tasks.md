@@ -1,5 +1,9 @@
 # Tasks
 
+### Linked History navigation revision (2026-10-18)
+
+`unify-operational-history` supersedes the presentation described in 7.1 with Today, Flocks, Alerts, History, Reports and More (Approvals, Record Checks, Feed templates). It also documents the approved narrow exception to 7.4: enabled CEOs receive History and consolidated Approvals without activating the broader CEO workspace. Legacy routes, disabled-tenant navigation and the pilot acceptance gate remain intact. Verification of this revision is tracked in that linked change, not inferred from the older checked tasks below.
+
 ## 1. Planning and Baseline Safety
 
 - [x] 1.1 Install OpenSpec 1.13.1 globally, pin it as an exact development dependency, initialize Codex integration, disable telemetry, and verify `openspec --version` and project context resolve.

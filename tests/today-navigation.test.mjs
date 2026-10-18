@@ -18,7 +18,8 @@ const cards = await readFile(new URL("../src/components/today/embedded-task-card
 test("enabled Farm Managers get Today-first navigation while disabled tenants keep legacy navigation", () => {
   assert.match(sidebar, /simplifiedFarmManagerNavSections/);
   for (const destination of ["/app/today", "/app/flocks", "/app/alerts"]) assert.match(sidebar, new RegExp(destination.replaceAll("/", "\\/")));
-  assert.match(sidebar, /navigationKey: "historyMore"/);
+  assert.match(sidebar, /navigationKey: "history"/);
+  assert.match(sidebar, /navigationKey: "more"/);
   assert.match(sidebar, /todayWorkspaceEnabled \? simplifiedFarmManagerNavSections : farmManagerNavSections/);
   assert.match(context, /todayWorkspaceEnabled: Boolean\(organization\?\.today_workspace_enabled\)/);
 });

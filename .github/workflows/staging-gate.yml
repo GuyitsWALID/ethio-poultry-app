@@ -90,3 +90,5 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Compare populated CEO and assigned-manager Reports with source readers
         run: npx playwright test tests/browser/report-staging.spec.ts --workers=1 --retries=0 --trace=off
+      - name: Verify read-only populated History for CEO and assigned manager
+        run: npx playwright test tests/browser/history-staging.spec.ts --workers=1 --retries=0 --trace=off

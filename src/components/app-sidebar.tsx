@@ -59,14 +59,14 @@ type NavItem = {
   href: string;
   label?: string;
   managerMessageKey?: ManagerNavigationMessageKey;
-  navigationKey?: "today" | "flocks" | "alerts" | "historyMore";
+  navigationKey?: "today" | "flocks" | "alerts" | "historyMore" | "history" | "reports" | "more" | "approvals" | "templates" | "recordChecks";
 };
 
 type NavSection = {
   id: string;
   title: string;
   managerMessageKey?: ManagerNavigationMessageKey;
-  navigationKey?: "historyMore";
+  navigationKey?: "historyMore" | "more";
   items: NavItem[];
 };
 
@@ -98,6 +98,8 @@ const itemIcons: Record<string, LucideIcon> = {
   today: CalendarDays,
   alerts: Bell,
   historyMore: History,
+  history: History,
+  templates: Package,
 };
 
 const ceoNavSections: NavSection[] = [
@@ -185,26 +187,28 @@ const simplifiedFarmManagerNavSections: NavSection[] = [
       {id: "today", navigationKey: "today", href: "/app/today"},
       {id: "flocksBatches", navigationKey: "flocks", href: "/app/flocks"},
       {id: "alerts", navigationKey: "alerts", href: "/app/alerts"},
+      {id: "history", navigationKey: "history", href: "/app/history"},
+      {id: "reports", navigationKey: "reports", href: "/app/reports"},
     ],
   },
   {
     id: "historyMore",
     title: "",
-    navigationKey: "historyMore",
+    navigationKey: "more",
     items: [
-      {id: "dailyRecords", managerMessageKey: "items.dailyRecords", href: "/app/daily-records"},
-      {id: "dailyClose", managerMessageKey: "items.dailyClose", href: "/app/operating-days"},
-      {id: "feed", managerMessageKey: "items.feed", href: "/app/feeding-log"},
-      {id: "mortality", managerMessageKey: "items.mortality", href: "/app/mortality"},
-      {id: "healthLog", managerMessageKey: "items.healthLog", href: "/app/health"},
-      {id: "inventoryLog", managerMessageKey: "items.inventoryLog", href: "/app/inventory"},
-      {id: "sales", managerMessageKey: "items.sales", href: "/app/sales"},
-      {id: "governance", managerMessageKey: "items.governance", href: "/app/governance"},
-      {id: "recordChecks", managerMessageKey: "items.recordChecks", href: "/app/reconciliation"},
-      {id: "branchReports", managerMessageKey: "items.branchReports", href: "/app/reports"},
+      {id: "governance", navigationKey: "approvals", href: "/app/governance"},
+      {id: "recordChecks", navigationKey: "recordChecks", href: "/app/reconciliation"},
+      {id: "templates", navigationKey: "templates", href: "/app/feeding-log?feed_target=template_management"},
     ],
   },
 ];
+
+// This limited History cleanup does not activate the gated CEO redesign.
+const historyCeoNavSections: NavSection[] = ceoNavSections.map(section => ({...section,
+  items: section.items.filter(item => !["requests", "dailyRecords", "feed", "mortality", "health", "inventory", "sales"].includes(item.id)).map(item => item.id === "governance" ? {...item, navigationKey: "approvals" as const} : item),
+}));
+historyCeoNavSections[0] = {...historyCeoNavSections[0], items: [...historyCeoNavSections[0].items.slice(0, 3), {id: "history", navigationKey: "history", href: "/app/history"}, ...historyCeoNavSections[0].items.slice(3)]};
+historyCeoNavSections.push({id: "configuration", title: "", navigationKey: "more", items: [{id: "templates", navigationKey: "templates", href: "/app/feeding-log?feed_target=template_management"}]});
 
 export function AppSidebar({ viewerRole, todayWorkspaceEnabled, mobileOpen = false, onMobileClose }: { viewerRole: AppRole | null; todayWorkspaceEnabled: boolean; mobileOpen?: boolean; onMobileClose?: () => void }) {
   const pathname = usePathname();
@@ -237,6 +241,7 @@ export function AppSidebar({ viewerRole, todayWorkspaceEnabled, mobileOpen = fal
 
   const navSections = useMemo<NavSection[]>(() => {
     if (viewerRole === "farm_manager") return todayWorkspaceEnabled ? simplifiedFarmManagerNavSections : farmManagerNavSections;
+    if (viewerRole === "ceo" && todayWorkspaceEnabled) return historyCeoNavSections;
     if (viewerRole === "ceo" || viewerRole === "system_admin") return ceoNavSections;
     return [];
   }, [todayWorkspaceEnabled, viewerRole]);

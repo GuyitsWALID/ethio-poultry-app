@@ -7,15 +7,15 @@ Organize daily operations around user intent and role instead of database module
 ## ADDED Requirements
 
 ### Requirement: Farm Manager primary navigation
-The Farm Manager primary navigation SHALL contain Today, Flocks, Stock, Sales, Alerts, and History & More.
+For Today-enabled organizations, Farm Manager primary navigation SHALL contain Today, Flocks, Alerts, History, and Reports. More SHALL contain Approvals, Record Checks, and Feed templates, as specified in the linked `unify-operational-history` change.
 
 #### Scenario: Manager signs in
 - **WHEN** a Farm Manager completes authentication without a trusted destination
 - **THEN** the system routes the manager to Today
 
 #### Scenario: Manager needs advanced history
-- **WHEN** the manager expands History & More
-- **THEN** the system exposes authorized Daily Record, Feed, Mortality, Health, Daily Close, Governance, Record Check, analytics, and report destinations
+- **WHEN** the manager opens History
+- **THEN** one authorized record browser exposes Daily Record, Feeding, Deaths/culls, Health/checks, Stock, Sales, Expenses, and Day closing records while exact legacy correction and configuration destinations remain available
 
 ### Requirement: Existing route compatibility
 Existing authorized operational URLs and trusted deep links SHALL continue to open their original source records during the pilot.
@@ -40,7 +40,7 @@ The CEO primary workspace SHALL not be reorganized until the Farm Manager pilot 
 
 #### Scenario: Manager pilot is still active
 - **WHEN** the seven-day pilot has not passed
-- **THEN** the existing CEO navigation remains in place apart from the bilingual language control
+- **THEN** the broader CEO workspace remains unchanged; the bilingual control and limited Today-enabled History/Reports/Approvals navigation exception in `unify-operational-history` are permitted without enabling the CEO simplification flag
 
 #### Scenario: CEO simplification is enabled
 - **WHEN** the manager pilot passes and the CEO feature flag is enabled

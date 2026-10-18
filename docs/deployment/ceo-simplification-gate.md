@@ -2,6 +2,12 @@
 
 Task 7.4 preserves the existing CEO destinations during the Farm Manager pilot. English/Amharic localization may change labels, but not destination order, routing, or access. The Today rollout control introduced in Task 7.3 enables managers only; it does not enable a CEO redesign.
 
+## Approved History navigation exception — 2026-10-18
+
+`unify-operational-history` permits a limited navigation cleanup for Today-enabled organizations: History and Reports are directly visible; replaced operational-history entries are removed; duplicate Governance/Requests entries become Approvals; Feed templates remains available under More. Legacy URLs and exact correction links remain supported. Disabled organizations and Admin retain their existing navigation.
+
+This exception does not enable the broader CEO workspace, change reporting calculations, or satisfy pilot acceptance. The database activation gate below remains unchanged.
+
 ## Current release boundary
 
 `20261005001000_ceo_workspace_pilot_gate.sql` blocks setting `today_pilot_accepted_at` or enabling `simplified_ceo_workspace_enabled` through ordinary INSERT/UPDATE, including service-role operations. A timestamp alone is not pilot evidence. No acceptance API, browser override, or release function exists in this phase. Normal organization edits, false/null no-ops, and manager Today enable/rollback remain supported.

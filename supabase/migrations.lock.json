@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 88,
-  "latest": "20261017001000_bounded_alert_reads.sql",
-  "aggregateSha256": "16c215b487ea9c675c260d2b7212529946ab14817eeb0ed4e8b7fb583b4ec0d2",
+  "count": 89,
+  "latest": "20261018000000_history_stock_operating_dates.sql",
+  "aggregateSha256": "2f1bc053e1f481327e9895cd294a0664dfba4b4ba299c2c269e50a1bbaf7370f",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -168,6 +168,7 @@
     "20261016001000_atomic_action_transitions.sql": "66cde52032ff3b7cc01045f898842d4243ec161ee265de9ce8438ea2adead525",
     "20261016002000_exact_action_source_verification.sql": "33ec8e9d120404d084447f648a2ba2bcfdd34436ed1a3117466f4bee9870c849",
     "20261017000000_authoritative_performance_warnings.sql": "0f82020906858b11f612b13908f139204b30c4a0591b0308f35d1603f48d94e5",
-    "20261017001000_bounded_alert_reads.sql": "3e8e72c9c2bf897886ae5d20522ec21440b0b59949c3d2a088b0a64a4e068d41"
+    "20261017001000_bounded_alert_reads.sql": "3e8e72c9c2bf897886ae5d20522ec21440b0b59949c3d2a088b0a64a4e068d41",
+    "20261018000000_history_stock_operating_dates.sql": "4597ad77d64b16419346bb0360dac2526f1cb6abccd85b51f55a7af246394e31"
   }
 }

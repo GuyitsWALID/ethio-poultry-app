@@ -7,7 +7,7 @@ const sidebar = await read("src/components/app-sidebar.tsx");
 const migration = await read("supabase/migrations/20261005001000_ceo_workspace_pilot_gate.sql");
 const followUp = await read("docs/deployment/ceo-simplification-gate.md");
 
-test("CEO destinations stay unchanged and independent of manager rollout", () => {
+test("disabled CEO destinations stay unchanged; enabled History cleanup does not activate the CEO redesign", () => {
   const sections = sidebar.split("const ceoNavSections: NavSection[] = [")[1].split("const farmManagerNavSections")[0];
   assert.deepEqual([...sections.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]), [
     "/app/ceo", "/app/ceo/setup", "/app/analytics", "/app/reports", "/app/governance",
@@ -16,6 +16,7 @@ test("CEO destinations stay unchanged and independent of manager rollout", () =>
     "/app/health", "/app/inventory", "/app/sales",
   ]);
   assert.match(sidebar, /if \(viewerRole === "ceo" \|\| viewerRole === "system_admin"\) return ceoNavSections/);
+  assert.match(sidebar, /viewerRole === "ceo" && todayWorkspaceEnabled\) return historyCeoNavSections/);
   assert.doesNotMatch(sidebar, /simplified_ceo_workspace_enabled|today_pilot_accepted_at/);
 });
 

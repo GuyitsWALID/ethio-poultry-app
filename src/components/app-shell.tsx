@@ -3,7 +3,8 @@
 import { CalendarDays, Menu, PanelsTopLeft, ShieldX } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import {HistoryReturn} from "@/components/history/history-return";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { HeaderAlertBell } from "@/components/header-alert-bell";
@@ -17,6 +18,7 @@ import type { ActiveRole } from "@/lib/permissions";
 
 const routeTitles = [
   ["/app/today", "today", "groups.farmOperations"],
+  ["/app/history", "history", "groups.farmOperations"],
   ["/app/farm-manager", "managerDashboard", "groups.farmOperations"],
   ["/app/ceo/setup", "branchNetwork", "groups.executiveOversight"],
   ["/app/ceo", "commandCenter", "groups.executiveOversight"],
@@ -92,6 +94,7 @@ export function AppShell({ children, viewerRole, todayWorkspaceEnabled }: { chil
           </header>
 
           <GovernanceAuthorizationBanner />
+          <Suspense><HistoryReturn/></Suspense>
           <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
         </div>
       </div>
