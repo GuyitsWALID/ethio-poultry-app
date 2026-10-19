@@ -9,5 +9,5 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const body = format === "csv" ? renderManagementReportCsv(run) : renderManagementReportHtml(run);
     const safeName = String(run.report_name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "management-report";
     return new Response(body, { headers: { "Content-Type": format === "csv" ? "text/csv; charset=utf-8" : "text/html; charset=utf-8", "Content-Disposition": `attachment; filename="${safeName}-${run.period_to}.${format}"`, "Cache-Control": "private, no-store" } });
-  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Report download failed." }, { status: 404 }); }
+  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Report download failed." }, { status: 404, headers: {"Cache-Control": "private, no-store"} }); }
 }

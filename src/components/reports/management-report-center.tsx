@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CalendarClock, CheckCircle2, Download, FileClock, Loader2, Pause, Play, Plus, RefreshCw } from "lucide-react";
 
 type Scope = { branchId?: string; farmId?: string; houseId?: string; flockId?: string; batchId?: string };
@@ -23,6 +23,7 @@ async function requestJson(url: string, options?: RequestInit) {
 export function ManagementReportCenter({ scope, dateFrom, dateTo, scopeLabel }: { scope: Scope; dateFrom: string; dateTo: string; scopeLabel: string }) {
   const [center, setCenter] = useState<Center | null>(null); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState<string | null>(null); const [showSchedule, setShowSchedule] = useState(false);
   const [name, setName] = useState("Weekly management brief"); const [cadence, setCadence] = useState<"weekly" | "monthly">("weekly"); const [runDay, setRunDay] = useState(1); const [recipientIds, setRecipientIds] = useState<string[]>([]);
+  const reportRetry = useRef<{payload: string; commandId: string} | null>(null);
   const cleanScope = useMemo(() => Object.fromEntries(Object.entries(scope).filter(([, value]) => Boolean(value))) as Scope, [scope]);
   const shareRecipients = useMemo(() => center?.recipients.filter((recipient) => recipient.id !== center.currentUserId) ?? [], [center]);
   const load = useCallback(async () => { try { setCenter(await requestJson("/api/reports/management")); setError(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not load saved reports."); } }, []);
@@ -39,7 +40,12 @@ export function ManagementReportCenter({ scope, dateFrom, dateTo, scopeLabel }: 
     }
     finally { setBusy(null); }
   };
-  const generate = () => act("generate", { action: "run_now", report: { name: `${scopeLabel} management brief`, scope: cleanScope, periodFrom: dateFrom, periodTo: dateTo, recipientIds } });
+  const generate = async () => {
+    const report = {name: `${scopeLabel} management brief`, scope: cleanScope, periodFrom: dateFrom, periodTo: dateTo, recipientIds};
+    const payload = JSON.stringify(report);
+    if (reportRetry.current?.payload !== payload) reportRetry.current = {payload, commandId: crypto.randomUUID()};
+    if (await act("generate", {action: "run_now", report: {...report, commandId: reportRetry.current.commandId}})) reportRetry.current = null;
+  };
   const createSchedule = async () => {
     const saved = await act("schedule", { action: "create_schedule", schedule: { name, cadence, runDay, runHour: 7, lookbackDays: cadence === "weekly" ? 7 : 30, scope: cleanScope, recipientIds } });
     if (saved) setShowSchedule(false);

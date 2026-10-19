@@ -24,6 +24,7 @@ import type { AccessContext } from "@/lib/access-context";
 import {effectiveWarehouseIds} from "@/lib/warehouse-access";
 import {reportConsumptionCost, reportOperatingDate, reportWarehouseAllowed, validReportDate} from "@/lib/report-safety";
 import {selectEvidenceScope, ReportEvidenceError} from "@/lib/report-evidence";
+import {reportResources, type ReportResources} from "@/lib/report-snapshot";
 
 type DbError = { message: string } | null;
 type Row = Record<string, unknown>;
@@ -128,7 +129,7 @@ function flockType(value: unknown): FlockType {
   return ["layer", "parent_stock", "broiler", "rearing"].includes(String(value)) ? String(value) as FlockType : "rearing";
 }
 
-export async function loadOperationsAnalytics(access: AccessContext, params: URLSearchParams) {
+export async function loadOperationsAnalytics(access: AccessContext, params: URLSearchParams, captureResources?: (resources: ReportResources) => void) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -162,7 +163,7 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
     const requestedBatch = params.get("batch_id") ?? "";
     if (requestedFarm && !permittedFarmIds.has(requestedFarm)) return json({ error: "The selected farm is outside your assigned scope." }, 403);
     const batches = requestedBatch ? await allRows<Row>((from, to) => db.from("batches").select("id,org_id,farm_id,house_id").eq("org_id", orgId).eq("id", requestedBatch).order("id").range(from, to)) : undefined;
-    selectEvidenceScope(orgId, role === "farm_manager", farms.filter(row => permittedFarmIds.has(String(row.id))), flockRows,
+    const selectedScope = selectEvidenceScope(orgId, role === "farm_manager", farms.filter(row => permittedFarmIds.has(String(row.id))), flockRows,
       {dateFrom, dateTo, branchId: requestedBranch, farmId: requestedFarm, houseId: requestedHouse, flockId: requestedFlock, batchId: requestedBatch}, {houses, batches});
 
     const farmById = new Map(farms.map((farm) => [String(farm.id), farm]));
@@ -207,7 +208,10 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
         : selectedFarmIds.size === 1
           ? String(farmById.get([...selectedFarmIds][0])?.name ?? "Assigned farm")
           : `${selectedFarmIds.size} farms`;
-    if (!scopedFlocks.length) return json(emptyResponse({ dateFrom, dateTo, previousFrom: prior.previousFrom, previousTo: prior.previousTo, days: prior.days, scopeLabel }));
+    if (!scopedFlocks.length) {
+      captureResources?.(reportResources(selectedScope.farmIds, []));
+      return json(emptyResponse({ dateFrom, dateTo, previousFrom: prior.previousFrom, previousTo: prior.previousTo, days: prior.days, scopeLabel }));
+    }
 
     const flockIds = scopedFlocks.map((flock) => flock.id);
     const unverifiedArchives = flockRows.filter(row => flockIds.includes(String(row.id)) && !["active", "quarantined"].includes(String(row.status)) && !completionByFlock.get(String(row.id)));
@@ -331,6 +335,7 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
       return Boolean(!requestedFarm && row.branch_id && selectedBranchIds.has(String(row.branch_id)));
     });
     const feedItemIds = new Set(inventoryRows.filter((row) => String(row.category) === "feed").map((row) => String(row.id)));
+    captureResources?.(reportResources(selectedScope.farmIds, scopedStock));
     const periodFeedIssues = scopedStock.filter((row) => {
       const date = reportOperatingDate(String(row.transaction_date));
       return feedItemIds.has(String(row.item_id)) && date !== null && date >= dateFrom && date <= dateTo;

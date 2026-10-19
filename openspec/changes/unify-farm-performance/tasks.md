@@ -15,10 +15,14 @@
   - [ ] Complete mixed-cohort FCR, separate culls, historical movement and all-topic coverage regressions.
 - [ ] 1.5 Revalidate scheduled creators and recipients; make snapshot/audit finalization atomic and scheduled/manual retries safe.
   - [x] Recheck the schedule creator's active CEO role before execution.
-  - [ ] Add atomic finalization/claims, recipient resource provenance and behavioral concurrency tests.
+  - [x] Add service-only leased retry claims, atomic snapshot/audit/receipt finalization, lost-response recovery and scheduled-period advancement.
+  - [x] Revalidate creator/recipient farm authority and stale schedule settings at finalization; test audit rollback, retries, stale workers and revoked assignments in Docker.
+  - [x] Capture server-side used-resource provenance and revalidate every recipient's warehouse access at atomic publication, listing and download; exercise direct authenticated RLS in Docker.
+  - [ ] Add true multi-connection concurrency tests; finish schedule-definition audit transactions.
 - [ ] 1.6 Protect CSV text, legacy snapshots and authorized saved-report pagination/exact selection; preserve failed forms.
   - [x] Share CSV formula protection across browser/saved exports; keep failed schedule forms open and make management reads private/no-store.
-  - [ ] Add legacy snapshot restrictions, authorized pagination and exact selection with database coverage.
+  - [x] Restrict unverifiable legacy snapshots to current tenant CEOs without rewriting them; filter authorized saved rows before the legacy list limit and protect direct database reads.
+  - [ ] Add complete saved-report pagination and exact selection with browser coverage.
 ## 2. Shared read model
 - [ ] 2.1 Implement authorized typed `/api/reports/performance` with metrics, series, coverage, units and explanation codes.
 - [ ] 2.2 Implement range-aware inventory, scope-wide feeding, previous-period comparisons and evidence links without duplicate events.

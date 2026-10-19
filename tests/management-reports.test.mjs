@@ -50,7 +50,7 @@ test("report history refreshes after failures and optional sharing excludes the 
 
 test("scheduler generates due reports and retains branded HTML and CSV downloads", () => {
   assert.match(service, /dispatchScheduledManagementReports/);
-  assert.match(service, /management-report-v1/);
+  assert.match(service, /scopedReportVersion/);
   assert.match(service, /renderManagementReportHtml/);
   assert.match(service, /renderManagementReportCsv/);
   assert.match(workflow, /platform-monitoring\.mjs reports/);
