@@ -38,3 +38,19 @@ export function reportConsumptionCost(rows: readonly Record<string, unknown>[]):
   }
   return total;
 }
+
+export function reportStockWindow<T extends {transaction_date:string;transaction_type:string;quantity:number}>(rows: readonly T[], from:string,to:string,now=Date.now()) {
+  const {start,end}=reportTimestampBounds(from,to);
+  let opening=0,periodEnd=0,current=0;
+  const during:T[]=[];
+  for(const row of rows){
+    const time=Date.parse(row.transaction_date),quantity=Number(row.quantity);
+    if(!Number.isFinite(time)||!Number.isFinite(quantity)||row.quantity===null)throw new Error("REPORT_STOCK_EVIDENCE_INVALID");
+    const change=["issue","transfer_out"].includes(row.transaction_type)?-Math.abs(quantity):row.transaction_type==="adjustment"?quantity:Math.abs(quantity);
+    if(time<Date.parse(start))opening+=change;
+    if(time<Date.parse(end))periodEnd+=change;
+    if(time<=now)current+=change;
+    if(time>=Date.parse(start)&&time<Date.parse(end))during.push(row);
+  }
+  return {opening,periodEnd,current,during};
+}

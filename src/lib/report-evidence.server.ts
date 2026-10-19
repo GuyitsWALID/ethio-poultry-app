@@ -4,6 +4,7 @@ import {governanceAdmin, type AccessContext} from "@/lib/access-context";
 import {reportRequest, type ReportInput} from "@/lib/report-workspace";
 import {projectReportEvidence, readAllEvidence, selectEvidenceScope, ReportEvidenceError} from "@/lib/report-evidence";
 import {effectiveWarehouseIds} from "@/lib/warehouse-access";
+import {projectLocationFlocks, reportRowInLocations, selectReportLocations, type ReportLocation} from "@/lib/report-locations";
 
 export async function loadReportEvidence(ctx: AccessContext, section: "health" | "finance", input: ReportInput) {
   if (!ctx.supportSessionId && ctx.role !== "ceo" && ctx.role !== "farm_manager") throw new ReportEvidenceError("REPORT_SCOPE_DENIED", 403);
@@ -27,19 +28,21 @@ export async function loadReportEvidence(ctx: AccessContext, section: "health" |
     if (assigned) query = query.in("id", assigned);
     return query;
   });
-  const flocks = !farms.length ? [] : await all(() => db.from("flocks").select("id,org_id,farm_id,house_id,batch_id,flock_code").eq("org_id", ctx.orgId).in("farm_id", farms.map(row => row.id)).order("id"));
+  const flocks = !farms.length ? [] : await all(() => db.from("flocks").select("id,org_id,farm_id,house_id,batch_id,flock_code").eq("org_id", ctx.orgId).order("id"));
+  const locations = !farms.length ? [] : await all(() => db.rpc("report_flock_locations",{p_org:ctx.orgId}).order("flock_id").order("from_at").order("house_id")) as ReportLocation[];
+  const selectedLocations = selectReportLocations(locations,flocks,farms,input);
   const [houses, batches, branches] = await Promise.all([
     input.houseId && farms.length ? all(() => db.from("houses").select("id,org_id,farm_id").eq("org_id", ctx.orgId).in("farm_id", farms.map(row => row.id)).order("id")) : Promise.resolve(undefined),
-    input.batchId && farms.length ? all(() => db.from("batches").select("id,org_id,farm_id,house_id").eq("org_id", ctx.orgId).in("farm_id", farms.map(row => row.id)).order("id")) : Promise.resolve(undefined),
+    input.batchId && farms.length ? all(() => db.from("batches").select("id,org_id,farm_id,house_id").eq("org_id", ctx.orgId).order("id")) : Promise.resolve(undefined),
     input.branchId && !restricted ? all(() => db.from("branches").select("id,org_id").eq("org_id", ctx.orgId).order("id")) : Promise.resolve(undefined),
   ]);
-  const scope = selectEvidenceScope(ctx.orgId, restricted, farms, flocks, input, {houses, batches, branches});
+  const scope = selectEvidenceScope(ctx.orgId, restricted, farms, projectLocationFlocks(flocks,selectReportLocations(locations.filter(row=>row.verified),flocks,farms,{})), input, {houses, batches, branches});
   scope.warehouseIds = restricted ? new Set(await effectiveWarehouseIds(ctx)) : null;
   if (section === "health") {
     if (!scope.flockIds.length) return projectReportEvidence(section, input, scope, {});
     const events = await all(() => db.from("health_events").select("id,org_id,flock_id,event_date,event_type,description,diagnosis,treatment,voided_at").eq("org_id", ctx.orgId).in("flock_id", scope.flockIds).is("voided_at", null).gte("event_date", input.dateFrom).lte("event_date", input.dateTo).order("event_date", {ascending: false}).order("id"));
     const vaccinations = await all(() => db.from("vaccination_events").select("id,org_id,flock_id,vaccine_name,voided_at").eq("org_id", ctx.orgId).in("flock_id", scope.flockIds).is("voided_at", null).order("id"));
-    return projectReportEvidence(section, input, scope, {events, vaccinations});
+    return projectReportEvidence(section, input, scope, {events:events.filter(row=>reportRowInLocations(row,selectedLocations,"event_date")), vaccinations});
   }
   if (scope.restricted && !scope.farmIds.length) return projectReportEvidence(section, input, scope, {});
   const filter = (query: any) => {

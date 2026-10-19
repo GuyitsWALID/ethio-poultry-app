@@ -19,7 +19,11 @@ export function selectEvidenceScope(orgId: string, restricted: boolean, farms: E
   const tenantFlocks = flocks.filter(row => row.org_id === orgId && tenantFarms.some(farm => farm.id === row.farm_id));
   const scopedMetadata = (rows: EvidenceRow[]) => rows.filter(row => row.org_id === orgId && tenantFarms.some(farm => farm.id === row.farm_id));
   const houses = scopedMetadata(metadata.houses ?? tenantFlocks.map(row => ({...row, id: row.house_id})));
-  const batches = scopedMetadata(metadata.batches ?? tenantFlocks.map(row => ({...row, id: row.batch_id})));
+  const batches = (metadata.batches ?? tenantFlocks.map(row => ({...row, id: row.batch_id})) as EvidenceRow[]).flatMap(row => {
+    if (row.org_id !== orgId) return [];
+    const linked = tenantFlocks.filter(flock => flock.batch_id === row.id);
+    return linked.length ? linked.map(flock => ({...row, farm_id: flock.farm_id, house_id: flock.house_id})) : scopedMetadata([row]);
+  });
   const branches = (metadata.branches ?? tenantFarms.map(row => ({...row, id: row.branch_id}))).filter(row => row.org_id === orgId);
   for (const [key, records, column] of [["farmId", tenantFarms, "id"], ["branchId", branches, "id"], ["houseId", houses, "id"], ["flockId", tenantFlocks, "id"], ["batchId", batches, "id"]] as const) {
     if (input[key] && !records.some(row => row[column] === input[key])) throw new ReportEvidenceError("REPORT_SCOPE_DENIED", 403);
@@ -54,7 +58,10 @@ export function projectReportEvidence(section: "health" | "finance", input: Repo
     result.items = expenses.map(row => ({kind: "expense", label: text(row.description), date: text(row.entry_date), context: scope.farmNames.get(text(row.farm_id)) || "", amount: amount(row.amount)}));
     for (const row of sources.periods ?? []) {
       if (!allowed(row) || text(row.period_start) > input.dateTo || text(row.period_end) < input.dateFrom) continue;
-      result.items.push({kind: "period", label: "", date: text(row.period_start), endDate: text(row.period_end), context: scope.farmNames.get(text(row.farm_id)) || "", status: ["draft", "reconciled", "locked"].includes(text(row.status)) ? text(row.status) as EvidenceItem["status"] : undefined, amount: amount(row.total_absorbed_cost), unallocated: amount(row.unallocated_cost), warnings: Array.isArray(row.reconciliation_warnings) ? row.reconciliation_warnings.length : undefined});
+      // Legacy aggregates have no frozen store provenance. A farm grant alone
+      // cannot prove that all stores absorbed in these totals are authorized.
+      const amountsAllowed = scope.warehouseIds === null;
+      result.items.push({kind: "period", label: amountsAllowed ? "" : "Financial totals unavailable: source warehouse permissions cannot be verified.", date: text(row.period_start), endDate: text(row.period_end), context: scope.farmNames.get(text(row.farm_id)) || "", status: ["draft", "reconciled", "locked"].includes(text(row.status)) ? text(row.status) as EvidenceItem["status"] : undefined, amount: amountsAllowed ? amount(row.total_absorbed_cost) : undefined, unallocated: amountsAllowed ? amount(row.unallocated_cost) : undefined, warnings: amountsAllowed && Array.isArray(row.reconciliation_warnings) ? row.reconciliation_warnings.length : undefined});
     }
   }
   return result;

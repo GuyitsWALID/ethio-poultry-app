@@ -3,6 +3,7 @@ import {managerWarehouseAccess} from "@/lib/warehouse-access";
 import {reportOperatingDate, reportTimestampBounds, reportWarehouseAllowed} from "@/lib/report-safety";
 import {readReportQuery} from "@/lib/report-pagination";
 import {selectEvidenceScope, ReportEvidenceError} from "@/lib/report-evidence";
+import {projectLocationFlocks, reportRowInLocations, selectReportLocations, type ReportLocation} from "@/lib/report-locations";
 
 import {
   applySalesFilters,
@@ -15,11 +16,11 @@ import {
 } from "@/lib/sales";
 import {
   buildTierSummary,
-  eggUnitsSold,
   missingCostBasis,
   round,
   unitPricePerEgg,
   type EggCostBasis,
+  reportSaleCost,
 } from "@/lib/profitability";
 
 type AggregateRow = {
@@ -28,8 +29,9 @@ type AggregateRow = {
   paid: number;
   balanceDue: number;
   quantity: number;
-  estimatedCost: number;
-  estimatedProfit: number;
+  quantityByUnit: Map<string,number>;
+  estimatedCost: number | null;
+  estimatedProfit: number | null;
   paidProfitMargin: number | null;
 };
 
@@ -40,6 +42,7 @@ function emptyAggregate(label: string): AggregateRow {
     paid: 0,
     balanceDue: 0,
     quantity: 0,
+    quantityByUnit: new Map(),
     estimatedCost: 0,
     estimatedProfit: 0,
     paidProfitMargin: null,
@@ -49,7 +52,7 @@ function emptyAggregate(label: string): AggregateRow {
 function aggregateByPeriod(
   records: DailySalesRecord[],
   period: "day" | "week" | "month" | "quarter",
-  costForRecord: (record: DailySalesRecord) => number
+  costForRecord: (record: DailySalesRecord) => number | null
 ) {
   const map = new Map<string, AggregateRow>();
   records.forEach((record) => {
@@ -60,22 +63,24 @@ function aggregateByPeriod(
     current.paid += record.paid_amount;
     current.balanceDue += record.balance_due;
     current.quantity += record.quantity;
-    current.estimatedCost += cost;
-    current.estimatedProfit += record.gross_amount - cost;
-    current.paidProfitMargin = current.paid > 0 ? round(((current.paid - current.estimatedCost) / current.paid) * 100) : null;
+    current.quantityByUnit.set(record.unit,(current.quantityByUnit.get(record.unit)??0)+record.quantity);
+    current.estimatedCost = cost===null||current.estimatedCost===null?null:current.estimatedCost+cost;
+    current.estimatedProfit = cost===null||current.estimatedProfit===null?null:current.estimatedProfit+record.gross_amount-cost;
+    current.paidProfitMargin = current.paid > 0 && current.balanceDue===0 && current.estimatedCost!==null ? round(((current.paid - current.estimatedCost) / current.paid) * 100) : null;
     map.set(key, current);
   });
 
   return Array.from(map.values())
     .sort((a, b) => (a.label < b.label ? -1 : 1))
-    .map((row) => ({
+    .map(({quantityByUnit,...row}) => ({
       ...row,
       revenue: round(row.revenue),
       paid: round(row.paid),
       balanceDue: round(row.balanceDue),
-      quantity: round(row.quantity),
-      estimatedCost: round(row.estimatedCost),
-      estimatedProfit: round(row.estimatedProfit),
+      quantity: quantityByUnit.size<=1?round(row.quantity):null,
+      quantityByUnit:[...quantityByUnit].map(([unit,quantity])=>({unit,quantity:round(quantity)})),
+      estimatedCost: row.estimatedCost===null?null:round(row.estimatedCost),
+      estimatedProfit: row.estimatedProfit===null?null:round(row.estimatedProfit),
     }));
 }
 
@@ -109,7 +114,7 @@ export async function GET(request: NextRequest) {
         .order("id")),
       readReportQuery(() => supabaseAdmin
         .from("daily_farm_records")
-        .select("record_date, flock_id, normal_eggs, broken_eggs, total_eggs, feed_intake_grams")
+        .select("record_date, flock_id, farm_id, house_id, normal_eggs, broken_eggs, total_eggs, feed_intake_grams")
         .eq("org_id", ctx.orgId)
         .is("voided_at",null)
         .gte("record_date", dateFrom)
@@ -129,7 +134,7 @@ export async function GET(request: NextRequest) {
         .gte("transaction_date", bounds.start)
         .lt("transaction_date", bounds.end)
         .order("transaction_date").order("id")),
-      readReportQuery(() => supabaseAdmin.from("flocks").select("id, org_id, flock_code, farm_id, house_id, batch_id").eq("org_id", ctx.orgId).order("id")),
+      readReportQuery(() => supabaseAdmin.from("flocks").select("id, org_id, flock_code, flock_type, farm_id, house_id, batch_id").eq("org_id", ctx.orgId).order("id")),
       readReportQuery(() => supabaseAdmin.from("farms").select("id, org_id, name, branch_id").eq("org_id", ctx.orgId).order("id")),
       readReportQuery(() => supabaseAdmin
         .from("monthly_cost_periods")
@@ -159,8 +164,15 @@ export async function GET(request: NextRequest) {
       batch_id: params.get("batch_id"),
     };
     const houses = requestedScope.house_id ? (await readReportQuery(() => supabaseAdmin.from("houses").select("id,org_id,farm_id").eq("org_id", ctx.orgId).eq("id", requestedScope.house_id!).order("id"))).data : undefined;
+    const locations = (await readReportQuery<ReportLocation>(()=>supabaseAdmin.rpc("report_flock_locations",{p_org:ctx.orgId}).order("flock_id").order("from_at").order("house_id"))).data;
+    const permittedFarms = farmRes.data.filter(row => hasScopedAccess(ctx,{farm_id:row.id}));
+    const locationFilter={branchId:requestedScope.branch_id??undefined,farmId:requestedScope.farm_id??undefined,houseId:requestedScope.house_id??undefined,flockId:requestedScope.flock_id??undefined,batchId:requestedScope.batch_id??undefined};
+    const selectedLocations=selectReportLocations(locations,flockRes.data,permittedFarms,locationFilter);
+    const periodFlockIds=new Set(selectedLocations.filter(row=>row.from_date<=dateTo&&(!row.to_date||row.to_date>=dateFrom)).map(row=>row.flock_id));
+    const eggFlockIds=new Set(flockRes.data.filter(row=>periodFlockIds.has(row.id)&&["layer","parent_stock"].includes(row.flock_type)).map(row=>row.id));
+    const mixedProduction=flockRes.data.some(row=>periodFlockIds.has(row.id)&&!["layer","parent_stock"].includes(row.flock_type));
     selectEvidenceScope(ctx.orgId, ctx.role === "farm_manager" && !ctx.supportSessionId,
-      farmRes.data.filter(row => hasScopedAccess(ctx, {farm_id: row.id})), flockRes.data,
+      permittedFarms, projectLocationFlocks(flockRes.data,selectReportLocations(locations.filter(row=>row.verified),flockRes.data,permittedFarms,{})),
       {dateFrom, dateTo, branchId: requestedScope.branch_id ?? undefined, farmId: requestedScope.farm_id ?? undefined, houseId: requestedScope.house_id ?? undefined, flockId: requestedScope.flock_id ?? undefined, batchId: requestedScope.batch_id ?? undefined}, {houses, batches: batchRes.data});
     const scopedBatchIds = new Set(records.map((record) => record.batch_id).filter(Boolean) as string[]);
     const scopeMatches = (row: {
@@ -183,21 +195,6 @@ export async function GET(request: NextRequest) {
     }) => (Object.entries(requestedScope) as Array<[keyof typeof requestedScope, string | null]>).every(
       ([key, value]) => value ? row[key] === value : !row[key]
     );
-    const farmBranchMap = new Map((farmRes.data ?? []).map((farm) => [farm.id, farm.branch_id]));
-    const productionFlockIds = new Set(
-      (flockRes.data ?? [])
-        .filter((flock) => {
-          if (!hasScopedAccess(ctx, flock)) return false;
-          if (requestedScope.flock_id && flock.id !== requestedScope.flock_id) return false;
-          if (requestedScope.batch_id && flock.batch_id !== requestedScope.batch_id) return false;
-          if (requestedScope.house_id && flock.house_id !== requestedScope.house_id) return false;
-          if (requestedScope.farm_id && flock.farm_id !== requestedScope.farm_id) return false;
-          if (requestedScope.branch_id && farmBranchMap.get(flock.farm_id) !== requestedScope.branch_id) return false;
-          return true;
-        })
-        .map((flock) => flock.id)
-    );
-
     const inventoryCategoryByItem = new Map((inventoryRes.data ?? []).map((item) => [item.id, String(item.category)]));
     const costedInventoryItemIds = new Set(
       (inventoryRes.data ?? [])
@@ -205,20 +202,23 @@ export async function GET(request: NextRequest) {
         .map((item) => item.id)
     );
     const issuedInventoryCostByCategory = new Map<string, number>();
+    let incompleteConsumptionCosts=false;
     (stockRes.data ?? []).forEach((row) => {
       if (!reportWarehouseAllowed(row.warehouse_id, warehouseIds) || !hasScopedAccess(ctx, row)) return;
       if (!costedInventoryItemIds.has(row.item_id)) return;
       if ((row.transaction_type !== "issue" && row.transaction_type !== "return") || !scopeMatches(row)) return;
+      if(row.flock_id&&!eggFlockIds.has(row.flock_id))return;
       const category = inventoryCategoryByItem.get(row.item_id) ?? "";
+      if(row.unit_cost===null||row.unit_cost===undefined||!Number.isFinite(Number(row.unit_cost))){incompleteConsumptionCosts=true;return;}
       const consumptionDelta = row.quantity * row.unit_cost * (row.transaction_type === "return" ? -1 : 1);
       issuedInventoryCostByCategory.set(category, (issuedInventoryCostByCategory.get(category) ?? 0) + consumptionDelta);
     });
     const normalEggs = (dailyRes.data ?? []).reduce((sum, row) => {
-      if (!productionFlockIds.has(row.flock_id)) return sum;
-      return sum + (row.normal_eggs ?? row.total_eggs ?? 0);
+      if (!eggFlockIds.has(row.flock_id)||!reportRowInLocations(row,selectedLocations)) return sum;
+      return sum + (row.normal_eggs ?? 0);
     }, 0);
     const brokenEggs = (dailyRes.data ?? []).reduce((sum, row) => {
-      if (!productionFlockIds.has(row.flock_id)) return sum;
+      if (!eggFlockIds.has(row.flock_id)||!reportRowInLocations(row,selectedLocations)) return sum;
       return sum + (row.broken_eggs ?? 0);
     }, 0);
     const inventoryCostCategories = new Set(["feed", "medicine", "vaccine", "vitamin", "supplement", "packaging"]);
@@ -242,6 +242,8 @@ export async function GET(request: NextRequest) {
     });
 
     const lockedPeriod = (lockedPeriodsRes.data ?? [])
+      .filter(()=>warehouseIds===null)
+      .filter(row=>row.period_start<=dateFrom&&row.period_end>=dateTo)
       .filter(row => hasScopedAccess(ctx, row))
       .filter(lockedScopeMatches)
       .sort((a, b) => {
@@ -274,7 +276,7 @@ export async function GET(request: NextRequest) {
           sourceLabel: `Locked ${lockedPeriod.period_start} to ${lockedPeriod.period_end}`,
           missingCostReasons: [],
         }
-      : normalEggs > 0 && issuedInventoryCost > 0
+      : !mixedProduction && !incompleteConsumptionCosts && (dailyRes.data??[]).filter(row=>eggFlockIds.has(row.flock_id)&&reportRowInLocations(row,selectedLocations)).every(row=>row.normal_eggs!==null) && normalEggs > 0 && issuedInventoryCost > 0
         ? {
             status: "rolling_estimate",
             baseCostPerEgg: rollingAbsorbedCost / normalEggs,
@@ -291,28 +293,24 @@ export async function GET(request: NextRequest) {
 
     const costPerBirdByBatch = new Map<string, number>();
     (batchRes.data ?? []).forEach((batch) => {
+      if(!hasScopedAccess(ctx,batch))return;
       if (scopedBatchIds.size && !scopedBatchIds.has(batch.id)) return;
       const birdCount = batch.total_count ?? 0;
       const fallback =
         (batch.purchase_cost_per_bird ?? 0) * birdCount + (batch.transport_cost ?? 0) + (batch.other_cost ?? 0);
-      const totalCost = batch.total_batch_cost ?? fallback;
-      if (birdCount > 0 && totalCost > 0) costPerBirdByBatch.set(batch.id, totalCost / birdCount);
+      const totalCost = batch.total_batch_cost ?? (batch.purchase_cost_per_bird===null?null:fallback);
+      if (birdCount > 0 && totalCost!==null && totalCost >= 0) costPerBirdByBatch.set(batch.id, totalCost / birdCount);
     });
 
-    const costForRecord = (record: DailySalesRecord) => {
-      if (record.product_category === "egg" && costPerEgg) return eggUnitsSold(record) * costPerEgg;
-      if (record.product_category === "bird" && record.batch_id) {
-        return record.quantity * (costPerBirdByBatch.get(record.batch_id) ?? 0);
-      }
-      return 0;
-    };
+    const costForRecord = (record: DailySalesRecord) => reportSaleCost(record,costPerEgg,costPerBirdByBatch);
 
     const totalRevenue = records.reduce((sum, record) => sum + record.gross_amount, 0);
     const totalPaid = records.reduce((sum, record) => sum + record.paid_amount, 0);
     const totalBalance = records.reduce((sum, record) => sum + record.balance_due, 0);
     const totalQuantity = records.reduce((sum, record) => sum + record.quantity, 0);
-    const estimatedCost = records.reduce((sum, record) => sum + costForRecord(record), 0);
-    const estimatedProfit = totalRevenue - estimatedCost;
+    const costs=records.map(costForRecord);
+    const estimatedCost = costs.some(cost=>cost===null)?null:costs.reduce<number>((sum,cost)=>sum+(cost??0),0);
+    const estimatedProfit = estimatedCost===null?null:totalRevenue-estimatedCost;
     const eggRecords = records.filter((record) => record.product_category === "egg");
     const belowTargetCount = eggRecords.filter((record) => {
       if (!costBasis.targetPricePerEgg) return false;
@@ -330,8 +328,8 @@ export async function GET(request: NextRequest) {
       costBasis.status === "missing" && records.some((record) => record.product_category === "egg")
         ? "Egg margin is unavailable because normal egg totals or absorbed costs are incomplete."
         : null,
-      records.some((record) => record.product_category === "bird" && (!record.batch_id || !costPerBirdByBatch.has(record.batch_id)))
-        ? "Bird margin is estimated because one or more sales are missing batch cost signals."
+      records.some((record) => record.product_category === "bird" && costForRecord(record)===null)
+        ? "Bird margin is unavailable because a recorded head count or authorized batch acquisition cost is missing."
         : null,
       excludedDuplicateCost > 0
         ? `${round(excludedDuplicateCost)} in manual inventory costs was excluded because issued stock already provides that category cost.`
@@ -375,12 +373,13 @@ export async function GET(request: NextRequest) {
         revenue: round(totalRevenue),
         paid: round(totalPaid),
         balanceDue: round(totalBalance),
-        quantity: round(totalQuantity),
-        averageSellingPrice: totalQuantity > 0 ? round(totalRevenue / totalQuantity) : 0,
-        estimatedCost: round(estimatedCost),
-        estimatedProfit: round(estimatedProfit),
-        actualPaidMargin: totalPaid > 0 ? round(((totalPaid - estimatedCost) / totalPaid) * 100) : null,
-        marginStatus: costBasis.status === "locked" && !missingCostReasons.length ? "tracked" : "estimated",
+        quantity: new Set(records.map(row=>row.unit)).size<=1?round(totalQuantity):null,
+        quantityByUnit:[...new Set(records.map(row=>row.unit))].map(unit=>({unit,quantity:round(records.filter(row=>row.unit===unit).reduce((sum,row)=>sum+row.quantity,0))})),
+        averageSellingPrice: totalQuantity > 0 && new Set(records.map(row=>row.unit)).size===1 ? round(totalRevenue / totalQuantity) : null,
+        estimatedCost: estimatedCost===null?null:round(estimatedCost),
+        estimatedProfit: estimatedProfit===null?null:round(estimatedProfit),
+        actualPaidMargin: totalPaid > 0 && totalBalance===0 && estimatedCost!==null ? round(((totalPaid - estimatedCost) / totalPaid) * 100) : null,
+        marginStatus: estimatedCost===null?"unavailable":costBasis.status === "locked" && !missingCostReasons.length ? "tracked" : "estimated",
         costBasisStatus: costBasis.status,
         breakEvenPricePerEgg: costBasis.baseCostPerEgg === null ? null : round(costBasis.baseCostPerEgg, 4),
         targetPricePerEgg: costBasis.targetPricePerEgg === null ? null : round(costBasis.targetPricePerEgg, 4),

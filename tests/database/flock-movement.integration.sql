@@ -46,6 +46,11 @@ begin
   update public.user_farm_access set revoked_at=null where profile_id=manager and farm_id=destination_farm;
   result:=public.apply_governance_request(request);
   if result.status<>'applied' or not public.valid_flock_movement_chain(o,flock) then raise exception 'Approved movement chain invalid'; end if;
+  if (select count(*) from public.report_flock_locations(o) where flock_id=flock)<>2
+    or not exists(select 1 from public.report_flock_locations(o) where flock_id=flock and farm_id=farm and house_id=a and to_date=(moved at time zone 'Africa/Addis_Ababa')::date and verified)
+    or not exists(select 1 from public.report_flock_locations(o) where flock_id=flock and farm_id=destination_farm and house_id=b and to_date is null and verified) then
+    raise exception 'Reports lost approved original/destination location evidence'; end if;
+  if has_function_privilege('authenticated','public.report_flock_locations(uuid)','EXECUTE') then raise exception 'Browser can bypass reporting scope'; end if;
   if not exists(select 1 from public.flocks where id=flock and farm_id=destination_farm and house_id=b and batch_id=batch and placed_at=arrival and current_count=100)
     or not exists(select 1 from public.batches where id=batch and farm_id=farm and house_id=a and batch_cycle_id=cycle) then raise exception 'Original placement was rewritten'; end if;
   perform public.apply_governance_request(request);

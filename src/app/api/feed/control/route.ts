@@ -1,19 +1,26 @@
-import { addisDate, calculateFeedPerBirdDay, calculateGrowthFcr, calculateInventoryCover, calculateLayerFcr, dateDays, feedAdmin, feedJson, getFeedContext, resolveFeedBatch, roundFeed, statusFromVariance } from "@/lib/feed-control";
+import { addisDate, calculateFeedPerBirdDay, calculateInventoryCover, dateDays, feedAdmin, feedJson, getFeedContext, resolveFeedBatch, roundFeed, statusFromVariance } from "@/lib/feed-control";
+import {calculateReportFcr} from "@/lib/feed-calculations";
+import {managerWarehouseAccess} from "@/lib/warehouse-access";
+import {reportConsumptionCost,reportTimestampBounds,validReportDate} from "@/lib/report-safety";
+import {readReportQuery} from "@/lib/report-pagination";
+import type {ReportLocation} from "@/lib/report-locations";
 
 export const dynamic = "force-dynamic";
 
 type Row = Record<string, unknown>;
 type SourceResult = { data: Row[]; error: string | null };
 type DbResult = { data: unknown; error: { message: string } | null };
-type PagedQuery = { range: (from: number, to: number) => PromiseLike<DbResult> };
+type PagedQuery = { range: (from: number, to: number) => PromiseLike<DbResult>; order: (column:string)=>PagedQuery };
 
 async function source(query: PagedQuery): Promise<SourceResult> {
+  query=query.order("id");
   const pageSize = 1000; const data: Row[] = [];
   for (let from = 0; ; from += pageSize) {
     const result = await query.range(from, from + pageSize - 1);
     if (result.error) return { data, error: result.error.message };
     const page = Array.isArray(result.data) ? result.data as Row[] : [];
     data.push(...page);
+    if(data.length>100000)return {data:[],error:"REPORT_TOO_LARGE"};
     if (page.length < pageSize) return { data, error: null };
   }
 }
@@ -22,6 +29,7 @@ const number = (value: unknown) => typeof value === "number" ? value : Number(va
 const nullable = (value: number, valid: boolean) => valid && Number.isFinite(value) ? roundFeed(value) : null;
 
 export async function GET(request: Request) {
+  try {
   const ctx = await getFeedContext();
   if (ctx instanceof Response) return ctx;
   const url = new URL(request.url);
@@ -32,16 +40,18 @@ export async function GET(request: Request) {
 
   const today = addisDate();
   const dateTo = url.searchParams.get("date_to") ?? today;
+  if(!validReportDate(dateTo))return feedJson({error:"Choose a valid final report date."},400);
   const requestedFrom = url.searchParams.get("date_from");
   const dateFrom = requestedFrom ?? new Date(Date.parse(`${dateTo}T00:00:00Z`) - 29 * 86_400_000).toISOString().slice(0, 10);
-  if (dateFrom > dateTo || dateDays(dateFrom, dateTo) > 370) return feedJson({ error: "Use a valid reporting period of 371 days or less." }, 400);
+  try{reportTimestampBounds(dateFrom,dateTo);}catch{return feedJson({error:"Use a valid reporting period of at most 366 days."},400);}
   const sourceFrom = dateFrom < today ? dateFrom : today;
   const sourceTo = dateTo > today ? dateTo : today;
 
   const db = feedAdmin;
   const org = ctx.orgId;
+  if(url.searchParams.get("branch_id")&&url.searchParams.get("branch_id")!==resolved.batch.branch_id)return feedJson({error:"The branch and batch filters do not agree."},400);
   const [flocksS, templatesS, schedulesS, sessionsS, closuresS, dailyS, weightsS, tasksS, itemsS, warehousesS, ledgerS, settingsS, standardsS, executionsS] = await Promise.all([
-    source(db.from("flocks").select("id,flock_code,flock_type,breed_id,current_count,initial_count,placement_date,age_at_placement_days,farm_id,house_id,status").eq("org_id", org).eq("batch_id", batchId).eq("status", "active")),
+    source(db.from("flocks").select("id,flock_code,flock_type,breed_id,current_count,initial_count,placement_date,age_at_placement_days,farm_id,house_id,status").eq("org_id", org).eq("batch_id", batchId).order("id")),
     source(db.from("batch_feed_templates").select("id,name,source_type,is_active,created_at,batch_feed_template_rows(*),batch_feed_template_milestones(*)").eq("org_id", org).eq("batch_id", batchId).order("created_at", { ascending: false })),
     source(db.from("feeding_schedules").select("*").eq("org_id", org).eq("batch_id", batchId).gte("schedule_date", sourceFrom).lte("schedule_date", sourceTo).order("schedule_date")),
     source(db.from("feeding_session_records").select("*").eq("org_id", org).is("voided_at",null).eq("batch_id", batchId).gte("record_date", sourceFrom).lte("record_date", sourceTo).order("record_date")),
@@ -51,13 +61,34 @@ export async function GET(request: Request) {
     source(db.from("batch_weight_check_tasks").select("*,batch_feed_template_rows(age_day_start,age_day_end,target_weight_min_g,target_weight_max_g)").eq("org_id", org).eq("batch_id", batchId).order("due_date")),
     source(db.from("inventory_items").select("id,name,unit,unit_cost,reorder_level").eq("org_id", org).eq("category", "feed").order("name")),
     source(db.from("warehouses").select("id,name,branch_id,type").eq("org_id", org).eq("branch_id", resolved.batch.branch_id).order("name")),
-    source(db.from("stock_ledger").select("item_id,warehouse_id,quantity,transaction_type,unit_cost,transaction_date").eq("org_id", org).lte("transaction_date", sourceTo)),
+    source(db.from("stock_ledger").select("item_id,warehouse_id,flock_id,batch_id,source_kind,quantity,transaction_type,unit_cost,transaction_date").eq("org_id", org).lt("transaction_date", new Date(Date.parse(`${sourceTo}T00:00:00+03:00`)+86400000).toISOString()).order("transaction_date").order("id")),
     source(db.from("feed_control_settings").select("warning_variance_pct,critical_variance_pct").eq("org_id", org)),
     source(db.from("breed_standards").select("breed_id,week_number,target_feed_g,target_weight_g").eq("org_id", org).order("week_number")),
     source(db.from("feed_milestone_executions").select("*").eq("org_id", org)),
   ]);
 
   const flockIds = flocksS.data.map((row) => String(row.id));
+  const [locationRows,clearanceRows,cycleRows]=await Promise.all([
+    readReportQuery<ReportLocation>(()=>db.rpc("report_flock_locations" as never,{p_org:org} as never).order("flock_id").order("from_at").order("house_id")),
+    readReportQuery<Row>(()=>db.from("effective_cycle_clearances").select("flock_id,closure_id").eq("org_id",org).order("flock_id")),
+    readReportQuery<Row>(()=>db.from("batch_cycle_closures").select("id,completed_at").eq("org_id",org).order("id")),
+  ]);
+  const relevantLocations=locationRows.data.filter(row=>flockIds.includes(row.flock_id)&&row.from_date<=dateTo&&(!row.to_date||row.to_date>=dateFrom));
+  if(relevantLocations.some(row=>!row.verified))return feedJson({error:"The flock movement history needs reviewed correction before reporting."},409);
+  if(ctx.role==="farm_manager"&&!ctx.supportSessionId&&relevantLocations.some(row=>!ctx.allowedFarmIds.has(row.farm_id)))return feedJson({error:"This batch includes historical farm evidence outside your current assignments."},403);
+  for(const [key,column] of [["farm_id","farm_id"],["house_id","house_id"],["flock_id","flock_id"]] as const){
+    const requested=url.searchParams.get(key);
+    if(requested&&relevantLocations.some(row=>row[column]!==requested))return feedJson({error:"Feed Control covers the complete batch. Select matching batch-level filters; narrower comparisons belong in Farm performance."},400);
+  }
+  const cycleEnds=new Map(cycleRows.data.map(row=>[String(row.id),new Date(Date.parse(String(row.completed_at))+3*3600000).toISOString().slice(0,10)]));
+  const completed=new Map(clearanceRows.data.map(row=>[String(row.flock_id),cycleEnds.get(String(row.closure_id))]));
+  const unverifiedArchive=flocksS.data.some(row=>!["active","quarantined"].includes(String(row.status))&&!completed.get(String(row.id)));
+  const allowedStores=ctx.role==="farm_manager"&&!ctx.supportSessionId?new Set((await managerWarehouseAccess(ctx.userId,ctx.orgId)).map(row=>row.id)):null;
+  if(allowedStores){
+    if(sessionsS.data.some(row=>row.warehouse_id&&!allowedStores.has(String(row.warehouse_id))))return feedJson({error:"Shared-store permission is required to view this feeding evidence."},403);
+    warehousesS.data=warehousesS.data.filter(row=>allowedStores.has(String(row.id)));
+    ledgerS.data=ledgerS.data.filter(row=>allowedStores.has(String(row.warehouse_id)));
+  }
   if (flockIds.length) {
     const [daily, weights] = await Promise.all([
       source(db.from("daily_farm_records").select("id,flock_id,record_date,opening_birds,closing_birds,feed_intake_grams,feed_intake_quantity,feed_leftover_grams,total_eggs,normal_eggs,broken_eggs,dirty_eggs,average_egg_weight_g").eq("org_id", org).is("voided_at",null).in("flock_id", flockIds).gte("record_date", sourceFrom).lte("record_date", sourceTo).order("record_date")),
@@ -69,7 +100,7 @@ export async function GET(request: Request) {
 
   const sources = { flocks: flocksS, templates: templatesS, schedules: schedulesS, sessions: sessionsS, closures: closuresS, dailyRecords: dailyS, weights: weightsS, tasks: tasksS, inventory: itemsS, warehouses: warehousesS, stockLedger: ledgerS, settings: settingsS, breedStandards: standardsS, milestoneExecutions: executionsS };
   const sourceStatuses = Object.fromEntries(Object.entries(sources).map(([key, value]) => [key, { status: value.error ? "failed" : "available", error: value.error }]));
-  if (flocksS.error) return feedJson({ error: flocksS.error, meta: { sources: sourceStatuses } }, 500);
+  if (Object.values(sources).some(value=>value.error)) return feedJson({ error: "Feed evidence could not be completely loaded.", meta: { sources: sourceStatuses } }, 500);
 
   const settings = settingsS.data[0];
   const warning = number(settings?.warning_variance_pct || 5);
@@ -83,7 +114,7 @@ export async function GET(request: Request) {
   const closures = new Map(closuresS.data.map((row) => [`${row.flock_id}:${row.record_date}`, row]));
   const dailyByKey = new Map(dailyS.data.map((row) => [`${row.flock_id}:${row.record_date}`, row]));
 
-  const todayFlocks = flocksS.data.map((flock) => {
+  const todayFlocks = flocksS.data.filter(row=>["active","quarantined"].includes(String(row.status))).map((flock) => {
     const flockSessions = sessionsS.data.filter((row) => row.flock_id === flock.id && row.record_date === today);
     const share = totalBirds > 0 ? number(flock.current_count) / totalBirds : 0;
     const planned = flockSessions.length ? flockSessions.reduce((sum, row) => sum + number(row.planned_feed_kg), 0)
@@ -98,14 +129,15 @@ export async function GET(request: Request) {
     return { ...flock, plannedKg: roundFeed(planned), actualKg: roundFeed(actual), varianceKg: roundFeed(actual - planned), variancePct: nullable((actual - planned) / planned * 100, planned > 0), closeStatus: closure?.status ?? "open", sessions: defaults };
   });
 
-  let actualFeed = 0; let plannedFeed = 0; let birdDays = 0; let coveredDays = 0; let coveredFlockDays = 0; let expectedFlockDays = 0; let eggMassKg = 0; let legacyDays = 0;
+  let actualFeed = 0; let plannedFeed = 0; let birdDays = 0; let coveredDays = 0; let coveredFlockDays = 0; let expectedFlockDays = 0; let legacyDays = 0;
   const trend = [] as Row[];
   for (let offset = 0; offset <= dateDays(dateFrom, dateTo); offset += 1) {
     const date = new Date(Date.parse(`${dateFrom}T00:00:00Z`) + offset * 86_400_000).toISOString().slice(0, 10);
     const schedule = schedulesS.data.find((row) => row.schedule_date === date);
     let dayActual = 0; let dayBirds = 0; let isCovered = false; let isLegacy = false;
     for (const flock of flocksS.data) {
-      const eligible = date >= String(flock.placement_date) && date <= today;
+      const completion=completed.get(String(flock.id));
+      const eligible = date >= String(flock.placement_date) && date <= today && (!completion||date<=completion);
       if (eligible) expectedFlockDays += 1;
       const closed = closures.get(`${flock.id}:${date}`)?.status === "closed";
       const rows = sessionsS.data.filter((row) => row.flock_id === flock.id && row.record_date === date);
@@ -113,7 +145,6 @@ export async function GET(request: Request) {
       if (closed && rows.length) { dayActual += rows.reduce((sum, row) => sum + number(row.actual_feed_kg), 0); isCovered = true; if (eligible) coveredFlockDays += 1; }
       else if (daily && (daily.feed_intake_grams !== null || daily.feed_intake_quantity !== null)) { dayActual += daily.feed_intake_grams !== null ? number(daily.feed_intake_grams) / 1000 : number(daily.feed_intake_quantity); isCovered = true; isLegacy = true; if (eligible) coveredFlockDays += 1; }
       if (daily?.opening_birds !== null && daily?.opening_birds !== undefined) dayBirds += number(daily.opening_birds);
-      if (daily?.total_eggs && daily?.average_egg_weight_g) eggMassKg += number(daily.total_eggs) * number(daily.average_egg_weight_g) / 1000;
     }
     const dayPlan = schedule ? number(schedule.planned_feed_kg) : 0;
     actualFeed += dayActual; plannedFeed += dayPlan; birdDays += dayBirds;
@@ -130,10 +161,10 @@ export async function GET(request: Request) {
   const trailingDays = Math.max(1, Math.min(14, coveredDays));
   const totalOnHand = balances.reduce((sum, row) => sum + row.onHand, 0);
   const inventoryCover = calculateInventoryCover(totalOnHand, actualFeed, coveredDays);
-  const itemCosts = new Map(itemsS.data.filter((item) => item.unit_cost !== null).map((item) => [String(item.id), number(item.unit_cost)]));
-  const closedSessions = sessionsS.data.filter((row) => String(row.record_date) >= dateFrom && String(row.record_date) <= dateTo && closures.get(`${row.flock_id}:${row.record_date}`)?.status === "closed" && row.actual_feed_kg !== null);
-  const costedFeedKg = closedSessions.filter((row) => row.feed_item_id && itemCosts.has(String(row.feed_item_id))).reduce((sum, row) => sum + number(row.actual_feed_kg), 0);
-  const feedCostEtb = closedSessions.reduce((sum, row) => sum + number(row.actual_feed_kg) * (itemCosts.get(String(row.feed_item_id)) ?? 0), 0);
+  const costBounds=reportTimestampBounds(dateFrom,dateTo);
+  const costRows=ledgerS.data.filter(row=>row.source_kind==="feed_day_close"&&flockIds.includes(String(row.flock_id))&&Date.parse(String(row.transaction_date))>=Date.parse(costBounds.start)&&Date.parse(String(row.transaction_date))<Date.parse(costBounds.end));
+  const costedFeedKg=costRows.filter(row=>row.transaction_type==="issue"||row.transaction_type==="return").reduce((sum,row)=>sum+Math.abs(number(row.quantity))*(row.transaction_type==="return"?-1:1),0);
+  const feedCostEtb=Math.abs(costedFeedKg-actualFeed)<.001?reportConsumptionCost(costRows):null;
   const leftoversKg = dailyS.data.filter((row) => String(row.record_date) >= dateFrom && String(row.record_date) <= dateTo).reduce((sum, row) => sum + number(row.feed_leftover_grams) / 1000, 0);
 
   const latestWeights = flocksS.data.map((flock) => weightsS.data.filter((row) => row.flock_id === flock.id).at(-1)).filter((row): row is Row => Boolean(row));
@@ -153,25 +184,9 @@ export async function GET(request: Request) {
   const weightVariance = nullable((number(weightedWeight) - targetMid) / targetMid * 100, weightedWeight !== null && targetMid > 0 && targetSamples === sampleTotal);
   const variancePct = nullable((actualFeed - plannedFeed) / plannedFeed * 100, plannedFeed > 0);
   const flockTypes = new Set(flocksS.data.map((row) => String(row.flock_type)));
-  const layerMetric = flockTypes.size === 1 && flockTypes.has("layer");
-  let growthFcr: number | null = null;
-  if (!layerMetric) {
-    const usable = flocksS.data.map((flock) => weightsS.data.filter((row) => row.flock_id === flock.id && String(row.record_date) >= dateFrom && String(row.record_date) <= dateTo)).filter((rows) => rows.length >= 2);
-    const gainKg = usable.reduce((sum, rows) => { const first = rows[0], last = rows.at(-1)!; return sum + Math.max(0, (number(last.average_weight_g) - number(first.average_weight_g)) * number(flocksS.data.find((f) => f.id === last.flock_id)?.current_count) / 1000); }, 0);
-    const intervalFeed = usable.reduce((sum, rows) => {
-      const first = rows[0]; const last = rows.at(-1)!; const flockId = String(last.flock_id); const start = String(first.record_date); const end = String(last.record_date);
-      let flockFeed = 0;
-      for (let offset = 0; offset <= dateDays(start, end); offset += 1) {
-        const date = new Date(Date.parse(`${start}T00:00:00Z`) + offset * 86_400_000).toISOString().slice(0, 10);
-        const sessionRows = sessionsS.data.filter((row) => row.flock_id === flockId && row.record_date === date);
-        if (closures.get(`${flockId}:${date}`)?.status === "closed" && sessionRows.length) flockFeed += sessionRows.reduce((total, row) => total + number(row.actual_feed_kg), 0);
-        else { const legacy = dailyByKey.get(`${flockId}:${date}`); if (legacy) flockFeed += legacy.feed_intake_grams !== null ? number(legacy.feed_intake_grams) / 1000 : number(legacy.feed_intake_quantity); }
-      }
-      return sum + flockFeed;
-    }, 0);
-    growthFcr = calculateGrowthFcr(intervalFeed, gainKg);
-  }
-  const applicableFcr = layerMetric ? calculateLayerFcr(actualFeed, eggMassKg) : growthFcr;
+  const layerMetric = [...flockTypes].every(type=>type==="layer"||type==="parent_stock");
+  const reportFcr=calculateReportFcr(flocksS.data,dailyS.data.filter(row=>String(row.record_date)>=dateFrom&&String(row.record_date)<=dateTo),weightsS.data.filter(row=>String(row.record_date)>=dateFrom&&String(row.record_date)<=dateTo));
+  const applicableFcr = reportFcr.mixed ? null : layerMetric ? reportFcr.layer : reportFcr.growth;
   const expectedDays = expectedFlockDays;
   const exceptions: Row[] = [];
   if (!activeTemplate) exceptions.push({ severity: "critical", title: "Feed template not configured", reason: "This batch has no active age-based ration and weight standard.", action: "Open template management", actionTarget: "template_management" });
@@ -203,14 +218,15 @@ export async function GET(request: Request) {
       feedPerBirdDay: { value: calculateFeedPerBirdDay(actualFeed, birdDays), unit: "g/bird/day", status: birdDays > 0 ? "Available" : "Unavailable", reason: birdDays > 0 ? `${birdDays.toLocaleString()} opening bird-days.` : "Opening birds are missing from daily records." },
       stockCover: { value: inventoryCover, unit: "days", status: inventoryCover === null ? "Unavailable" : inventoryCover < 7 ? "Review" : "Available", reason: inventoryCover === null ? "Stock or consumption history is missing." : `Based on ${trailingDays} covered consumption days.` },
       weight: { value: weightedWeight, unit: "g", variancePct: weightVariance, uniformityPct: weightedUniformity, sampleCount: sampleTotal, status: weightedWeight === null ? "Awaiting weight sample" : targetSamples === sampleTotal ? "Available" : "Unavailable", reason: weightedWeight === null ? "No weight sample is recorded." : targetSamples === sampleTotal ? `Sample-count weighted; each result is compared with its target at the sample’s actual age (${roundFeed(targetMid)} g weighted midpoint).` : "One or more samples has no target at its recorded age." },
-      fcr: { value: applicableFcr, unit: "kg/kg", kind: layerMetric ? "Layer feed / egg mass" : "Growth feed / biomass gain", status: applicableFcr === null ? "Unavailable" : "Available", reason: applicableFcr === null ? layerMetric ? "Recorded average egg weights and egg output are required." : "Two valid weights and feed within the measurement interval are required." : "Calculated only from compatible production inputs." },
-      coverage: { value: expectedDays ? roundFeed(coveredFlockDays / expectedDays * 100) : null, unit: "%", coveredDays: coveredFlockDays, expectedDays, legacyDays },
+      fcr: { value: applicableFcr, layer:reportFcr.layer,growth:reportFcr.growth, unit: "kg/kg", kind: reportFcr.mixed?"Separate layer and growth ratios":layerMetric ? "Layer feed / egg mass" : "Growth feed / biomass gain", status: applicableFcr === null ? "Unavailable" : "Available", reason: reportFcr.mixed?"Layer egg-mass and growth FCR are different measures; no combined ratio is shown.":applicableFcr === null ? layerMetric ? "Complete layer feed, recorded average egg weights and egg output are required." : "Two valid weights, complete interval feed and a consistent recorded population are required. Removed-bird weights cannot be guessed." : "Calculated only from compatible production inputs." },
+      coverage: { value: !unverifiedArchive&&expectedDays ? roundFeed(coveredFlockDays / expectedDays * 100) : null, unit: "%", coveredDays: coveredFlockDays, expectedDays:unverifiedArchive?null:expectedDays, legacyDays,reason:unverifiedArchive?"Verified completion evidence is missing for an archived flock.":null },
     },
     trends: { daily: trend }, inventory: { balances, totalOnHand: roundFeed(totalOnHand), estimatedValue: roundFeed(balances.reduce((sum, row) => sum + row.value, 0)) },
-    financials: { feedCostEtb: costedFeedKg > 0 ? roundFeed(feedCostEtb) : null, costCoveragePct: nullable(costedFeedKg / actualFeed * 100, actualFeed > 0), leftoversKg: roundFeed(leftoversKg), leftoverPct: nullable(leftoversKg / actualFeed * 100, actualFeed > 0), confidence: legacyDays || costedFeedKg < actualFeed ? "Estimate" : costedFeedKg > 0 ? "Actual" : "Unavailable" },
+    financials: { feedCostEtb: feedCostEtb !== null ? roundFeed(feedCostEtb) : null, costCoveragePct: nullable(costedFeedKg / actualFeed * 100, actualFeed > 0), leftoversKg: roundFeed(leftoversKg), leftoverPct: nullable(leftoversKg / actualFeed * 100, actualFeed > 0), confidence: feedCostEtb!==null?"Actual":"Unavailable" },
     template: activeTemplate ? { ...activeTemplate, rows: templateRows, currentTarget } : null, templateVersions: templatesS.data.map((template) => ({ id: template.id, name: template.name, source_type: template.source_type, is_active: template.is_active, created_at: template.created_at })), suggestedRows,
     tasks, milestones, nextCheck: pendingTasks[0] ?? { displayStatus: "All checks complete" }, exceptions,
     settings: { warningVariancePct: warning, criticalVariancePct: critical },
     permissions: { canManage: ctx.canManage, canConfigure: false, canRecordWeight: ctx.role === "farm_manager", templateChangeMode: !ctx.canManage ? "read_only" : ctx.supportSessionId ? "direct" : "governance" },
   });
+  } catch {return feedJson({error:"Feed evidence could not be completely loaded. Refresh and try again."},500);}
 }

@@ -9,7 +9,7 @@ import { recordAuditEvent } from "@/lib/audit-ledger";
 import { ensureFreshReconciliation } from "@/lib/reconciliation-service";
 import { listInventoryWarehouses } from "@/lib/warehouse-management";
 import {readReportQuery} from "@/lib/report-pagination";
-import {reportTimestampBounds} from "@/lib/report-safety";
+import {reportStockWindow,reportTimestampBounds} from "@/lib/report-safety";
 
 const categories = ["feed", "medicine", "vaccine", "vitamin", "supplement", "equipment", "spare_parts", "packaging", "miscellaneous"] as const;
 const openingRow = z.object({
@@ -51,19 +51,22 @@ function sourceLabel(kind:string|null, type:string) {
   return type === "issue" ? "Stock use" : "Inventory movement";
 }
 function monthBounds(month:string) {
-  if (!/^\d{4}-\d{2}$/.test(month)) throw new InventoryOperationsError("Month must use YYYY-MM.");
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new InventoryOperationsError("Month must use YYYY-MM.");
   const start=`${month}-01`; const value=new Date(`${start}T00:00:00Z`); value.setUTCMonth(value.getUTCMonth()+1);
   return { start, next:value.toISOString().slice(0,10) };
 }
 
-export async function loadInventoryWorkspace(ctx:AccessContext, warehouseId:string|null, month:string) {
+export async function loadInventoryWorkspace(ctx:AccessContext, warehouseId:string|null, month:string, period?: {from: string; to: string}) {
   if (!ctx.supportSessionId && ctx.role !== "ceo" && ctx.role !== "farm_manager") throw new InventoryOperationsError("Inventory access is not available for this role.",403);
   const warehouseData=await listInventoryWarehouses(ctx); const active=warehouseData.warehouses.filter(row=>row.status==="active");
   const selected=warehouseId ? active.find(row=>row.id===warehouseId) : active.length===1 ? active[0] : null;
   if (warehouseId && !selected) throw new InventoryOperationsError("The selected warehouse is inactive or outside your assignment.",403);
-  const {start,next}=monthBounds(month);
-  const last = new Date(Date.parse(`${next}T00:00:00Z`) - 86400000).toISOString().slice(0,10);
-  const bounds = reportTimestampBounds(start, last);
+  const monthly=monthBounds(month);
+  const start = period?.from ?? monthly.start;
+  const last = period?.to ?? new Date(Date.parse(`${monthly.next}T00:00:00Z`) - 86400000).toISOString().slice(0,10);
+  let bounds: ReturnType<typeof reportTimestampBounds>;
+  try {bounds = reportTimestampBounds(start, last);} catch {throw new InventoryOperationsError("Choose a valid reporting range of at most 366 days.");}
+  const next = new Date(Date.parse(`${last}T00:00:00Z`) + 86400000).toISOString().slice(0,10);
   if (!selected) return { meta:{role:ctx.role,month,canOperate:ctx.role==="farm_manager"||Boolean(ctx.supportSessionId),canManage:ctx.role==="ceo",warehouseRequired:active.length>0}, warehouses:active, selectedWarehouse:null, catalogItems:[], items:[], movements:[], latestCountSession:null, expenses:[], recurringTemplates:[] };
 
   const db=governanceAdmin as any;
@@ -81,17 +84,18 @@ export async function loadInventoryWorkspace(ctx:AccessContext, warehouseId:stri
   const items=(itemsResult.data??[]) as Item[]; const ledger=(ledgerResult.data??[]) as Ledger[];
   const latestCounts=new Map<string,any>(); for(const count of countsResult.data??[]) if(!latestCounts.has(String(count.item_id))) latestCounts.set(String(count.item_id),count);
   const stockRows=items.map(item=>{
-    const rows=ledger.filter(row=>row.item_id===item.id); const before=rows.filter(row=>Date.parse(row.transaction_date)<Date.parse(bounds.start)).reduce((sum,row)=>sum+delta(row),0); const during=rows.filter(row=>Date.parse(row.transaction_date)>=Date.parse(bounds.start)&&Date.parse(row.transaction_date)<Date.parse(bounds.end));
+    const rows=ledger.filter(row=>row.item_id===item.id); const window=reportStockWindow(rows,start,last); const before=window.opening; const during=window.during;
     const bucket=(test:(row:Ledger)=>boolean)=>during.filter(test).reduce((sum,row)=>sum+Math.abs(delta(row)),0);
-    const current=rows.reduce((sum,row)=>sum+delta(row),0); const latest=latestCounts.get(item.id)??null;
+    const current=window.current; const latest=latestCounts.get(item.id)??null;
+    const periodEnd=window.periodEnd;
     const received=bucket(row=>row.transaction_type==="receipt"||row.transaction_type==="opening_balance");
     const feed=bucket(row=>row.source_kind==="feed_day_close"); const daily=bucket(row=>row.source_kind==="daily_record_usage");
     const health=bucket(row=>row.source_kind==="health_treatment"); const vaccine=bucket(row=>row.source_kind==="vaccination_completion");
     const transfers=during.filter(row=>row.transaction_type.startsWith("transfer")||row.transaction_type==="adjustment"||row.transaction_type==="return").reduce((sum,row)=>sum+delta(row),0);
-    return {...item,carriedOpening:before,received,feedUsage:feed,dailyUsage:daily,healthUsage:health,vaccineUsage:vaccine,transfersAndAdjustments:transfers,currentBalance:current,latestCount:latest?{date:latest.count_date,quantity:Number(latest.counted_quantity),variance:Number(latest.variance)}:null,reorderStatus:current<=0?"out":current<=Number(item.reorder_level??0)?"reorder":"healthy",stockValue:current*Number(item.unit_cost??0)};
+    return {...item,carriedOpening:before,periodEndBalance:periodEnd,received,feedUsage:feed,dailyUsage:daily,healthUsage:health,vaccineUsage:vaccine,transfersAndAdjustments:transfers,currentBalance:current,latestCount:latest?{date:latest.count_date,quantity:Number(latest.counted_quantity),variance:Number(latest.variance)}:null,reorderStatus:current<=0?"out":current<=Number(item.reorder_level??0)?"reorder":"healthy",stockValue:item.unit_cost===null?null:current*Number(item.unit_cost),periodEndValue:item.unit_cost===null?null:periodEnd*Number(item.unit_cost)};
   }).filter(row=>row.currentBalance!==0||ledger.some(entry=>entry.item_id===row.id));
-  const movements=ledger.slice(0,40).map(row=>({...row,quantity:Number(row.quantity),displayQuantity:delta(row),sourceLabel:sourceLabel(row.source_kind,row.transaction_type),itemName:items.find(item=>item.id===row.item_id)?.name??"Inventory item"}));
-  return {meta:{role:ctx.role,month,canOperate:ctx.role==="farm_manager"||Boolean(ctx.supportSessionId),canManage:ctx.role==="ceo",warehouseRequired:true},warehouses:active,selectedWarehouse:selected,initialization:initializationResult.data??null,catalogItems:items,items:stockRows,movements,latestCountSession:(sessionResult.data??[])[0]??null,expenses:costsResult.data??[],recurringTemplates:templatesResult.data??[]};
+  const movements=ledger.filter(row=>Date.parse(row.transaction_date)>=Date.parse(bounds.start)&&Date.parse(row.transaction_date)<Date.parse(bounds.end)).slice(0,40).map(row=>({...row,quantity:Number(row.quantity),displayQuantity:delta(row),sourceLabel:sourceLabel(row.source_kind,row.transaction_type),itemName:items.find(item=>item.id===row.item_id)?.name??"Inventory item"}));
+  return {meta:{role:ctx.role,month,dateFrom:start,dateTo:last,balanceScope:"warehouse",currentBalanceAt:new Date().toISOString(),canOperate:ctx.role==="farm_manager"||Boolean(ctx.supportSessionId),canManage:ctx.role==="ceo",warehouseRequired:true},warehouses:active,selectedWarehouse:selected,initialization:initializationResult.data??null,catalogItems:items,items:stockRows,movements,latestCountSession:(sessionResult.data??[])[0]??null,expenses:costsResult.data??[],recurringTemplates:templatesResult.data??[]};
 }
 
 export async function establishOpeningStock(ctx:AccessContext,input:unknown){

@@ -32,7 +32,7 @@ export function reportRequest(section: ReportSection, input: ReportInput) {
   if (section === "stock") {
     const month = input.month || input.dateTo.slice(0, 7);
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("INVALID_REPORT_MONTH");
-    return `/api/inventory/workspace?${new URLSearchParams({month, warehouse_id: input.warehouseId || ""})}`;
+    return `/api/inventory/workspace?${new URLSearchParams({month, warehouse_id: input.warehouseId || "", date_from: input.dateFrom, date_to: input.dateTo})}`;
   }
   const params = new URLSearchParams({date_from: input.dateFrom, date_to: input.dateTo});
   for (const [key, value] of Object.entries({branch_id: input.branchId, farm_id: input.farmId, house_id: input.houseId, flock_id: input.flockId, batch_id: input.batchId})) if (value) params.set(key, value);

@@ -41,7 +41,8 @@ export function formatNumber(value: number, locale: AppLocale, maximumFractionDi
   }).format(value);
 }
 
-export function formatEtb(value: number, locale: AppLocale) {
+export function formatEtb(value: number | null, locale: AppLocale) {
+  if(value===null||!Number.isFinite(value))return locale==="am"?"አይገኝም":"Unavailable";
   return new Intl.NumberFormat(displayLocales[locale], {
     style: "currency",
     currency: "ETB",

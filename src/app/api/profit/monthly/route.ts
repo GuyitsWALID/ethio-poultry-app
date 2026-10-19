@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const ctx = await getSalesContext();
     if (ctx instanceof Response) return ctx;
     if (!ctx.canView) return json({ error: "You do not have access to monthly profit periods." }, 403);
+    if(ctx.role==="farm_manager"&&!ctx.supportSessionId)return json({periods:[],unavailable:true,reason:"Financial totals are unavailable because legacy periods do not retain verifiable warehouse-source permissions."});
 
     const params = request.nextUrl.searchParams;
     let query = supabaseAdmin

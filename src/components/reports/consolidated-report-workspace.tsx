@@ -22,7 +22,7 @@ export function ConsolidatedReportWorkspace() {
   const [dateFrom, setDateFrom] = usePageFilter("dateFrom", period.dateFrom);
   const [dateTo, setDateTo] = usePageFilter("dateTo", period.dateTo);
   const [warehouseId, setWarehouseId] = usePageFilter<string>("reportWarehouse", "");
-  const [month, setMonth] = usePageFilter("reportMonth", dateTo.slice(0, 7));
+  const [month] = usePageFilter("reportMonth", dateTo.slice(0, 7));
   const [result, setResult] = useState<{key: string; view: ReportView | null; error: boolean} | null>(null);
   const [refresh, setRefresh] = useState(0);
   const permitted = role === "ceo" || role === "farm_manager";
@@ -59,7 +59,8 @@ export function ConsolidatedReportWorkspace() {
     </nav>
     <section aria-label={t("filters")} className="grid gap-4 rounded-2xl border border-sand-200 bg-white p-5 sm:grid-cols-2 lg:grid-cols-3">
       {isStock ? <>
-        <label className="grid gap-1 text-sm">{t("month")}<input className={inputClass} type="month" value={month} onChange={event => setMonth(event.target.value)}/></label>
+        <label className="grid gap-1 text-sm">{t("from")}<OperationDateInput className={inputClass} value={dateFrom} max={dateTo} onChange={event => setDateFrom(event.target.value)}/></label>
+        <label className="grid gap-1 text-sm">{t("to")}<OperationDateInput className={inputClass} value={dateTo} min={dateFrom} onChange={event => setDateTo(event.target.value)}/></label>
         <label className="grid gap-1 text-sm">{t("warehouse")}<select className={inputClass} value={warehouseId} onChange={event => setWarehouseId(event.target.value)}><option value="">{t("chooseWarehouse")}</option>{result?.view?.warehouses.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
       </> : <>
         {role === "ceo" ? <label className="grid gap-1 text-sm">{t("branch")}<select className={inputClass} value={scope.branchId} onChange={event => setScope({branchId: event.target.value, farmId: "", houseId: "", flockId: "", batchId: ""})}><option value="">{t("allBranches")}</option>{branches.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label> : null}
@@ -76,7 +77,7 @@ export function ConsolidatedReportWorkspace() {
     </section>
     <section aria-label={t(`sections.${section}`)} aria-busy={!current} className="space-y-4">
       {!current ? <p role="status">{t("loading")}</p> : current.error ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{t("loadFailed")}</p> : !view ? <p role="status">{t("chooseBatch")}</p> : <>
-        <p className="text-sm text-forest-600">{isStock ? `${view.warehouseName || t("chooseWarehouse")} · ${month}` : `${formatOperationDate(view.dateFrom || dateFrom, locale)} – ${formatOperationDate(view.dateTo || dateTo, locale)}`}</p>
+        <p className="text-sm text-forest-600">{isStock ? `${view.warehouseName || t("chooseWarehouse")} · ` : ""}{`${formatOperationDate(view.dateFrom || dateFrom, locale)} – ${formatOperationDate(view.dateTo || dateTo, locale)}`}</p>
         {view.notices.map(notice => <p key={notice} className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">{t(`notices.${notice}`)}</p>)}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{view.metrics.map(metric => <div key={metric.key} className="rounded-xl border border-sand-200 bg-white p-4"><p className="text-sm text-forest-600">{t(`metrics.${metric.key}`)}</p><p className="mt-2 text-2xl font-semibold text-forest-900">{valueLabel(metric)}</p></div>)}</div>
         {!view.rows.length ? (view.evidence?.items.length ? null : <p role="status">{t("empty")}</p>) : <div className="grid gap-3 lg:grid-cols-2">{view.rows.map((row, index) => <article key={index} className="min-w-0 rounded-xl border border-sand-200 bg-white p-4"><h2 className="break-words font-semibold text-forest-900">{row.date ? formatOperationDate(row.date, locale) : row.label}</h2><dl className="mt-3 grid gap-3 sm:grid-cols-2">{row.values.map(metric => <div key={metric.key}><dt className="text-xs text-forest-600">{t(`metrics.${metric.key}`)}</dt><dd className="mt-1 font-medium">{valueLabel(metric)}</dd></div>)}</dl></article>)}</div>}

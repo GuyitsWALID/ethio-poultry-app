@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {validReportDate, reportTimestampBounds, reportOperatingDate, reportWarehouseAllowed, reportCsvCell, reportConsumptionCost} from "../src/lib/report-safety.ts";
+import {validReportDate, reportTimestampBounds, reportOperatingDate, reportWarehouseAllowed, reportCsvCell, reportConsumptionCost,reportStockWindow} from "../src/lib/report-safety.ts";
 
 test("report dates reject normalized impossible dates and excessive periods", () => {
   assert.equal(validReportDate("2026-02-30"), false);
@@ -38,4 +38,14 @@ test("consumption costs exclude transfers, reverse returns and never claim parti
   for (const unit_cost of [null, undefined, "", "bad", -1]) assert.equal(reportConsumptionCost([issue, {...issue, unit_cost}]), null);
   assert.equal(reportConsumptionCost([{...issue, unit_cost: 0}]), 0);
   assert.equal(reportConsumptionCost([]), null);
+});
+
+test("stock windows distinguish opening, period end, current and future without mixing item units",()=>{
+  const row=(date,type,quantity)=>({transaction_date:date,transaction_type:type,quantity});
+  const rows=[row('2026-08-01T09:00:00Z','receipt',100),row('2026-09-30T21:00:00Z','issue',10),
+    row('2026-10-01T20:59:59Z','issue',5),row('2026-10-01T21:00:00Z','receipt',20),row('2026-12-01T00:00:00Z','receipt',999)];
+  const result=reportStockWindow(rows,'2026-10-01','2026-10-01',Date.parse('2026-10-19T00:00:00Z'));
+  assert.equal(result.opening,100);assert.equal(result.periodEnd,85);assert.equal(result.current,105);
+  assert.equal(result.during.length,2);
+  assert.throws(()=>reportStockWindow([{...rows[0],quantity:null}],'2026-10-01','2026-10-01'),/INVALID/);
 });

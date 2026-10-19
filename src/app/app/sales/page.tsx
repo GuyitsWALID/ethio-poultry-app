@@ -62,11 +62,11 @@ type Analytics = {
     revenue: number;
     paid: number;
     balanceDue: number;
-    quantity: number;
-    averageSellingPrice: number;
-    estimatedProfit: number;
+    quantity: number | null;
+    averageSellingPrice: number | null;
+    estimatedProfit: number | null;
     actualPaidMargin: number | null;
-    marginStatus: "estimated" | "tracked";
+    marginStatus: "estimated" | "tracked" | "unavailable";
     costBasisStatus?: "locked" | "rolling_estimate" | "missing";
     breakEvenPricePerEgg?: number | null;
     targetPricePerEgg?: number | null;
@@ -102,7 +102,7 @@ type Analytics = {
     warnings: string[];
   };
   charts: {
-    daily: Array<{ label: string; revenue: number; quantity: number; estimatedProfit: number; paidProfitMargin: number | null }>;
+    daily: Array<{ label: string; revenue: number; quantity: number | null; estimatedProfit: number | null; paidProfitMargin: number | null }>;
     weekly: Array<{ label: string; revenue: number }>;
     monthly: Array<{ label: string; revenue: number }>;
     quarterly: Array<{ label: string; revenue: number }>;
@@ -176,7 +176,8 @@ const emptyAnalytics: Analytics = {
   charts: { daily: [], weekly: [], monthly: [], quarterly: [], productMix: [], contribution: [] },
 };
 
-function currency(value: number) {
+function currency(value: number | null) {
+  if(value===null)return "Unavailable";
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: Math.abs(value) < 100 ? 2 : 0,
   }).format(value);
@@ -500,7 +501,7 @@ export default function SalesPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forest-500">Today</p><WalletCards className="h-4 w-4 text-forest-500" aria-hidden="true" /></div><p className="mt-2 font-display text-2xl font-semibold text-forest-900">{currency(analytics.kpis.todayRevenue)} ETB</p><p className="mt-1 text-xs text-forest-600">{todayRecords.length} sales recorded on {today}</p></article>
-        <article className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forest-500">Estimated profit</p><TrendingUp className="h-4 w-4 text-leaf-500" aria-hidden="true" /></div><p className={`mt-2 font-display text-2xl font-semibold ${analytics.kpis.estimatedProfit < 0 ? "text-ember-500" : "text-forest-900"}`}>{currency(analytics.kpis.estimatedProfit)} ETB</p><p className="mt-1 text-xs text-forest-600">{labelize(analytics.kpis.marginStatus)} using {labelize(analytics.kpis.costBasisStatus)}</p></article>
+        <article className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forest-500">Estimated profit</p><TrendingUp className="h-4 w-4 text-leaf-500" aria-hidden="true" /></div><p className={`mt-2 font-display text-2xl font-semibold ${(analytics.kpis.estimatedProfit??0) < 0 ? "text-ember-500" : "text-forest-900"}`}>{currency(analytics.kpis.estimatedProfit)} ETB</p><p className="mt-1 text-xs text-forest-600">{labelize(analytics.kpis.marginStatus)} using {labelize(analytics.kpis.costBasisStatus)}</p></article>
         <article className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forest-500">Average ticket</p><ReceiptText className="h-4 w-4 text-forest-500" aria-hidden="true" /></div><p className="mt-2 font-display text-2xl font-semibold text-forest-900">{records.length ? `${currency(analytics.kpis.revenue / records.length)} ETB` : "Unavailable"}</p><p className="mt-1 text-xs text-forest-600">Average value per transaction</p></article>
         <article className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forest-500">Leading product</p><Target className="h-4 w-4 text-amber-500" aria-hidden="true" /></div><p className="mt-2 truncate font-display text-2xl font-semibold text-forest-900">{topProduct ? labelize(topProduct.label) : "Unavailable"}</p><p className="mt-1 text-xs text-forest-600">{topProduct ? `${currency(topProduct.revenue)} ETB revenue` : "No product mix in this period"}</p></article>
       </div>

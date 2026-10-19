@@ -36,7 +36,7 @@ export type FeedTemplateInputRow = {
 };
 
 export function feedJson(data: unknown, status = 200) {
-  return Response.json(data, { status });
+  return Response.json(data, { status,headers:{"Cache-Control":"private, no-store"} });
 }
 
 export function addisDate(date = new Date()) {

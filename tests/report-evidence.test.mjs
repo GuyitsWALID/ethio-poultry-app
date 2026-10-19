@@ -55,7 +55,9 @@ test("populated CEO and manager expense evidence uses existing sums without net-
   const manager = projectReportEvidence("finance", input, scope(true), {expenses, periods});
   assert.equal(ceo.expenseTotal, 370.5);
   assert.equal(manager.expenseTotal, 120.5);
-  assert.equal(manager.items.find(row => row.kind === "period").warnings, 1);
+  assert.equal(manager.items.find(row => row.kind === "period").warnings, undefined);
+  assert.equal(manager.items.find(row => row.kind === "period").amount, undefined);
+  assert.match(manager.items.find(row => row.kind === "period").label, /permissions cannot be verified/);
   assert.equal(manager.items.find(row => row.kind === "period").status, "locked");
   assert.doesNotMatch(JSON.stringify(ceo), /secret1|netProfit/);
   const branchInput = {...input, branchId: "b"};

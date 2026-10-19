@@ -15,7 +15,7 @@ import type { AppLocale } from "@/i18n/locale";
 
 type WarehouseRow={id:string;name:string;branch_name:string;farm_name:string|null;farm_id:string|null;type:string;status:string;access_source?:"farm_assignment"|"warehouse_assignment";manager_names?:string[]};
 type CatalogItem={id:string;name:string;category:string;unit:string;reorder_level:number|null;unit_cost:number|null};
-type StockItem=CatalogItem&{carriedOpening:number;received:number;feedUsage:number;dailyUsage:number;healthUsage:number;vaccineUsage:number;transfersAndAdjustments:number;currentBalance:number;latestCount:{date:string;quantity:number;variance:number}|null;reorderStatus:"out"|"reorder"|"healthy";stockValue:number};
+type StockItem=CatalogItem&{carriedOpening:number;received:number;feedUsage:number;dailyUsage:number;healthUsage:number;vaccineUsage:number;transfersAndAdjustments:number;currentBalance:number;latestCount:{date:string;quantity:number;variance:number}|null;reorderStatus:"out"|"reorder"|"healthy";stockValue:number|null};
 type Movement={item_id:string;itemName:string;transaction_date:string;sourceLabel:string;displayQuantity:number;unit_cost:number|null;reference_doc:string|null};
 type Expense={id:string;entry_date:string;entry_kind:"monthly"|"one_off";category:string;description:string;amount:number;supplier_name:string|null};
 type Template={id:string;category:string;description:string;default_amount:number;supplier_name:string|null};
@@ -70,7 +70,7 @@ export default function InventoryPage(){
   },[month,warehouseId,setWarehouseId,t]);
   const cancelLoad=useCallback(()=>{loadSequence.current++;},[]);
   useEffect(()=>{const timer=window.setTimeout(()=>void load(),0);return()=>{window.clearTimeout(timer);cancelLoad();}},[load,cancelLoad]);
-  const selected=data?.selectedWarehouse;const totalValue=useMemo(()=>data?.items.reduce((sum,item)=>sum+item.stockValue,0)??0,[data]);const risks=useMemo(()=>data?.items.filter(item=>item.reorderStatus!=="healthy").length??0,[data]);
+  const selected=data?.selectedWarehouse;const totalValue=useMemo(()=>!data||data.items.some(item=>item.stockValue===null)?null:data.items.reduce((sum,item)=>sum+(item.stockValue??0),0),[data]);const risks=useMemo(()=>data?.items.filter(item=>item.reorderStatus!=="healthy").length??0,[data]);
   const entryTarget={farmId:selected?.farm_id??undefined,warehouseId:selected?.id};
   const chooseView=(next:View)=>{if(todayEntryEnabled&&next!=="stock"){router.push(todayHref(next==="expense"?"expenses":"stock",{...entryTarget,stockMode:next==="count"?"count":"receipt"}));return;}setView(next);};
   const chooseWarehouse=(id:string)=>{setWarehouseId(id)};

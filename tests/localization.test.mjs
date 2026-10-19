@@ -11,6 +11,12 @@ import {
   formatOperationDateTime,
 } from "../src/i18n/formats.ts";
 import {ethiopianMonthDays, ethiopianMonthNames, toEthiopianDate, toGregorianDate} from "../src/i18n/ethiopian-calendar.ts";
+
+test("unknown stock values never format as zero ETB in either language",()=>{
+  assert.equal(formatEtb(null,"en"),"Unavailable");
+  assert.equal(formatEtb(null,"am"),"አይገኝም");
+  assert.notEqual(formatEtb(0,"en"),"Unavailable");
+});
 import {
   managerTodayMessageKeys,
   pendingTerminologyReviewKeys,

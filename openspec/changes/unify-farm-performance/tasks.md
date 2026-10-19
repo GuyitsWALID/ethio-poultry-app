@@ -1,18 +1,18 @@
 ## 1. Reporting safeguards
-- [ ] 1.1 Enforce effective warehouse access in operations, sales/cost and evidence readers; reject contradictory targets; add permission regressions.
+- [x] 1.1 Enforce effective warehouse access in operations, sales/cost and evidence readers; reject contradictory targets; add permission regressions.
   - [x] Apply effective store checks to operations stock, sales stock/cost entries and finance expense evidence; enforce manager farm scope on sales production denominators.
   - [x] Reject unavailable/contradictory operations and sales targets using the shared evidence scope validator.
-  - [ ] Verify reconciled aggregate provenance, database permission coverage and authenticated regressions before sign-off.
-- [ ] 1.2 Include historical completed/archived/quarantined flocks using verified placement, movement and completion evidence; preserve loss accounting.
+  - [x] Fail closed for unverifiable financial aggregate amounts; verify effective-store guards and direct authenticated RLS locally. Integrated authenticated staging acceptance remains in 5.3.
+- [x] 1.2 Include historical completed/archived/quarantined flocks using verified placement, movement and completion evidence; preserve loss accounting.
   - [x] Include historical flock identities, resolve verified clearance dates and bound expected days; expose unverified legacy completion instead of claiming full coverage.
-  - [ ] Complete approved-movement scope handling and migrated-database coverage.
-- [ ] 1.3 Correct inclusive Addis date boundaries and replace capped totals with complete stable pagination/aggregation.
+  - [x] Use verified original/approved movement periods, current farm authority and stored location/actual event time; verify movement evidence against the migrated Docker database.
+- [x] 1.3 Correct inclusive Addis date boundaries and replace capped totals with complete stable pagination/aggregation.
   - [x] Correct sales and operations stock timestamp boundaries and inventory month boundaries to Addis operating days.
   - [x] Paginate sales calculation sources, inventory ledger/counts/catalogue/expenses and stably order operations reads; fail explicitly at the safety bound.
-  - [ ] Complete the new range-aware read model and verify remaining domain adapters before sign-off.
-- [ ] 1.4 Preserve weighted authoritative formulas, distinct culls/deaths, stock units, FCR types and unavailable evidence.
+  - [x] Complete range-aware existing inventory/feed/mortality source adapters and explicit completeness failures. The new typed all-topic facade is Task 2.1, not part of this source-reader sign-off.
+- [x] 1.4 Preserve weighted authoritative formulas, distinct culls/deaths, stock units, FCR types and unavailable evidence.
   - [x] Correct historical weight target age and historical daily target weights; exclude transfers/reverse returns in feed consumption costs and reject partial cost evidence.
-  - [ ] Complete mixed-cohort FCR, separate culls, historical movement and all-topic coverage regressions.
+  - [x] Add mixed-cohort FCR, separate deaths/culls, historical movement/clearance, stock-range, unavailable money and source-coverage regressions; retain incompatible units and FCR types separately.
 - [x] 1.5 Revalidate scheduled creators and recipients; make snapshot/audit finalization atomic and scheduled/manual retries safe.
   - [x] Recheck the schedule creator's active CEO role before execution.
   - [x] Add service-only leased retry claims, atomic snapshot/audit/receipt finalization, lost-response recovery and scheduled-period advancement.

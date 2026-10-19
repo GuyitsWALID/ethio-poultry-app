@@ -80,6 +80,8 @@ test("stock reader uses independently authorized warehouses and labels item unit
   const url = new URL(reportRequest("stock", {...input, warehouseId: "store-a", month: "2026-08"}), "https://test.invalid");
   assert.equal(url.searchParams.get("month"), "2026-08");
   assert.equal(url.searchParams.get("warehouse_id"), "store-a");
+  assert.equal(url.searchParams.get("date_from"), input.dateFrom);
+  assert.equal(url.searchParams.get("date_to"), input.dateTo);
   assert.equal(url.searchParams.has("farm_id"), false);
   const view = presentReport("stock", {selectedWarehouse: {id: "secret-id", name: "Main store"}, items: [{id: "secret-item", name: "Feed", unit: "kg", currentBalance: 100.5, feedUsage: 22}, {name: "Syringes", unit: "piece", currentBalance: 4}]});
   assert.equal(view.metrics.length, 0);

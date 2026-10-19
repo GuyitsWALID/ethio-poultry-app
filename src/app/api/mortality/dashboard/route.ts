@@ -8,10 +8,14 @@ import {
 } from "@/lib/mortality-dashboard";
 import { parseActiveRole } from "@/lib/permissions";
 import { getAccessContext,isAccessResponse } from "@/lib/access-context";
+import {reportTimestampBounds,validReportDate} from "@/lib/report-safety";
+import {projectLocationFlocks, reportRowInLocations, selectReportLocations, type ReportLocation} from "@/lib/report-locations";
+import {ReportEvidenceError,selectEvidenceScope} from "@/lib/report-evidence";
+import {expectedRecordsForPeriod,type AnalyticsFlock} from "@/lib/operational-analytics";
 
 type Row = Record<string, unknown>;
 type DbError = { message: string } | null;
-const json = (value: unknown, status = 200) => Response.json(value, { status });
+const json = (value: unknown, status = 200) => Response.json(value, { status, headers:{"Cache-Control":"private, no-store"} });
 
 async function allRows<T>(load: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: DbError }>) {
   const rows: T[] = [];
@@ -20,6 +24,7 @@ async function allRows<T>(load: (from: number, to: number) => PromiseLike<{ data
     if (error) throw new Error(error.message);
     const page = data ?? [];
     rows.push(...page);
+    if(rows.length>100000)throw new Error("REPORT_TOO_LARGE");
     if (page.length < 1000) return rows;
   }
 }
@@ -46,10 +51,10 @@ export async function GET(request: NextRequest) {
     const orgId=access.orgId;const role=parseActiveRole(access.role);const user={id:access.userId};if((!role||!["farm_manager","ceo"].includes(role))&&!access.supportSessionId)return json({error:"Management access is required."},403);
 
     const [farms, houses, flocks, farmAccess] = await Promise.all([
-      allRows<Row>((a, b) => db.from("farms").select("id,name,branch_id").eq("org_id", orgId).range(a, b)),
-      allRows<Row>((a, b) => db.from("houses").select("id,name,farm_id").eq("org_id", orgId).range(a, b)),
-      allRows<Row>((a, b) => db.from("flocks").select("id,flock_code,flock_type,farm_id,house_id,batch_id,current_count,status,placement_date,age_at_placement_days,breed_id").eq("org_id", orgId).range(a, b)),
-      role === "farm_manager" ? allRows<{ farm_id: string }>((a, b) => db.from("user_farm_access").select("farm_id").eq("profile_id", user.id).is("revoked_at",null).lte("starts_at",new Date().toISOString()).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).range(a, b)) : Promise.resolve([]),
+      allRows<Row>((a, b) => db.from("farms").select("id,name,branch_id").eq("org_id", orgId).order("id").range(a, b)),
+      allRows<Row>((a, b) => db.from("houses").select("id,name,farm_id").eq("org_id", orgId).order("id").range(a, b)),
+      allRows<Row>((a, b) => db.from("flocks").select("id,flock_code,flock_type,farm_id,house_id,batch_id,current_count,status,placement_date,age_at_placement_days,breed_id").eq("org_id", orgId).order("id").range(a, b)),
+      role === "farm_manager" ? allRows<{ farm_id: string }>((a, b) => db.from("user_farm_access").select("farm_id").eq("org_id",orgId).eq("profile_id", user.id).is("revoked_at",null).lte("starts_at",new Date().toISOString()).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).order("id").range(a, b)) : Promise.resolve([]),
     ]);
     const permittedFarmIds = role === "farm_manager"
       ? authorizedFarmIds(farms.map((row) => ({ id: String(row.id), branch_id: String(row.branch_id) })), [], farmAccess.map((row) => row.farm_id))
@@ -57,19 +62,33 @@ export async function GET(request: NextRequest) {
     const p = request.nextUrl.searchParams;
     const today = addisDate();
     const requestedTo = p.get("date_to") ?? today;
-    const dateTo = /^\d{4}-\d{2}-\d{2}$/.test(requestedTo) && requestedTo <= today ? requestedTo : today;
+    const dateTo = requestedTo;
+    if(!validReportDate(dateTo))return json({error:"Choose a valid final report date."},400);
     const requestedFrom = p.get("date_from") ?? addDays(dateTo, -29);
-    const unclampedFrom = /^\d{4}-\d{2}-\d{2}$/.test(requestedFrom) && requestedFrom <= dateTo ? requestedFrom : addDays(dateTo, -29);
-    const dateFrom = unclampedFrom < addDays(dateTo, -179) ? addDays(dateTo, -179) : unclampedFrom;
+    const dateFrom = requestedFrom;
+    try {reportTimestampBounds(dateFrom,dateTo);} catch {return json({error:"Choose a valid reporting range of at most 366 days."},400);}
     const dates = dateRange(dateFrom, dateTo); const periodDays = dates.length;
     const previousTo = addDays(dateFrom, -1); const previousFrom = addDays(previousTo, -(periodDays - 1));
     const selectedBranch = p.get("branch_id") ?? ""; const selectedFarm = p.get("farm_id") ?? ""; const selectedHouse = p.get("house_id") ?? ""; const selectedFlock = p.get("flock_id") ?? ""; const selectedBatch = p.get("batch_id") ?? "";
     if (selectedFarm && !permittedFarmIds.has(selectedFarm)) return json({ error: "The selected farm is outside your assigned scope." }, 403);
     const farmMap = new Map(farms.map((row) => [String(row.id), row]));
-    const activeFlocks = flocks.filter((flock) => String(flock.status) === "active" && permittedFarmIds.has(String(flock.farm_id))
-      && (!selectedBranch || String(farmMap.get(String(flock.farm_id))?.branch_id ?? "") === selectedBranch)
-      && (!selectedFarm || String(flock.farm_id) === selectedFarm) && (!selectedHouse || String(flock.house_id) === selectedHouse)
-      && (!selectedFlock || String(flock.id) === selectedFlock) && (!selectedBatch || String(flock.batch_id ?? "") === selectedBatch));
+    const locations=await allRows<ReportLocation>((a,b)=>db.rpc("report_flock_locations",{p_org:orgId}).order("flock_id").order("from_at").order("house_id").range(a,b));
+    const permittedFarms=farms.filter(row=>permittedFarmIds.has(String(row.id))).map(row=>({...row,org_id:orgId}));
+    const locationFilter={branchId:selectedBranch,farmId:selectedFarm,houseId:selectedHouse,flockId:selectedFlock,batchId:selectedBatch};
+    const selectedLocations=selectReportLocations(locations,flocks,permittedFarms,locationFilter);
+    const projected=projectLocationFlocks(flocks.map(row=>({...row,org_id:orgId})),selectReportLocations(locations.filter(row=>row.verified),flocks,permittedFarms,{}));
+    selectEvidenceScope(orgId,role==="farm_manager",permittedFarms,projected,{dateFrom,dateTo,...locationFilter},{houses:houses.map(row=>({...row,org_id:orgId}))});
+    const clearances=await allRows<Row>((a,b)=>db.from("effective_cycle_clearances").select("flock_id,closure_id").eq("org_id",orgId).order("flock_id").range(a,b));
+    const closures=await allRows<Row>((a,b)=>db.from("batch_cycle_closures").select("id,completed_at").eq("org_id",orgId).order("id").range(a,b));
+    const completed=new Map(closures.map(row=>[row.id,new Date(Date.parse(String(row.completed_at))+3*3600000).toISOString().slice(0,10)]));
+    const ends=new Map(clearances.map(row=>[row.flock_id,completed.get(row.closure_id)]));
+    const activeFlocks=flocks.filter(row=>String(row.placement_date)<=dateTo&&(!ends.get(row.id)||ends.get(row.id)!>=previousFrom)&&selectedLocations.some(location=>location.flock_id===row.id)).map((row):Row=>{
+      const location=selectedLocations.filter(location=>location.flock_id===row.id).at(-1)!;
+      return {...row,farm_id:location.farm_id,house_id:location.house_id,current_count:ends.has(row.id)||row.house_id!==location.house_id?0:row.current_count};
+    });
+    const coverageFlocks=activeFlocks.map(row=>({id:String(row.id),placementDate:String(row.placement_date),completionDate:ends.get(row.id)??null,
+      scopePeriods:selectedLocations.filter(location=>location.flock_id===row.id).map(location=>({from:location.from_date,to:location.to_date}))})) as AnalyticsFlock[];
+    const expected=expectedRecordsForPeriod(coverageFlocks,dateFrom,dateTo);
     const houseMap = new Map(houses.map((row) => [String(row.id), row]));
     const farmsInView = [...permittedFarmIds].filter((id) => !selectedBranch || String(farmMap.get(id)?.branch_id ?? "") === selectedBranch);
     const scopeLabel = selectedFarm ? String(farmMap.get(selectedFarm)?.name ?? "Selected farm") : farmsInView.length === 1 ? String(farmMap.get(farmsInView[0])?.name ?? "Assigned farm") : `${farmsInView.length} assigned farms`;
@@ -78,12 +97,12 @@ export async function GET(request: NextRequest) {
     if (!flockIds.length) return json(base);
     const breedIds = [...new Set(activeFlocks.map((row) => String(row.breed_id ?? "")).filter(Boolean))];
     const [dailyRaw, eventRaw, standards] = await Promise.all([
-      allRows<Row>((a, b) => db.from("daily_farm_records").select("flock_id,record_date,deaths,deaths_cause,opening_birds,closing_birds").eq("org_id", orgId).is("voided_at",null).in("flock_id", flockIds).gte("record_date", previousFrom).lte("record_date", dateTo).range(a, b)),
-      allRows<Row>((a, b) => db.from("mortality_events").select("id,flock_id,record_date,count,cause,diagnosis,recorded_time,notes").eq("org_id", orgId).in("flock_id", flockIds).gte("record_date", dateFrom).lte("record_date", dateTo).order("record_date", { ascending: false }).range(a, b)),
-      breedIds.length ? allRows<Row>((a, b) => db.from("breed_standards").select("breed_id,week_number,target_mortality_pct").eq("org_id", orgId).in("breed_id", breedIds).range(a, b)) : Promise.resolve([]),
+      allRows<Row>((a, b) => db.from("daily_farm_records").select("id,flock_id,farm_id,house_id,record_date,deaths,culls,other_removals,transfers_out,transfers_in,deaths_cause,opening_birds,closing_birds").eq("org_id", orgId).is("voided_at",null).in("flock_id", flockIds).gte("record_date", previousFrom).lte("record_date", dateTo).order("record_date").order("id").range(a, b)),
+      allRows<Row>((a, b) => db.from("mortality_events").select("id,flock_id,record_date,count,cause,diagnosis,recorded_time,notes").eq("org_id", orgId).in("flock_id", flockIds).gte("record_date", dateFrom).lte("record_date", dateTo).order("record_date", { ascending: false }).order("id").range(a, b)),
+      breedIds.length ? allRows<Row>((a, b) => db.from("breed_standards").select("breed_id,week_number,target_mortality_pct").eq("org_id", orgId).in("breed_id", breedIds).order("id").range(a, b)) : Promise.resolve([]),
     ]);
-    const daily: MortalityDailyInput[] = dailyRaw.map((row) => ({ flockId: String(row.flock_id), recordDate: String(row.record_date), deaths: row.deaths === null ? null : Number(row.deaths), openingBirds: row.opening_birds === null ? null : Number(row.opening_birds), closingBirds: row.closing_birds === null ? null : Number(row.closing_birds), cause: row.deaths_cause === null ? null : String(row.deaths_cause) }));
-    const events: MortalityEventInput[] = eventRaw.map((row) => ({ id: String(row.id), flockId: String(row.flock_id), recordDate: String(row.record_date), count: Number(row.count ?? 0), cause: String(row.cause ?? "Unspecified"), diagnosis: row.diagnosis === null ? null : String(row.diagnosis), recordedTime: row.recorded_time === null ? null : String(row.recorded_time), notes: row.notes === null ? null : String(row.notes) }));
+    const daily: MortalityDailyInput[] = dailyRaw.filter(row=>reportRowInLocations(row,selectedLocations)).map((row) => ({ flockId: String(row.flock_id), recordDate: String(row.record_date), deaths: row.deaths === null ? null : Number(row.deaths), culls:row.culls===null?null:Number(row.culls),otherRemovals:Number(row.other_removals??0),transfersOut:Number(row.transfers_out??0),transfersIn:Number(row.transfers_in??0),openingBirds: row.opening_birds === null ? null : Number(row.opening_birds), closingBirds: row.closing_birds === null ? null : Number(row.closing_birds), cause: row.deaths_cause === null ? null : String(row.deaths_cause) }));
+    const events: MortalityEventInput[] = eventRaw.filter(row=>reportRowInLocations(row,selectedLocations)).map((row) => ({ id: String(row.id), flockId: String(row.flock_id), recordDate: String(row.record_date), count: Number(row.count ?? 0), cause: String(row.cause ?? "Unspecified"), diagnosis: row.diagnosis === null ? null : String(row.diagnosis), recordedTime: row.recorded_time === null ? null : String(row.recorded_time), notes: row.notes === null ? null : String(row.notes) }));
     const current = daily.filter((row) => row.recordDate >= dateFrom); const previous = daily.filter((row) => row.recordDate <= previousTo);
     const eventMap = new Map<string, MortalityEventInput[]>(); for (const event of events) { const key = `${event.flockId}:${event.recordDate}`; eventMap.set(key, [...(eventMap.get(key) ?? []), event]); }
     const causeMap = new Map<string, number>(); let unexplainedDeaths = 0;
@@ -98,6 +117,7 @@ export async function GET(request: NextRequest) {
     const causes = [...causeMap.entries()].map(([cause, deaths]) => ({ cause, deaths: roundMortality(deaths, 1), sharePct: percent(deaths, totalForShares) ?? 0 })).sort((a, b) => b.deaths - a.deaths);
     const standardMap = new Map(standards.map((row) => [`${row.breed_id}:${row.week_number}`, row.target_mortality_pct === null ? null : Number(row.target_mortality_pct)]));
     const comparisons = activeFlocks.map((flock) => {
+      const periodDays=expectedRecordsForPeriod(coverageFlocks.filter(row=>row.id===flock.id),dateFrom,dateTo);
       const id = String(flock.id); const rows = current.filter((row) => row.flockId === id); const prior = previous.filter((row) => row.flockId === id); const knownRows = rows.filter((row) => row.deaths !== null); const knownPrior = prior.filter((row) => row.deaths !== null); const deaths = knownRows.length ? knownRows.reduce((sum, row) => sum + (row.deaths ?? 0), 0) : null; const priorDeaths = knownPrior.length ? knownPrior.reduce((sum, row) => sum + (row.deaths ?? 0), 0) : null; const rate = mortalityPerThousand(rows); const weeklyRatePct = rate === null ? null : roundMortality(rate * .7, 3); const targetPct = standardMap.get(`${flock.breed_id}:${ageWeeks(flock, dateTo)}`) ?? null; const allocations = rows.flatMap((row) => reconcileCauses(row, eventMap.get(`${id}:${row.recordDate}`) ?? [])); const causesForFlock = new Map<string, number>(); for (const item of allocations) causesForFlock.set(item.cause, (causesForFlock.get(item.cause) ?? 0) + item.deaths); const leadingCause = [...causesForFlock.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null; const unexplained = allocations.filter((row) => row.source === "unexplained").reduce((sum, row) => sum + row.deaths, 0); const coveragePct = percent(knownRows.length, periodDays) ?? 0; const direction = periodDirection(deaths, priorDeaths); const targetGapPct = weeklyRatePct !== null && targetPct !== null ? roundMortality(weeklyRatePct - targetPct, 3) : null; const status = coveragePct < 60 ? "insufficient_data" as const : targetGapPct !== null && targetGapPct > Math.max(targetPct ?? 0, .05) ? "critical" as const : (targetGapPct !== null && targetGapPct > 0) || (deaths ?? 0) > (priorDeaths ?? 0) * 1.5 || ((deaths ?? 0) > 0 && unexplained / (deaths ?? 1) > .25) ? "watch" as const : "stable" as const;
       return { id, code: String(flock.flock_code), farmName: String(farmMap.get(String(flock.farm_id))?.name ?? "Farm"), houseName: String(houseMap.get(String(flock.house_id))?.name ?? "House"), liveBirds: Number(flock.current_count ?? 0), deaths, mortalityPerThousand: rate, weeklyRatePct, targetPct, targetGapPct, previousDeaths: priorDeaths, direction: direction.direction, changePct: direction.changePct, leadingCause, unexplainedPct: deaths && deaths > 0 ? percent(unexplained, deaths) : null, deathDays: new Set(rows.filter((row) => (row.deaths ?? 0) > 0).map((row) => row.recordDate)).size, lastDeathDate: rows.filter((row) => (row.deaths ?? 0) > 0).map((row) => row.recordDate).sort().at(-1) ?? null, status, coveragePct };
     });
@@ -107,13 +127,24 @@ export async function GET(request: NextRequest) {
     const timeMap = new Map<string, number>(); const diagnosisMap = new Map<string, number>(); for (const event of events) { const band = timeBand(event.recordedTime); timeMap.set(band, (timeMap.get(band) ?? 0) + event.count); if (event.diagnosis?.trim()) diagnosisMap.set(event.diagnosis.trim(), (diagnosisMap.get(event.diagnosis.trim()) ?? 0) + event.count); }
     const actions: MortalityDashboardResponse["actions"] = [];
     for (const flock of comparisons) { if (flock.status === "critical") actions.push({ id: `critical:${flock.id}`, severity: "critical", title: `Investigate ${flock.code} mortality now`, explanation: `${flock.deaths ?? 0} deaths; weekly-equivalent mortality is ${flock.weeklyRatePct ?? "unavailable"}%${flock.targetPct !== null ? ` against ${flock.targetPct}% target` : ""}.`, route: "/app/health", flockCode: flock.code }); else if (flock.status === "watch") actions.push({ id: `watch:${flock.id}`, severity: "warning", title: `Review the pattern in ${flock.code}`, explanation: `${flock.deathDays} mortality day(s); leading cause ${flock.leadingCause ?? "not established"}.`, route: "/app/health", flockCode: flock.code }); if (flock.coveragePct < 80) actions.push({ id: `coverage:${flock.id}`, severity: "data", title: `Complete ${flock.code} Daily Records`, explanation: `Only ${flock.coveragePct}% of flock-days are available for this analysis.`, route: "/app/daily-records", flockCode: flock.code }); if ((flock.unexplainedPct ?? 0) > 20) actions.push({ id: `cause:${flock.id}`, severity: "data", title: `Record causes for ${flock.code}`, explanation: `${flock.unexplainedPct}% of recorded deaths remain unexplained.`, route: "/app/daily-records", flockCode: flock.code }); }
-    const peak = [...trends].filter((row) => row.deaths !== null).sort((a, b) => (b.deaths ?? 0) - (a.deaths ?? 0))[0]; const eventDeaths = events.reduce((sum, event) => sum + event.count, 0); const coveragePct = percent(currentKnown.length, periodDays * activeFlocks.length) ?? 0; const reconciliationPct = officialDeaths && officialDeaths > 0 ? Math.min(100, percent(Math.min(eventDeaths, officialDeaths), officialDeaths) ?? 0) : null;
-    const notes = [...(coveragePct < 100 ? [`${periodDays * activeFlocks.length - currentKnown.length} expected flock-day mortality value(s) are missing.`] : []), ...(eventDeaths !== (officialDeaths ?? 0) ? [`Detailed mortality events total ${eventDeaths}; official Daily Records total ${officialDeaths ?? "unavailable"}. Daily Records remain authoritative.`] : []), ...(causes.length === 0 && (officialDeaths ?? 0) > 0 ? ["Deaths exist without usable cause information."] : [])];
+    const peak = [...trends].filter((row) => row.deaths !== null).sort((a, b) => (b.deaths ?? 0) - (a.deaths ?? 0))[0]; const eventDeaths = events.reduce((sum, event) => sum + event.count, 0); const coveragePct = percent(currentKnown.length, expected) ?? 0; const reconciliationPct = officialDeaths && officialDeaths > 0 ? Math.min(100, percent(Math.min(eventDeaths, officialDeaths), officialDeaths) ?? 0) : null;
+    const notes = [...(coveragePct < 100 ? [`${expected - currentKnown.length} expected flock-day mortality value(s) are missing.`] : []), ...(eventDeaths !== (officialDeaths ?? 0) ? [`Detailed mortality events total ${eventDeaths}; official Daily Records total ${officialDeaths ?? "unavailable"}. Daily Records remain authoritative.`] : []), ...(causes.length === 0 && (officialDeaths ?? 0) > 0 ? ["Deaths exist without usable cause information."] : [])];
     const actionRank = { critical: 3, warning: 2, data: 1 } as const;
     actions.sort((a, b) => actionRank[b.severity] - actionRank[a.severity]);
     const response: MortalityDashboardResponse = { meta: base.meta, summary: { officialDeaths, mortalityPerThousand: mortalityPerThousand(current), previousDeaths, direction: comparisonDirection.direction, changePct: comparisonDirection.changePct, affectedFlocks: comparisons.filter((row) => (row.deaths ?? 0) > 0).length, recordsComplete: currentKnown.length, recordsExpected: periodDays * activeFlocks.length, unexplainedDeaths: roundMortality(unexplainedDeaths, 1), eventDeaths, peakDate: peak?.date ?? null, peakDeaths: peak?.deaths ?? null }, trends, fingerprint, comparisons, causes, timeBands: ["Overnight", "Morning", "Afternoon", "Evening", "Unknown"].map((band) => ({ band, deaths: timeMap.get(band) ?? 0 })), diagnoses: [...diagnosisMap.entries()].map(([diagnosis, deaths]) => ({ diagnosis, deaths })).sort((a, b) => b.deaths - a.deaths), actions: actions.slice(0, 20), events: events.slice(0, 100).map((event) => { const flock = comparisons.find((item) => item.id === event.flockId); return { id: event.id, date: event.recordDate, time: event.recordedTime, flockCode: flock?.code ?? event.flockId, farmName: flock?.farmName ?? "Farm", cause: event.cause, diagnosis: event.diagnosis, count: event.count, notes: event.notes }; }), dataTrust: { coveragePct, eventReconciliationPct: reconciliationPct, notes: notes.length ? notes : ["Daily Records and detailed mortality events reconcile for the selected period."] } };
+    response.summary.recordsExpected=expected;
+    response.summary.culls=current.length&&current.every(row=>row.culls!==null&&row.culls!==undefined)?current.reduce((sum,row)=>sum+(row.culls??0),0):null;
+    response.summary.birdLosses=officialDeaths!==null&&response.summary.culls!==null?officialDeaths+response.summary.culls:null;
+    const unverifiedArchives=new Set(activeFlocks.filter(row=>!["active","quarantined"].includes(String(row.status))&&!ends.get(row.id)).map(row=>String(row.id)));
+    if(unverifiedArchives.size){
+      response.dataTrust.coveragePct=null;
+      response.dataTrust.notes.push("Archived flock completion evidence is missing; expected coverage is unavailable, not zero.");
+      for(const row of response.comparisons)if(unverifiedArchives.has(row.id)){row.coveragePct=null;row.status="insufficient_data";}
+    }
+    if(selectedLocations.some(row=>row.starts_with_move))response.dataTrust.notes.push("On transfer dates, evidence without a stored location or actual event time is excluded rather than assigned to a farm by guessing.");
     return json(response);
   } catch (error: unknown) {
+    if(error instanceof ReportEvidenceError)return json({error:error.code},error.status);
     return json({ error: error instanceof Error ? error.message : "Could not load mortality analysis." }, 500);
   }
 }
