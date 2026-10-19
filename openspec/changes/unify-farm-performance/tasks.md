@@ -13,12 +13,12 @@
 - [ ] 1.4 Preserve weighted authoritative formulas, distinct culls/deaths, stock units, FCR types and unavailable evidence.
   - [x] Correct historical weight target age and historical daily target weights; exclude transfers/reverse returns in feed consumption costs and reject partial cost evidence.
   - [ ] Complete mixed-cohort FCR, separate culls, historical movement and all-topic coverage regressions.
-- [ ] 1.5 Revalidate scheduled creators and recipients; make snapshot/audit finalization atomic and scheduled/manual retries safe.
+- [x] 1.5 Revalidate scheduled creators and recipients; make snapshot/audit finalization atomic and scheduled/manual retries safe.
   - [x] Recheck the schedule creator's active CEO role before execution.
   - [x] Add service-only leased retry claims, atomic snapshot/audit/receipt finalization, lost-response recovery and scheduled-period advancement.
   - [x] Revalidate creator/recipient farm authority and stale schedule settings at finalization; test audit rollback, retries, stale workers and revoked assignments in Docker.
   - [x] Capture server-side used-resource provenance and revalidate every recipient's warehouse access at atomic publication, listing and download; exercise direct authenticated RLS in Docker.
-  - [ ] Add true multi-connection concurrency tests; finish schedule-definition audit transactions.
+  - [x] Add true multi-connection concurrency tests; finish schedule-definition audit transactions (local Docker verification; integrated staging acceptance remains in 5.3).
 - [ ] 1.6 Protect CSV text, legacy snapshots and authorized saved-report pagination/exact selection; preserve failed forms.
   - [x] Share CSV formula protection across browser/saved exports; keep failed schedule forms open and make management reads private/no-store.
   - [x] Restrict unverifiable legacy snapshots to current tenant CEOs without rewriting them; filter authorized saved rows before the legacy list limit and protect direct database reads.

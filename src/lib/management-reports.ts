@@ -5,7 +5,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { canAccessFarm, governanceAdmin, type AccessContext } from "@/lib/access-context";
-import { recordAuditEvent } from "@/lib/audit-ledger";
 import { loadOperationsAnalytics } from "@/lib/operations-analytics-service";
 import type { OperationsAnalyticsResponse } from "@/lib/operational-analytics";
 import {reportCsvCell, reportTimestampBounds} from "@/lib/report-safety";
@@ -131,24 +130,23 @@ export async function createManagementReportSchedule(ctx: AccessContext, input: 
   if (ctx.role !== "ceo" || ctx.supportSessionId) throw new Error("Only the tenant CEO can schedule management reports.");
   const values = scheduleSchema.parse(input);
   const recipients = await validRecipients(ctx, values.recipientIds, values.scope);
-  const { data, error } = await db.from("management_report_schedules").insert({
-    org_id: ctx.orgId, created_by: ctx.userId, name: values.name, cadence: values.cadence, run_day: values.runDay,
-    run_hour: values.runHour, lookback_days: values.lookbackDays, scope: values.scope, recipient_ids: recipients.ids,
-    next_run_at: nextRun(values.cadence, values.runDay, values.runHour),
-  }).select("*").single();
-  if (error) throw new Error(error.message);
-  await recordAuditEvent(ctx, { eventType: "management_report.schedule_created", operation: "insert", entityTable: "management_report_schedules", entityId: String(data.id), reason: `Scheduled ${values.name}.`, after: data });
-  return data;
+  return reportRpc("create_management_report_schedule", {
+    p_org: ctx.orgId, p_actor: ctx.userId, p_values: {...values, recipientIds: recipients.ids},
+    p_next_run: nextRun(values.cadence, values.runDay, values.runHour),
+  });
 }
 
 export async function setManagementReportScheduleActive(ctx: AccessContext, scheduleId: string, active: boolean) {
   if (ctx.role !== "ceo" || ctx.supportSessionId) throw new Error("Only the tenant CEO can change report schedules.");
-  const { data: before } = await db.from("management_report_schedules").select("*").eq("id", scheduleId).eq("org_id", ctx.orgId).maybeSingle();
-  if (!before) throw new Error("Report schedule not found.");
-  const { data, error } = await db.from("management_report_schedules").update({ is_active: active, next_run_at: active ? nextRun(before.cadence, before.run_day, before.run_hour) : before.next_run_at, updated_at: new Date().toISOString() }).eq("id", scheduleId).select("*").single();
+  z.string().uuid().parse(scheduleId);
+  const { data: before, error } = await db.from("management_report_schedules").select("*").eq("id", scheduleId).eq("org_id", ctx.orgId).maybeSingle();
   if (error) throw new Error(error.message);
-  await recordAuditEvent(ctx, { eventType: active ? "management_report.schedule_resumed" : "management_report.schedule_paused", operation: "update", entityTable: "management_report_schedules", entityId: scheduleId, reason: active ? "Resumed the report schedule." : "Paused the report schedule.", before, after: data });
-  return data;
+  if (!before) throw new Error("Report schedule not found.");
+  return reportRpc("set_management_report_schedule_active", {
+    p_org: ctx.orgId, p_actor: ctx.userId, p_id: scheduleId, p_active: active,
+    p_expected_revision: before.updated_at,
+    p_next_run: active ? nextRun(before.cadence, before.run_day, before.run_hour) : null,
+  });
 }
 
 async function reportRpc(name: string, args: Record<string, unknown>) {

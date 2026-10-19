@@ -55,3 +55,10 @@ test("scheduler generates due reports and retains branded HTML and CSV downloads
   assert.match(service, /renderManagementReportCsv/);
   assert.match(workflow, /platform-monitoring\.mjs reports/);
 });
+
+test("schedule writes use atomic audited RPCs rather than a separate audit call", () => {
+  assert.match(service, /reportRpc\("create_management_report_schedule"/);
+  assert.match(service, /reportRpc\("set_management_report_schedule_active"/);
+  assert.match(service, /p_expected_revision: before.updated_at/);
+  assert.doesNotMatch(service, /recordAuditEvent|from\("management_report_schedules"\)\.(insert|update|delete)/);
+});
