@@ -3,13 +3,13 @@ import { createManagementReportSchedule, generateManagementReport, getManagement
 
 function failure(error: unknown) {
   const message = error instanceof Error ? error.message : "The report request could not be completed.";
-  const status = message.includes("Only the tenant CEO") || message.includes("outside your access") ? 403 : message.includes("not found") ? 404 : 400;
+  const status = message.includes("Only the tenant CEO") || message.includes("outside your access") || message.includes("access is required") ? 403 : message.includes("not found") ? 404 : 400;
   return Response.json({ error: message }, { status, headers: {"Cache-Control": "private, no-store"} });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const access = await getAccessContext({ tenant: true }); if (isAccessResponse(access)) return access;
-  try { return Response.json(await getManagementReportCenter(access), {headers: {"Cache-Control": "private, no-store"}}); } catch (error) { return failure(error); }
+  try { return Response.json(await getManagementReportCenter(access, new URL(request.url).searchParams.get("cursor")), {headers: {"Cache-Control": "private, no-store"}}); } catch (error) { return failure(error); }
 }
 
 export async function POST(request: Request) {

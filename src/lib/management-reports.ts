@@ -10,6 +10,7 @@ import type { OperationsAnalyticsResponse } from "@/lib/operational-analytics";
 import {reportCsvCell, reportTimestampBounds} from "@/lib/report-safety";
 import {executeReportGeneration, ReportBusyError, type ReportClaim} from "@/lib/report-generation";
 import {scopedReportVersion, readableReportVersion, type ReportResources} from "@/lib/report-snapshot";
+import {readSavedReportCursor, savedReportPage, type SavedReportSummary} from "@/lib/saved-report-page";
 
 const db = governanceAdmin as any;
 const REPORT_VERSION = scopedReportVersion;
@@ -104,10 +105,12 @@ async function validRecipients(ctx: AccessContext, recipientIds: string[], scope
   return { ids, profiles: data ?? [] };
 }
 
-export async function getManagementReportCenter(ctx: AccessContext) {
+export async function getManagementReportCenter(ctx: AccessContext, cursor: string | null = null) {
   if (ctx.role !== "ceo" && ctx.role !== "farm_manager") throw new Error("Management report access is required.");
   let schedules = db.from("management_report_schedules").select("*").eq("org_id", ctx.orgId).order("created_at", { ascending: false });
-  const runs = db.rpc("list_accessible_management_reports", {p_actor: ctx.userId});
+  const before = readSavedReportCursor(cursor, ctx.userId, ctx.orgId);
+  const runs = db.rpc("page_accessible_management_reports", {p_actor: ctx.userId, p_org: ctx.orgId,
+    p_before_time: before?.createdAt ?? null, p_before_id: before?.id ?? null});
   if (ctx.role === "farm_manager") {
     schedules = schedules.contains("recipient_ids", [ctx.userId]);
   }
@@ -117,13 +120,14 @@ export async function getManagementReportCenter(ctx: AccessContext) {
   ]);
   const error = scheduleResult.error ?? runResult.error ?? profileResult.error;
   if (error) throw new Error(error.message);
-  const schedulesData = scheduleResult.data ?? []; const runsData = runResult.data ?? [];
+  const schedulesData = scheduleResult.data ?? [];
+  const page = savedReportPage((runResult.data ?? []) as SavedReportSummary[], ctx.userId, ctx.orgId);
   if (ctx.role === "farm_manager") {
     const visibleSchedules: Row[] = [];
     for (const row of schedulesData) if (row.scope?.farmId && await canAccessFarm(ctx, String(row.scope.farmId))) visibleSchedules.push(row);
-    return { currentUserId: ctx.userId, capabilities: { canSchedule: false, canGenerate: true }, schedules: visibleSchedules, runs: runsData, recipients: profileResult.data ?? [] };
+    return { currentUserId: ctx.userId, capabilities: { canSchedule: false, canGenerate: true }, schedules: visibleSchedules, ...page, recipients: profileResult.data ?? [] };
   }
-  return { currentUserId: ctx.userId, capabilities: { canSchedule: true, canGenerate: true }, schedules: schedulesData, runs: runsData, recipients: profileResult.data ?? [] };
+  return { currentUserId: ctx.userId, capabilities: { canSchedule: true, canGenerate: true }, schedules: schedulesData, ...page, recipients: profileResult.data ?? [] };
 }
 
 export async function createManagementReportSchedule(ctx: AccessContext, input: unknown) {
@@ -203,12 +207,12 @@ export async function dispatchScheduledManagementReports(origin: string) {
   return { due: schedules?.length ?? 0, completed, failed, skipped };
 }
 
-export async function getManagementReportRun(ctx: AccessContext, runId: string) {
+export async function getManagementReportRun(ctx: AccessContext, runId: string, allowFailed = false) {
   if (ctx.role !== "ceo" && ctx.role !== "farm_manager") throw new Error("Management report access is required.");
   const { data, error } = await db.rpc("read_accessible_management_report", {p_actor: ctx.userId, p_id: z.string().uuid().parse(runId)}).maybeSingle();
   if (error || !data) throw new Error(error?.message ?? "Report not found.");
   if (data.org_id !== ctx.orgId) throw new Error("This report is outside your access.");
-  if (data.status !== "completed" || !data.report_snapshot) throw new Error("This report has no completed snapshot.");
+  if (!allowFailed && (data.status !== "completed" || !data.report_snapshot)) throw new Error("This report has no completed snapshot.");
   return data;
 }
 

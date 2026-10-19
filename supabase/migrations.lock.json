@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 92,
-  "latest": "20261019001000_atomic_management_report_schedules.sql",
-  "aggregateSha256": "4f6e389dd3bc8c480b4da99096d50234fe7ebc7848629fc95ef2cb8258c66378",
+  "count": 93,
+  "latest": "20261019002000_management_report_pagination.sql",
+  "aggregateSha256": "d968a01e3f038658ce6a0ad142d8f270aff38a8688e15b1ccba5232b96e111ba",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -172,6 +172,7 @@
     "20261018000000_history_stock_operating_dates.sql": "4597ad77d64b16419346bb0360dac2526f1cb6abccd85b51f55a7af246394e31",
     "20261018001000_atomic_management_report_runs.sql": "9be98299f9300331a67f09ed9ee1c01475c371a40ec0ab9f0522fc4b118a961c",
     "20261019000000_management_report_resource_permissions.sql": "2de324308b8674be6db1bff22206ddcb6dfa84d2b40286688e736c759f63f7a4",
-    "20261019001000_atomic_management_report_schedules.sql": "3c1958241639df080b1dd912a1d281f35e0ffd242834d7bc9166de7d9b5ebc71"
+    "20261019001000_atomic_management_report_schedules.sql": "3c1958241639df080b1dd912a1d281f35e0ffd242834d7bc9166de7d9b5ebc71",
+    "20261019002000_management_report_pagination.sql": "398be8f5d7e26b29b062a471b0be0da35b2ff2abfca2aecdf332bcf894ff718e"
   }
 }

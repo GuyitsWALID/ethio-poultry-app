@@ -19,10 +19,10 @@
   - [x] Revalidate creator/recipient farm authority and stale schedule settings at finalization; test audit rollback, retries, stale workers and revoked assignments in Docker.
   - [x] Capture server-side used-resource provenance and revalidate every recipient's warehouse access at atomic publication, listing and download; exercise direct authenticated RLS in Docker.
   - [x] Add true multi-connection concurrency tests; finish schedule-definition audit transactions (local Docker verification; integrated staging acceptance remains in 5.3).
-- [ ] 1.6 Protect CSV text, legacy snapshots and authorized saved-report pagination/exact selection; preserve failed forms.
+- [x] 1.6 Protect CSV text, legacy snapshots and authorized saved-report pagination/exact selection; preserve failed forms.
   - [x] Share CSV formula protection across browser/saved exports; keep failed schedule forms open and make management reads private/no-store.
   - [x] Restrict unverifiable legacy snapshots to current tenant CEOs without rewriting them; filter authorized saved rows before the legacy list limit and protect direct database reads.
-  - [ ] Add complete saved-report pagination and exact selection with browser coverage.
+  - [x] Add complete saved-report pagination and exact selection with local database and desktop/tablet presentation coverage; authenticated staging validation remains in 5.3.
 ## 2. Shared read model
 - [ ] 2.1 Implement authorized typed `/api/reports/performance` with metrics, series, coverage, units and explanation codes.
 - [ ] 2.2 Implement range-aware inventory, scope-wide feeding, previous-period comparisons and evidence links without duplicate events.

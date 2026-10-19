@@ -30,7 +30,7 @@ test("legacy rendering stays version-specific and unknown versions fail closed",
 test("all application snapshot reads use the database permission boundary", async () => {
   const service = await readFile(new URL("../src/lib/management-reports.ts", import.meta.url), "utf8");
   assert.doesNotMatch(service, /\.from\("management_report_runs"\)/);
-  assert.match(service, /list_accessible_management_reports/);
+  assert.match(service, /page_accessible_management_reports/);
   assert.match(service, /read_accessible_management_report/);
   assert.match(service, /report_resources: resources/);
   assert.match(service, /REPORT_RESOURCE_PROVENANCE_MISSING/);

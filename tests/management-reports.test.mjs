@@ -7,6 +7,7 @@ const service = await readFile(new URL("../src/lib/management-reports.ts", impor
 const route = await readFile(new URL("../src/app/api/operations-analytics/route.ts", import.meta.url), "utf8");
 const analyticsService = await readFile(new URL("../src/lib/operations-analytics-service.ts", import.meta.url), "utf8");
 const center = await readFile(new URL("../src/components/reports/management-report-center.tsx", import.meta.url), "utf8");
+const history = await readFile(new URL("../src/components/reports/saved-report-history.tsx", import.meta.url), "utf8");
 const workflow = await readFile(new URL("../.github/workflows/platform-monitoring.yml", import.meta.url), "utf8");
 
 test("report runs are immutable, tenant scoped, and shared only with named recipients", () => {
@@ -45,7 +46,7 @@ test("report history refreshes after failures and optional sharing excludes the 
   assert.match(center, /Optional in-app sharing/);
   assert.match(center, /You already have access as the report creator/);
   assert.match(center, /catch \(caught\)[\s\S]*await load\(\);[\s\S]*setError\(message\)/);
-  assert.match(center, /Report was not created/);
+  assert.match(history, /Report was not created/);
 });
 
 test("scheduler generates due reports and retains branded HTML and CSV downloads", () => {
