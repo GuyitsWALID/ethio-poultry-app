@@ -59,7 +59,7 @@ type NavItem = {
   href: string;
   label?: string;
   managerMessageKey?: ManagerNavigationMessageKey;
-  navigationKey?: "today" | "flocks" | "alerts" | "historyMore" | "history" | "reports" | "more" | "approvals" | "templates" | "recordChecks";
+  navigationKey?: "today" | "flocks" | "alerts" | "historyMore" | "history" | "reports" | "performance" | "more" | "approvals" | "templates" | "recordChecks";
 };
 
 type NavSection = {
@@ -188,7 +188,7 @@ const simplifiedFarmManagerNavSections: NavSection[] = [
       {id: "flocksBatches", navigationKey: "flocks", href: "/app/flocks"},
       {id: "alerts", navigationKey: "alerts", href: "/app/alerts"},
       {id: "history", navigationKey: "history", href: "/app/history"},
-      {id: "reports", navigationKey: "reports", href: "/app/reports"},
+      {id: "reports", navigationKey: "performance", href: "/app/reports"},
     ],
   },
   {
@@ -205,7 +205,7 @@ const simplifiedFarmManagerNavSections: NavSection[] = [
 
 // This limited History cleanup does not activate the gated CEO redesign.
 const historyCeoNavSections: NavSection[] = ceoNavSections.map(section => ({...section,
-  items: section.items.filter(item => !["requests", "dailyRecords", "feed", "mortality", "health", "inventory", "sales"].includes(item.id)).map(item => item.id === "governance" ? {...item, navigationKey: "approvals" as const} : item),
+  items: section.items.filter(item => !["analytics", "requests", "dailyRecords", "feed", "mortality", "health", "inventory", "sales"].includes(item.id)).map(item => item.id === "governance" ? {...item, navigationKey: "approvals" as const} : item.id === "reports" ? {...item, navigationKey: "performance" as const} : item),
 }));
 historyCeoNavSections[0] = {...historyCeoNavSections[0], items: [...historyCeoNavSections[0].items.slice(0, 3), {id: "history", navigationKey: "history", href: "/app/history"}, ...historyCeoNavSections[0].items.slice(3)]};
 historyCeoNavSections.push({id: "configuration", title: "", navigationKey: "more", items: [{id: "templates", navigationKey: "templates", href: "/app/feeding-log?feed_target=template_management"}]});
@@ -258,7 +258,8 @@ export function AppSidebar({ viewerRole, todayWorkspaceEnabled, mobileOpen = fal
     [visibleNavSections]
   );
   const isActive = (href: string) =>
-    pathname === href || (href !== "/app" && pathname.startsWith(`${href}/`));
+    pathname === href || (href !== "/app" && pathname.startsWith(`${href}/`)) ||
+    (todayWorkspaceEnabled && (viewerRole === "ceo" || viewerRole === "farm_manager") && href === "/app/reports" && pathname === "/app/analytics");
   const compactSidebar = collapsed && !mobileOpen;
 
   return (

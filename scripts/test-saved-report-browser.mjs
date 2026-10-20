@@ -8,10 +8,10 @@ const {build} = require('esbuild'), {chromium, expect} = require('@playwright/te
 const id = n => `31000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const row = n => ({id: id(n), report_name: `Saved report ${n}`, period_from: '2026-10-01', period_to: '2026-10-18',
   status: 'completed', failure_message: null, generated_at: '2026-10-19T07:00:00Z', created_at: '2026-10-19T07:00:00Z'});
-const entry = `import React from 'react';import {createRoot} from 'react-dom/client';
+const entry = `import React from 'react';import {createRoot} from 'react-dom/client';import {NextIntlClientProvider} from 'next-intl';
 import {SavedReportHistory} from './src/components/reports/saved-report-history';
 const page=${JSON.stringify({runs: [row(1), row(2)], nextCursor: 'page-two'})};
-createRoot(document.getElementById('root')).render(<SavedReportHistory page={page}/>);`;
+createRoot(document.getElementById('root')).render(<NextIntlClientProvider locale="en" messages={{}}><SavedReportHistory page={page}/></NextIntlClientProvider>);`;
 const bundle = await build({stdin: {contents: entry, resolveDir: repo, loader: 'tsx'}, bundle: true, write: false,
   jsx: 'automatic', platform: 'browser', define: {'process.env.NODE_ENV': '"development"'}, plugins: [{name: 'next-navigation', setup(b) {
     b.onResolve({filter: /^next\/navigation$/}, () => ({path: 'navigation', namespace: 'mock'}));
@@ -63,7 +63,7 @@ try {
     await page.goForward();
     await expect(page.getByRole('region').getByRole('heading', {name: 'Saved report 2', exact: true})).toBeVisible();
     await page.getByRole('button', {name: 'Load more reports'}).click();
-    await expect(page.getByRole('alert')).toContainText('Temporary list failure');
+    await expect(page.getByRole('alert')).toContainText('Report request failed');
     await expect(page.locator('article')).toHaveCount(2);
     failMore = false;
     await page.getByRole('button', {name: 'Retry loading reports'}).click();
@@ -72,10 +72,10 @@ try {
     await expect(page.getByRole('button', {name: 'Load more reports'})).toHaveCount(0);
     deniedDetail = true;
     await page.getByRole('button', {name: 'View report', exact: true}).last().click();
-    await expect(page.getByRole('alert')).toContainText('Report unavailable');
+    await expect(page.getByRole('alert')).toContainText('Report request failed');
     await expect(page.locator('iframe')).toHaveCount(0);
     await mount('saved_report=' + id(999));
-    await expect(page.getByRole('alert')).toContainText('Report unavailable');
+    await expect(page.getByRole('alert')).toContainText('Report request failed');
     await expect(page.locator('iframe')).toHaveCount(0);
     assert.equal(writes, 0);
     await page.close();

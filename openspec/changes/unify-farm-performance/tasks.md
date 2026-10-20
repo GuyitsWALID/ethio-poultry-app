@@ -24,21 +24,35 @@
   - [x] Restrict unverifiable legacy snapshots to current tenant CEOs without rewriting them; filter authorized saved rows before the legacy list limit and protect direct database reads.
   - [x] Add complete saved-report pagination and exact selection with local database and desktop/tablet presentation coverage; authenticated staging validation remains in 5.3.
 ## 2. Shared read model
-- [ ] 2.1 Implement authorized typed `/api/reports/performance` with metrics, series, coverage, units and explanation codes.
-- [ ] 2.2 Implement range-aware inventory, scope-wide feeding, previous-period comparisons and evidence links without duplicate events.
-- [ ] 2.3 Verify private/no-store, no offline caching and explicit denied/session/empty/missing/failure states.
+- [x] 2.1 Implement authorized typed `/api/reports/performance` with metrics, series, coverage, units and explanation codes.
+  - [x] Add the typed server-only facade, strict range/scope parsing and production/daily-feed/loss plus completed-health projections, retaining authoritative calculations and explicit partial/missing/failure states.
+  - [x] Complete all-topic stock, sales/cost and feeding-session adapters with Task 2.2. Visual workspace wiring remains Task 3.
+- [x] 2.2 Implement range-aware inventory, scope-wide feeding, previous-period comparisons and evidence links without duplicate events.
+  - [x] Compare equal inclusive operating periods; expose separate warehouse/item balances and units, session plans/actuals/closure coverage, separate layer/growth FCR, selected-sale collections, qualified margins and expense categories.
+  - [x] Reuse existing authoritative calculations; preserve exact authorized History evidence destinations and explicit bounded supporting previews without truncating calculation reads.
+- [x] 2.3 Verify private/no-store, no offline caching and explicit denied/session/empty/missing/failure states.
+  - [x] Exercise actual API orchestration with read-only transport fixtures, service-worker passthrough, revoked/foreign/shared-store scope checks and large source pagination. Full authenticated staging validation remains Task 5.3.
 ## 3. Visual workspace
-- [ ] 3.1 Add seven views, URL-persisted scope/date controls and accessible in-page supporting figures.
-- [ ] 3.2 Add Overview and Production visuals with coverage and age-correct targets.
-- [ ] 3.3 Add Feeding and Health visuals with supported explanations and separate FCR/loss types.
-- [ ] 3.4 Add Stock and Sales & Costs visuals with correctly labelled units, balances, collections and margins.
+- [x] 3.1 Add seven views, URL-persisted scope/date controls and accessible in-page supporting figures.
+  - [x] Enable the unified visual workspace for Today-enabled managers/CEOs; preserve disabled/Admin and exact correction routes. Saved reports hosts existing frozen-report controls; v2 snapshot/localization work remains Task 4.
+- [x] 3.2 Add Overview and Production visuals with coverage and age-correct targets.
+  - [x] Show comparisons, source-supported concerns, output/quality/weight plots and dated supporting evidence; explicitly label out-of-period measurements and missing targets.
+- [x] 3.3 Add Feeding and Health visuals with supported explanations and separate FCR/loss types.
+  - [x] Plot session plans/actuals, feed per bird, deaths/culls and cause/type breakdowns. Preserve null gaps, separate compatible conversion types and warn against automatic diagnosis.
+- [x] 3.4 Add Stock and Sales & Costs visuals with correctly labelled units, balances, collections and margins.
+  - [x] Separate warehouse/unit balance and movement charts; show sales, collections, balances, expense categories and qualified estimates with readable explanations and table alternatives.
 ## 4. Saved reports and compatibility
-- [ ] 4.1 Add all-topic consistent v2 evidence snapshots and authorized in-page detail API/preview.
-- [ ] 4.2 Integrate paginated saved reports/schedules, retry IDs and print-friendly HTML/CSV downloads.
-- [ ] 4.3 Consolidate enabled navigation and legacy links; preserve exact corrections/financial targets and disabled/Admin behavior.
-- [ ] 4.4 Complete EN/AM, Ethiopian dates, keyboard/table alternatives, focus and 48px controls.
+- [x] 4.1 Add all-topic consistent v2 evidence snapshots and authorized in-page detail API/preview.
+  - [x] Capture all five domain sections between database evidence revisions; retry changing reads and reject failed sections. Atomic publication rechecks the revision and every recipient's resource access. Legacy snapshots remain unchanged.
+- [x] 4.2 Integrate paginated saved reports/schedules, retry IDs and print-friendly HTML/CSV downloads.
+  - [x] Reuse claimed generation and atomic schedule/audit services; include selected warehouse scope, frozen visual summaries, tables, unavailable evidence, safe CSV and exact paginated previews.
+- [x] 4.3 Consolidate enabled navigation and legacy links; preserve exact corrections/financial targets and disabled/Admin behavior.
+  - [x] One Farm performance entry/header for enabled CEOs/managers; direct Analytics/advanced/saved resolution, with exact correction/financial targets and rollback preserved. Limited CEO navigation exception to simplify-farm-operations Task 7.4 only.
+- [x] 4.4 Complete EN/AM, Ethiopian dates, keyboard/table alternatives, focus and 48px controls.
+  - [x] Translate saved controls/errors and schedules, preserve user text, localize dates and frozen v2 renderings, retain table alternatives and 48px controls. New navigation terminology remains explicitly pending partner review, not falsely included in prior glossary approval.
 ## 5. Verification and release
-- [ ] 5.1 Add behavioral permission, lifecycle, boundary, scale, formula, concurrency, retry and compatibility regressions.
-- [ ] 5.2 Investigate staging Unavailable eggs against authoritative populated evidence; do not weaken assertions.
+- [x] 5.1 Add behavioral permission, lifecycle, boundary, scale, formula, concurrency, retry and compatibility regressions.
+- [x] 5.2 Investigate staging Unavailable eggs against authoritative populated evidence; do not weaken assertions.
+  - Staging read-only investigation on 2026-10-20 found one non-voided Daily Record in the selected 90 days, with null egg count and no positive egg records. Missing evidence correctly remains unavailable. The positive populated-data acceptance assertion is retained and cannot pass until an operator supplies an approved populated staging dataset.
 - [ ] 5.3 Run integrated full tests, TS/lint, production/Cloudflare builds and authenticated tablet/staging checks.
 - [ ] 5.4 Docker dry-run necessary migrations, migrate staging, validate and push to notmain; no production changes.

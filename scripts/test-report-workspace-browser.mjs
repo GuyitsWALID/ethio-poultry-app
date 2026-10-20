@@ -19,14 +19,14 @@ const entry = `
 import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
 import {NextIntlClientProvider} from 'next-intl';
 import {FarmScopeProvider} from './src/components/farm-scope-context';
-import {ReportsWorkspace} from './src/components/reports/consolidated-report-workspace';
+import {ReportsWorkspace,ConsolidatedReportWorkspace} from './src/components/reports/consolidated-report-workspace';
 import {ReportAnalyticsHandoff} from './src/components/reports/report-analytics-handoff';
 import FeedControlPage from './src/app/app/feeding-log/page';
 import {AppSidebar} from './src/components/app-sidebar';
 import en from './messages/en.json';import am from './messages/am.json';
 for(const method of ['pushState','replaceState']){const original=history[method].bind(history);history[method]=(...args)=>{original(...args);queueMicrotask(()=>window.dispatchEvent(new Event('routechange')))}}
 const params=new URLSearchParams(location.search);const role=params.get('role')==='manager'?'farm_manager':'ceo';
-function App(){const [locale,setLocale]=useState(localStorage.getItem('test-locale')||'en');return <NextIntlClientProvider locale={locale} messages={locale==='am'?am:en} timeZone='Africa/Addis_Ababa'><button onClick={()=>{localStorage.setItem('test-locale','am');setLocale('am')}}>Amharic</button><FarmScopeProvider viewerRole={role} todayWorkspaceEnabled={params.get('enabled')!=='false'}>{params.get('sidebar')?<AppSidebar viewerRole={role} todayWorkspaceEnabled={params.get('enabled')!=='false'} mobileOpen/>:params.get('legacyFeed')?<FeedControlPage/>:params.get('handoff')?<ReportAnalyticsHandoff section='feed'><p>Legacy analytics</p></ReportAnalyticsHandoff>:<ReportsWorkspace/>}</FarmScopeProvider></NextIntlClientProvider>}
+function App(){const [locale,setLocale]=useState(localStorage.getItem('test-locale')||'en');return <NextIntlClientProvider locale={locale} messages={locale==='am'?am:en} timeZone='Africa/Addis_Ababa'><button onClick={()=>{localStorage.setItem('test-locale','am');setLocale('am')}}>Amharic</button><FarmScopeProvider viewerRole={role} todayWorkspaceEnabled={params.get('enabled')!=='false'}>{params.get('legacyPresentation')?<ConsolidatedReportWorkspace/>:params.get('sidebar')?<AppSidebar viewerRole={role} todayWorkspaceEnabled={params.get('enabled')!=='false'} mobileOpen/>:params.get('legacyFeed')?<FeedControlPage/>:params.get('handoff')?<ReportAnalyticsHandoff section='feed'><p>Legacy analytics</p></ReportAnalyticsHandoff>:<ReportsWorkspace/>}</FarmScopeProvider></NextIntlClientProvider>}
 createRoot(document.getElementById('root')).render(<App/>);
 `;
 const bundled = await build({stdin: {contents: entry, resolveDir: repo, loader: "tsx"}, bundle: true, write: false, jsx: "automatic", platform: "browser", define: {"process.env.NODE_ENV": '"development"'}, plugins: [{name: "next-test-adapters", setup(builder) {
@@ -76,7 +76,8 @@ try {
       return route.fulfill({contentType: "text/html", body: '<html><body><div id="root"></div></body></html>'});
     });
     const mount = async search => {await page.goto(`http://reports.test/app/reports?${search}`); await page.addStyleTag({content: css.css}); await page.addScriptTag({content: bundled.outputFiles[0].text});};
-    await mount("role=manager&filter_view=1&filter_page_dateFrom=2026-09-01&filter_page_dateTo=2026-09-30");
+    // Retained presentation tested independently; new enabled workspace has its own browser suite.
+    await mount("role=manager&legacyPresentation=1&filter_view=1&filter_page_dateFrom=2026-09-01&filter_page_dateTo=2026-09-30");
     const nav = page.getByRole("navigation", {name: "Report sections"});
     await expect(page.getByText("12,345", {exact: true})).toBeVisible();
     await nav.getByRole("button", {name: "Feed and FCR", exact: true}).click();

@@ -63,7 +63,7 @@ export function AppShell({ children, viewerRole, todayWorkspaceEnabled }: { chil
   }, [mobileNavOpen]);
 
   const route = routeTitles.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-  const pageTitle = tPage(route?.[1] ?? "operationsWorkspace");
+  const pageTitle = todayWorkspaceEnabled && (viewerRole === "ceo" || viewerRole === "farm_manager") && ["/app/reports", "/app/analytics"].includes(pathname) ? tPage("farmPerformance") : tPage(route?.[1] ?? "operationsWorkspace");
   const pageGroup = tPage(route?.[2] ?? "groups.poultryManagement");
 
   return (

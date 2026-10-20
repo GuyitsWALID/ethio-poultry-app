@@ -8,6 +8,7 @@ const route = await readFile(new URL("../src/app/api/operations-analytics/route.
 const analyticsService = await readFile(new URL("../src/lib/operations-analytics-service.ts", import.meta.url), "utf8");
 const center = await readFile(new URL("../src/components/reports/management-report-center.tsx", import.meta.url), "utf8");
 const history = await readFile(new URL("../src/components/reports/saved-report-history.tsx", import.meta.url), "utf8");
+const copy = JSON.parse(await readFile(new URL("../messages/en.json", import.meta.url), "utf8")).SavedReports;
 const workflow = await readFile(new URL("../.github/workflows/platform-monitoring.yml", import.meta.url), "utf8");
 
 test("report runs are immutable, tenant scoped, and shared only with named recipients", () => {
@@ -20,7 +21,8 @@ test("report runs are immutable, tenant scoped, and shared only with named recip
 });
 
 test("report generation reuses protected authoritative analytics and hashes every snapshot", () => {
-  assert.match(service, /loadOperationsAnalytics\(ctx, analyticsParams/);
+  assert.match(service, /loadFarmPerformance\(ctx/);
+  assert.match(service, /captureConsistentPerformance/);
   assert.doesNotMatch(service, /fetch\(`\$\{origin\}\/api\/operations-analytics/);
   assert.match(service, /createHash\("sha256"\)/);
   assert.match(service, /snapshot_sha256/);
@@ -36,22 +38,24 @@ test("only a tenant CEO can schedule while managers can generate scoped snapshot
   assert.match(service, /Every report recipient must be an active CEO or Farm Manager/);
   assert.match(service, /A Farm Manager can receive only a report for a farm currently assigned to them/);
   assert.match(service, /Choose one assigned farm before saving a management report/);
-  assert.match(center, /Create downloadable report/);
-  assert.match(center, /Schedule report/);
+  assert.equal(copy.create, "Create downloadable report");
+  assert.equal(copy.schedule, "Schedule report");
+  assert.match(center, /copy\.create/);
+  assert.match(center, /copy\.schedule/);
 });
 
 test("report history refreshes after failures and optional sharing excludes the creator", () => {
   assert.match(service, /currentUserId: ctx\.userId/);
   assert.match(center, /recipient\.id !== center\.currentUserId/);
-  assert.match(center, /Optional in-app sharing/);
-  assert.match(center, /You already have access as the report creator/);
+  assert.match(center, /copy\.sharing/);
+  assert.match(center, /copy\.creator/);
   assert.match(center, /catch \(caught\)[\s\S]*await load\(\);[\s\S]*setError\(message\)/);
-  assert.match(history, /Report was not created/);
+  assert.match(history, /copy\.notCreated/);
 });
 
 test("scheduler generates due reports and retains branded HTML and CSV downloads", () => {
   assert.match(service, /dispatchScheduledManagementReports/);
-  assert.match(service, /scopedReportVersion/);
+  assert.match(service, /performanceReportVersion/);
   assert.match(service, /renderManagementReportHtml/);
   assert.match(service, /renderManagementReportCsv/);
   assert.match(workflow, /platform-monitoring\.mjs reports/);

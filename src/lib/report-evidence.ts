@@ -3,7 +3,7 @@ import {reportWarehouseAllowed} from "./report-safety.ts";
 
 export type EvidenceRow = Record<string, unknown>;
 export type EvidenceScope = {orgId: string; farmIds: string[]; flockIds: string[]; farmNames: Map<string, string>; flockNames: Map<string, string>; restricted: boolean; warehouseIds?: ReadonlySet<string> | null};
-export type EvidenceItem = {kind: "disease" | "treatment" | "observation" | "vaccination" | "expense" | "period"; label: string; date: string; endDate?: string; context: string; note?: string; status?: "draft" | "reconciled" | "locked"; amount?: number; unallocated?: number; warnings?: number};
+export type EvidenceItem = {kind: "disease" | "treatment" | "observation" | "vaccination" | "expense" | "period"; label: string; date: string; endDate?: string; context: string; category?: string; sourceId?: string; note?: string; status?: "draft" | "reconciled" | "locked"; amount?: number; unallocated?: number; warnings?: number};
 export type ReportEvidence = {dateFrom: string; dateTo: string; items: EvidenceItem[]; expenseTotal?: number};
 export class ReportEvidenceError extends Error {
   readonly code: string;
@@ -11,6 +11,7 @@ export class ReportEvidenceError extends Error {
   constructor(code: string, status = 400) {super(code); this.code = code; this.status = status;}
 }
 const text = (value: unknown) => typeof value === "string" ? value : "";
+const sourceId = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : undefined;
 const amount = (value: unknown) => (typeof value === "number" || typeof value === "string" && value.trim() !== "") && Number.isFinite(Number(value)) ? Number(value) : undefined;
 
 // Trusted assignment-filtered metadata only. A requested scope never grants access.
@@ -40,7 +41,7 @@ export function projectReportEvidence(section: "health" | "finance", input: Repo
   const result: ReportEvidence = {dateFrom: input.dateFrom, dateTo: input.dateTo, items: []};
   if (section === "health") {
     const events = (sources.events ?? []).filter(row => row.org_id === scope.orgId && !row.voided_at && scope.flockIds.includes(text(row.flock_id)) && within(text(row.event_date)));
-    result.items = events.filter(row => !/^SCHEDULE_(STATUS|TARGET)\|/.test(text(row.description)) && ["disease", "treatment", "observation"].includes(text(row.event_type))).map(row => ({kind: text(row.event_type) as EvidenceItem["kind"], label: text(row.diagnosis) || text(row.description), date: text(row.event_date), context: scope.flockNames.get(text(row.flock_id)) || "", note: text(row.treatment)}));
+    result.items = events.filter(row => !/^SCHEDULE_(STATUS|TARGET)\|/.test(text(row.description)) && ["disease", "treatment", "observation"].includes(text(row.event_type))).map(row => ({kind: text(row.event_type) as EvidenceItem["kind"], label: text(row.diagnosis) || text(row.description), date: text(row.event_date), context: scope.flockNames.get(text(row.flock_id)) || "", sourceId: sourceId(row.id), note: text(row.treatment)}));
     const seen = new Set<string>();
     for (const row of events) {
       const match = /^SCHEDULE_STATUS\|([^|]+)\|completed\|vaccination$/.exec(text(row.description));
@@ -48,14 +49,14 @@ export function projectReportEvidence(section: "health" | "finance", input: Repo
       const vaccine = sources.vaccinations?.find(record => record.id === match[1] && record.org_id === scope.orgId && record.flock_id === row.flock_id && !record.voided_at);
       if (!vaccine) continue;
       seen.add(match[1]);
-      result.items.push({kind: "vaccination", label: text(vaccine.vaccine_name), date: text(row.event_date), context: scope.flockNames.get(text(row.flock_id)) || ""});
+      result.items.push({kind: "vaccination", label: text(vaccine.vaccine_name), date: text(row.event_date), context: scope.flockNames.get(text(row.flock_id)) || "", sourceId: sourceId(row.id)});
     }
   } else {
     const warehouseIds = scope.warehouseIds === undefined ? (scope.restricted ? new Set<string>() : null) : scope.warehouseIds;
     const allowed = (row: EvidenceRow) => row.org_id === scope.orgId && (!scope.restricted || scope.farmIds.includes(text(row.farm_id))) && (!row.warehouse_id || reportWarehouseAllowed(row.warehouse_id, warehouseIds)) && (!input.branchId || row.branch_id === input.branchId) && (!input.houseId || row.house_id === input.houseId) && (!input.flockId || row.flock_id === input.flockId) && (!input.batchId || row.batch_id === input.batchId);
     const expenses = (sources.expenses ?? []).filter(row => allowed(row) && within(text(row.entry_date)));
     result.expenseTotal = expenses.every(row => amount(row.amount) !== undefined) ? expenses.reduce((sum, row) => sum + Number(row.amount), 0) : undefined;
-    result.items = expenses.map(row => ({kind: "expense", label: text(row.description), date: text(row.entry_date), context: scope.farmNames.get(text(row.farm_id)) || "", amount: amount(row.amount)}));
+    result.items = expenses.map(row => ({kind: "expense", label: text(row.description), date: text(row.entry_date), context: scope.farmNames.get(text(row.farm_id)) || "", category: text(row.category), sourceId: sourceId(row.id), amount: amount(row.amount)}));
     for (const row of sources.periods ?? []) {
       if (!allowed(row) || text(row.period_start) > input.dateTo || text(row.period_end) < input.dateFrom) continue;
       // Legacy aggregates have no frozen store provenance. A farm grant alone

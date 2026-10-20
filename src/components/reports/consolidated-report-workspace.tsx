@@ -8,6 +8,7 @@ import {useFarmScope} from "@/components/farm-scope-context";
 import {usePageFilter} from "@/components/page-filter-controls";
 import {OperationDateInput} from "@/components/operation-date-input";
 import {BranchReportWorkspace} from "@/components/reports/branch-report-workspace";
+import {FarmPerformanceWorkspace} from "@/components/reports/farm-performance-workspace";
 import {formatEtb, formatNumber, formatOperationDate} from "@/i18n/formats";
 import {loadReport, reportSection, reportSections, type ReportSection, type ReportValue, type ReportView} from "@/lib/report-workspace";
 
@@ -106,6 +107,6 @@ export function ReportsWorkspace() {
   const {role, todayWorkspaceEnabled, loading} = useFarmScope();
   const t = useTranslations("ReportWorkspace");
   if (loading) return <p role="status">{t("loading")}</p>;
-  const legacy = role === "system_admin" || (role === "farm_manager" && !todayWorkspaceEnabled) || query?.get("view") === "advanced" || ["finding", "governance_request", "financial_period", "cost_entry", "report_id"].some(key => query?.has(key));
-  return legacy ? <BranchReportWorkspace/> : <ConsolidatedReportWorkspace/>;
+  const legacy = role === "system_admin" || (role === "farm_manager" && !todayWorkspaceEnabled) || (!todayWorkspaceEnabled && (query?.get("view") === "advanced" || query?.has("report_id"))) || ["finding", "governance_request", "financial_period", "cost_entry"].some(key => query?.has(key));
+  return legacy ? <BranchReportWorkspace/> : todayWorkspaceEnabled && (role === "ceo" || role === "farm_manager") ? <FarmPerformanceWorkspace/> : <ConsolidatedReportWorkspace/>;
 }

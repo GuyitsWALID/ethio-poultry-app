@@ -4,17 +4,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock, FileClock, Loader2, Pause, Play, Plus, RefreshCw } from "lucide-react";
 import {SavedReportHistory} from "@/components/reports/saved-report-history";
+import {useSavedReportText} from "@/components/reports/use-saved-report-text";
 import type {SavedReportPage} from "@/lib/saved-report-page";
 
-type Scope = { branchId?: string; farmId?: string; houseId?: string; flockId?: string; batchId?: string };
+type Scope = { branchId?: string; farmId?: string; houseId?: string; flockId?: string; batchId?: string; warehouseId?: string };
 type Recipient = { id: string; full_name: string; role: string };
 type Schedule = { id: string; name: string; cadence: "weekly" | "monthly"; run_day: number; run_hour: number; lookback_days: number; is_active: boolean; next_run_at: string; recipient_ids: string[] };
 type Center = SavedReportPage & { currentUserId: string; capabilities: { canSchedule: boolean; canGenerate: boolean }; schedules: Schedule[]; recipients: Recipient[] };
-
-function timestamp(value: string | null) {
-  if (!value) return "Not generated";
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Africa/Addis_Ababa" }).format(new Date(value));
-}
 
 class ReportRequestError extends Error {constructor(message: string, readonly status: number) {super(message);}}
 async function requestJson(url: string, options?: RequestInit) {
@@ -23,19 +19,20 @@ async function requestJson(url: string, options?: RequestInit) {
 }
 
 export function ManagementReportCenter({ scope, dateFrom, dateTo, scopeLabel }: { scope: Scope; dateFrom: string; dateTo: string; scopeLabel: string }) {
+  const {copy, timestamp} = useSavedReportText();
   const [center, setCenter] = useState<Center | null>(null); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState<string | null>(null); const [showSchedule, setShowSchedule] = useState(false);
-  const [name, setName] = useState("Weekly management brief"); const [cadence, setCadence] = useState<"weekly" | "monthly">("weekly"); const [runDay, setRunDay] = useState(1); const [recipientIds, setRecipientIds] = useState<string[]>([]);
+  const [name, setName] = useState(copy.defaultName); const [cadence, setCadence] = useState<"weekly" | "monthly">("weekly"); const [runDay, setRunDay] = useState(1); const [recipientIds, setRecipientIds] = useState<string[]>([]);
   const reportRetry = useRef<{payload: string; commandId: string} | null>(null);
   const cleanScope = useMemo(() => Object.fromEntries(Object.entries(scope).filter(([, value]) => Boolean(value))) as Scope, [scope]);
   const shareRecipients = useMemo(() => center?.recipients.filter((recipient) => recipient.id !== center.currentUserId) ?? [], [center]);
-  const load = useCallback(async () => { try { setCenter(await requestJson("/api/reports/management")); setError(null); } catch (caught) { if (caught instanceof ReportRequestError && [401, 403].includes(caught.status)) setCenter(null); setError(caught instanceof Error ? caught.message : "Could not load saved reports."); } }, []);
+  const load = useCallback(async () => { try { setCenter(await requestJson("/api/reports/management")); setError(null); } catch (caught) { if (caught instanceof ReportRequestError && [401, 403].includes(caught.status)) setCenter(null); setError(copy.requestFailed); } }, [copy.requestFailed]);
   useEffect(() => { void load(); }, [load]);
 
   const act = async (key: string, body: unknown) => {
     setBusy(key); setError(null);
     try { await requestJson("/api/reports/management", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); await load(); return true; }
-    catch (caught) {
-      const message = caught instanceof Error ? caught.message : "The report request failed.";
+    catch {
+      const message = copy.requestFailed;
       await load();
       setError(message);
       return false;
@@ -43,7 +40,7 @@ export function ManagementReportCenter({ scope, dateFrom, dateTo, scopeLabel }: 
     finally { setBusy(null); }
   };
   const generate = async () => {
-    const report = {name: `${scopeLabel} management brief`, scope: cleanScope, periodFrom: dateFrom, periodTo: dateTo, recipientIds};
+    const report = {name: `${scopeLabel} ${copy.defaultName}`, scope: cleanScope, periodFrom: dateFrom, periodTo: dateTo, recipientIds};
     const payload = JSON.stringify(report);
     if (reportRetry.current?.payload !== payload) reportRetry.current = {payload, commandId: crypto.randomUUID()};
     if (await act("generate", {action: "run_now", report: {...report, commandId: reportRetry.current.commandId}})) reportRetry.current = null;
@@ -56,20 +53,20 @@ export function ManagementReportCenter({ scope, dateFrom, dateTo, scopeLabel }: 
   return (
     <section className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm" aria-labelledby="saved-reports-heading">
       <div className="flex flex-col gap-4 border-b border-sand-200 bg-forest-900 p-5 text-white lg:flex-row lg:items-center lg:justify-between">
-        <div><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-amber-300">Management reporting</p><h2 id="saved-reports-heading" className="mt-1 font-display text-2xl font-semibold">Downloadable reports & schedules</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-sand-100">Create a permanent management report from the current evidence and download it whenever needed. Sharing with another manager is optional.</p></div>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={generate} disabled={busy !== null || !center?.capabilities.canGenerate} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-white px-4 text-xs font-semibold text-forest-900 disabled:opacity-50">{busy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileClock className="h-4 w-4" />}Create downloadable report</button>{center?.capabilities.canSchedule ? <button type="button" onClick={() => setShowSchedule((value) => !value)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/25 px-4 text-xs font-semibold hover:bg-white/10"><CalendarClock className="h-4 w-4" />Schedule report</button> : null}</div>
+        <div><p className="text-[10px] font-semibold uppercase tracking-[.2em] text-amber-300">{copy.eyebrow}</p><h2 id="saved-reports-heading" className="mt-1 font-display text-2xl font-semibold">{copy.heading}</h2><p className="mt-1 max-w-2xl text-xs leading-5 text-sand-100">{copy.description}</p></div>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={generate} disabled={busy !== null || !center?.capabilities.canGenerate} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-white px-4 text-xs font-semibold text-forest-900 disabled:opacity-50">{busy === "generate" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileClock className="h-4 w-4" />}{copy.create}</button>{center?.capabilities.canSchedule ? <button type="button" onClick={() => setShowSchedule((value) => !value)} className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-white/25 px-4 text-xs font-semibold hover:bg-white/10"><CalendarClock className="h-4 w-4" />{copy.schedule}</button> : null}</div>
       </div>
       {error ? <div role="alert" className="border-b border-ember-500/30 bg-ember-500/10 px-5 py-3 text-sm text-ember-700">{error}</div> : null}
       {showSchedule && center?.capabilities.canSchedule ? <div className="grid gap-4 border-b border-sand-200 bg-sand-50 p-5 lg:grid-cols-[1.2fr_.8fr_.7fr_1.3fr_auto] lg:items-end">
-        <label className="grid gap-1 text-xs font-semibold text-forest-700">Report name<input value={name} onChange={(event) => setName(event.target.value)} className="h-11 rounded-xl border border-sand-300 bg-white px-3 font-normal" /></label>
-        <label className="grid gap-1 text-xs font-semibold text-forest-700">Frequency<select value={cadence} onChange={(event) => { const value = event.target.value as "weekly" | "monthly"; setCadence(value); setRunDay(1); }} className="h-11 rounded-xl border border-sand-300 bg-white px-3 font-normal"><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></label>
-        <label className="grid gap-1 text-xs font-semibold text-forest-700">{cadence === "weekly" ? "Run day" : "Day of month"}{cadence === "weekly" ? <select value={runDay} onChange={(event) => setRunDay(Number(event.target.value))} className="h-11 rounded-xl border border-sand-300 bg-white px-3 font-normal"><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option><option value={6}>Saturday</option><option value={7}>Sunday</option></select> : <input type="number" min={1} max={28} value={runDay} onChange={(event) => setRunDay(Number(event.target.value))} className="h-11 rounded-xl border border-sand-300 bg-white px-3 font-normal" />}</label>
-        <fieldset><legend className="text-xs font-semibold text-forest-700">Optional in-app sharing</legend><div className="mt-1 flex min-h-11 flex-wrap items-center gap-3 rounded-xl border border-sand-300 bg-white px-3">{shareRecipients.length ? shareRecipients.map((recipient) => <label key={recipient.id} className="inline-flex items-center gap-1.5 text-xs text-forest-700"><input type="checkbox" checked={recipientIds.includes(recipient.id)} onChange={(event) => setRecipientIds((current) => event.target.checked ? [...current, recipient.id] : current.filter((id) => id !== recipient.id))} />{recipient.full_name}</label>) : <span className="text-xs text-forest-500">No other eligible managers in this scope.</span>}</div><p className="mt-1 text-[11px] text-forest-500">You already have access as the report creator.</p></fieldset>
-        <button type="button" onClick={() => void createSchedule()} disabled={busy !== null || name.trim().length < 3} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-forest-900 px-4 text-xs font-semibold text-white disabled:opacity-50"><Plus className="h-4 w-4" />Save schedule</button>
+        <label className="grid gap-1 text-xs font-semibold text-forest-700">{copy.name}<input value={name} onChange={(event) => setName(event.target.value)} className="h-12 rounded-xl border border-sand-300 bg-white px-3 font-normal" /></label>
+        <label className="grid gap-1 text-xs font-semibold text-forest-700">{copy.frequency}<select value={cadence} onChange={(event) => { const value = event.target.value as "weekly" | "monthly"; setCadence(value); setRunDay(1); }} className="h-12 rounded-xl border border-sand-300 bg-white px-3 font-normal"><option value="weekly">{copy.weekly}</option><option value="monthly">{copy.monthly}</option></select></label>
+        <label className="grid gap-1 text-xs font-semibold text-forest-700">{cadence === "weekly" ? copy.runDay : copy.monthDay}{cadence === "weekly" ? <select value={runDay} onChange={(event) => setRunDay(Number(event.target.value))} className="h-12 rounded-xl border border-sand-300 bg-white px-3 font-normal"><option value={1}>{copy.days[0]}</option><option value={2}>{copy.days[1]}</option><option value={3}>{copy.days[2]}</option><option value={4}>{copy.days[3]}</option><option value={5}>{copy.days[4]}</option><option value={6}>{copy.days[5]}</option><option value={7}>{copy.days[6]}</option></select> : <input type="number" min={1} max={28} value={runDay} onChange={(event) => setRunDay(Number(event.target.value))} className="h-12 rounded-xl border border-sand-300 bg-white px-3 font-normal" />}</label>
+        <fieldset><legend className="text-xs font-semibold text-forest-700">{copy.sharing}</legend><div className="mt-1 flex min-h-12 flex-wrap items-center gap-3 rounded-xl border border-sand-300 bg-white px-3">{shareRecipients.length ? shareRecipients.map((recipient) => <label key={recipient.id} className="inline-flex min-h-12 items-center gap-1.5 text-xs text-forest-700"><input type="checkbox" checked={recipientIds.includes(recipient.id)} onChange={(event) => setRecipientIds((current) => event.target.checked ? [...current, recipient.id] : current.filter((id) => id !== recipient.id))} />{recipient.full_name}</label>) : <span className="text-xs text-forest-500">{copy.noRecipients}</span>}</div><p className="mt-1 text-[11px] text-forest-500">{copy.creator}</p></fieldset>
+        <button type="button" onClick={() => void createSchedule()} disabled={busy !== null || name.trim().length < 3} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-forest-900 px-4 text-xs font-semibold text-white disabled:opacity-50"><Plus className="h-4 w-4" />{copy.saveSchedule}</button>
       </div> : null}
       <div className="grid lg:grid-cols-[.9fr_1.1fr]">
-        <div className="border-b border-sand-200 p-5 lg:border-b-0 lg:border-r"><div className="flex items-center justify-between"><div><h3 className="font-semibold text-forest-900">Automatic reports</h3><p className="mt-1 text-xs text-forest-500">Generated even when nobody has the dashboard open.</p></div><button type="button" onClick={() => void load()} aria-label="Refresh saved reports" className="rounded-lg border border-sand-200 p-2 text-forest-600"><RefreshCw className="h-4 w-4" /></button></div><div className="mt-4 space-y-2">{center?.schedules.length ? center.schedules.map((schedule) => <div key={schedule.id} className="flex items-center gap-3 rounded-xl border border-sand-200 p-3"><div className={`grid h-9 w-9 place-items-center rounded-full ${schedule.is_active ? "bg-leaf-500/15 text-leaf-600" : "bg-sand-100 text-forest-400"}`}>{schedule.is_active ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-forest-900">{schedule.name}</p><p className="mt-0.5 text-[11px] text-forest-500">{schedule.cadence} · next {timestamp(schedule.next_run_at)}</p></div>{center.capabilities.canSchedule ? <button type="button" disabled={busy !== null} onClick={() => void act(schedule.id, { action: "set_active", scheduleId: schedule.id, active: !schedule.is_active })} className="rounded-lg border border-sand-200 px-2.5 py-1.5 text-[11px] font-semibold text-forest-700">{schedule.is_active ? "Pause" : "Resume"}</button> : null}</div>) : <div className="rounded-xl border border-dashed border-sand-300 p-5 text-center text-xs text-forest-500">No automatic report schedule is visible in your scope.</div>}</div></div>
-        {center ? <SavedReportHistory page={center} /> : <p role="status" className="p-5">Loading saved reports…</p>}
+        <div className="border-b border-sand-200 p-5 lg:border-b-0 lg:border-r"><div className="flex items-center justify-between"><div><h3 className="font-semibold text-forest-900">{copy.automatic}</h3><p className="mt-1 text-xs text-forest-500">{copy.automaticNote}</p></div><button type="button" onClick={() => void load()} aria-label={copy.refresh} className="min-h-12 min-w-12 rounded-lg border border-sand-200 p-2 text-forest-600"><RefreshCw className="h-4 w-4" /></button></div><div className="mt-4 space-y-2">{center?.schedules.length ? center.schedules.map((schedule) => <div key={schedule.id} className="flex items-center gap-3 rounded-xl border border-sand-200 p-3"><div className={`grid h-9 w-9 place-items-center rounded-full ${schedule.is_active ? "bg-leaf-500/15 text-leaf-600" : "bg-sand-100 text-forest-400"}`}>{schedule.is_active ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-forest-900">{schedule.name}</p><p className="mt-0.5 text-[11px] text-forest-500">{copy[schedule.cadence]} · {copy.next} {timestamp(schedule.next_run_at)}</p></div>{center.capabilities.canSchedule ? <button type="button" disabled={busy !== null} onClick={() => void act(schedule.id, { action: "set_active", scheduleId: schedule.id, active: !schedule.is_active })} className="min-h-12 rounded-lg border border-sand-200 px-2.5 py-1.5 text-[11px] font-semibold text-forest-700">{schedule.is_active ? copy.pause : copy.resume}</button> : null}</div>) : <div className="rounded-xl border border-dashed border-sand-300 p-5 text-center text-xs text-forest-500">{copy.noSchedules}</div>}</div></div>
+        {center ? <SavedReportHistory page={center} /> : <p role="status" className="p-5">{copy.loading}</p>}
       </div>
     </section>
   );

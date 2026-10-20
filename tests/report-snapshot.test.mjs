@@ -24,7 +24,8 @@ test("an empty evidence set retains authorized farm context without inventing wa
 test("legacy rendering stays version-specific and unknown versions fail closed", () => {
   assert.equal(readableReportVersion("management-report-v1"), "management-report-v1");
   assert.equal(readableReportVersion(scopedReportVersion), "management-report-v1-scoped");
-  for (const version of [null, undefined, "management-report-v2", ""]) assert.throws(() => readableReportVersion(version), /not supported/);
+  assert.equal(readableReportVersion("management-report-v2"), "management-report-v2");
+  for (const version of [null, undefined, "management-report-v3", ""]) assert.throws(() => readableReportVersion(version), /not supported/);
 });
 
 test("all application snapshot reads use the database permission boundary", async () => {

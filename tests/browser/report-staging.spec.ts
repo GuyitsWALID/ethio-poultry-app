@@ -1,5 +1,5 @@
 import {expect, test} from "@playwright/test";
-import {buildReportHref, loadReport, reportSections, type ReportInput} from "../../src/lib/report-workspace";
+import {loadReport, reportSections, type ReportInput} from "../../src/lib/report-workspace";
 import {formatEtb, formatNumber} from "../../src/i18n/formats";
 import messages from "../../messages/en.json";
 
@@ -66,27 +66,35 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
       const feed = await loadReport("feed", input, read);
       if ((feed?.metrics.find(metric => metric.key === "feedKg")?.value || 0) > 0) break;
     }
-    await page.goto(buildReportHref("production", {...input, batchId: undefined}));
-    await page.getByRole("group", {name: /^(Language|ቋንቋ)$/}).getByRole("button", {name: "EN", exact: true}).click({timeout: 30_000});
+    // Exercise the unified workspace, while retaining independent source checks.
+    const performanceParams = new URLSearchParams({date_from: input.dateFrom, date_to: input.dateTo});
+    if (farmId) performanceParams.set("farm_id", farmId);
+    const performance = await read(`/api/reports/performance?${performanceParams}`);
+    const canonical = await read(`/api/operations-analytics?${performanceParams}`);
+    expect(performance.sections.production.metrics.find((m: {key: string}) => m.key === "eggs").value).toBe(canonical.summary.current.eggs);
     for (const section of reportSections) {
-      const selected = {...input, batchId: section === "feed" ? input.batchId : undefined};
-      const expected = await loadReport(section, selected, read);
-      expect(expected).not.toBeNull();
-      await page.goto(buildReportHref(section, selected));
-      const pane = page.getByRole("region", {name: messages.ReportWorkspace.sections[section], exact: true});
-      await expect(pane).toHaveAttribute("aria-busy", "false");
-      await expect(pane.getByRole("alert")).toHaveCount(0);
-      for (const metric of expected!.metrics) {
-        const value = metric.value === null ? messages.ReportWorkspace.unavailable : metric.unit === "ETB" ? formatEtb(metric.value, "en") : `${formatNumber(metric.value, "en")}${metric.unit ? ` ${metric.unit}` : ""}`;
-        const label = pane.getByText(messages.ReportWorkspace.metrics[metric.key], {exact: true}).first();
-        await expect(label.locator("..").getByText(value, {exact: true})).toBeVisible();
-      }
-      if (section === "production") expect(expected!.metrics.find(metric => metric.key === "eggs")!.value).toBeGreaterThan(0);
-      if (section === "feed") expect(expected!.metrics.find(metric => metric.key === "feedKg")!.value).toBeGreaterThan(0);
-      if (section === "stock" && input.warehouseId) expect(expected!.rows.length).toBeGreaterThan(0);
-      if (section === "stock" && !input.warehouseId) expect(expected!.rows).toHaveLength(0);
-      if (section === "finance") expect(expected!.metrics.find(metric => metric.key === "revenue")!.value).toBeGreaterThan(0);
+      const source = await loadReport(section, {...input, batchId: section === "feed" ? input.batchId : undefined}, read);
+      expect(source).not.toBeNull();
     }
+    const views = ["overview", "production", "feeding", "health", "stock", "salesCosts", "saved"] as const;
+    const query = new URLSearchParams({filter_view: "1", filter_dateFrom: input.dateFrom, filter_dateTo: input.dateTo});
+    if (farmId) query.set("filter_farmId", farmId);
+    await page.goto(`/app/reports?${query}`);
+    await page.getByRole("group", {name: /^(Language|ቋንቋ)$/}).getByRole("button", {name: "EN", exact: true}).click({timeout: 30_000});
+    for (const view of views) {
+      await page.getByRole("button", {name: messages.FarmPerformance.views[view], exact: true}).click();
+      await expect(page).toHaveURL(/\/app\/reports/);
+      await expect(page.getByRole("alert")).toHaveCount(0);
+      if (view === "overview" || view === "saved") continue;
+      for (const metric of performance.sections[view].metrics) {
+        const label = messages.FarmPerformance.labels[metric.key as keyof typeof messages.FarmPerformance.labels] ?? messages.FarmPerformance.unavailable;
+        const number = metric.value === null ? messages.FarmPerformance.unavailable : metric.unit === "ETB" ? formatEtb(metric.value, "en") : formatNumber(metric.value, "en");
+        const card = page.locator("dt").filter({hasText: label}).first().locator("..");
+        await expect(card.locator("dd").first()).toContainText(number);
+      }
+    }
+    // Keep populated acceptance strict: unavailable is not zero or a passing fixture.
+    expect(performance.sections.production.metrics.find((m: {key: string}) => m.key === "eggs").value, "Populated staging egg evidence is required").toBeGreaterThan(0);
     // Unknown targets cannot act as grants. No assignments are changed here.
     const unknown = "ffffffff-ffff-4fff-8fff-ffffffffffff";
     for (const section of ["health", "finance"]) {

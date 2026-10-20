@@ -5,8 +5,9 @@ import {reportRequest, type ReportInput} from "@/lib/report-workspace";
 import {projectReportEvidence, readAllEvidence, selectEvidenceScope, ReportEvidenceError} from "@/lib/report-evidence";
 import {effectiveWarehouseIds} from "@/lib/warehouse-access";
 import {projectLocationFlocks, reportRowInLocations, selectReportLocations, type ReportLocation} from "@/lib/report-locations";
+import {reportResources, type ReportResources} from "@/lib/report-snapshot";
 
-export async function loadReportEvidence(ctx: AccessContext, section: "health" | "finance", input: ReportInput) {
+export async function loadReportEvidence(ctx: AccessContext, section: "health" | "finance", input: ReportInput, captureResources?: (resources: ReportResources) => void) {
   if (!ctx.supportSessionId && ctx.role !== "ceo" && ctx.role !== "farm_manager") throw new ReportEvidenceError("REPORT_SCOPE_DENIED", 403);
   reportRequest(section, input);
   for (const value of [input.branchId, input.farmId, input.houseId, input.flockId, input.batchId]) if (value && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) throw new ReportEvidenceError("INVALID_REPORT_SCOPE");
@@ -51,8 +52,11 @@ export async function loadReportEvidence(ctx: AccessContext, section: "health" |
     return query;
   };
   const [expenses, periods] = await Promise.all([
-    all(() => filter(db.from("cost_entries").select("id,org_id,branch_id,farm_id,house_id,flock_id,batch_id,warehouse_id,entry_date,description,amount").eq("org_id", ctx.orgId).gte("entry_date", input.dateFrom).lte("entry_date", input.dateTo)).order("entry_date", {ascending: false}).order("id")),
+    all(() => filter(db.from("cost_entries").select("id,org_id,branch_id,farm_id,house_id,flock_id,batch_id,warehouse_id,entry_date,category,description,amount").eq("org_id", ctx.orgId).gte("entry_date", input.dateFrom).lte("entry_date", input.dateTo)).order("entry_date", {ascending: false}).order("id")),
     all(() => filter(db.from("monthly_cost_periods").select("id,org_id,branch_id,farm_id,house_id,flock_id,batch_id,period_start,period_end,status,total_absorbed_cost,unallocated_cost,reconciliation_warnings").eq("org_id", ctx.orgId).gte("period_end", input.dateFrom).lte("period_start", input.dateTo)).order("period_start", {ascending: false}).order("id")),
   ]);
-  return projectReportEvidence(section, input, scope, {expenses, periods});
+  const evidence = projectReportEvidence(section, input, scope, {expenses, periods});
+  const ids = new Set(evidence.items.filter(row => row.kind === "expense").map(row => row.sourceId));
+  captureResources?.(reportResources(scope.farmIds, expenses.filter(row => ids.has(String(row.id)) && row.warehouse_id)));
+  return evidence;
 }
