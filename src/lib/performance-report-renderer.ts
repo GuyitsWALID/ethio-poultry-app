@@ -6,12 +6,12 @@ import type {PerformanceSnapshot} from "./performance-snapshot";
 
 const escape = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]!);
 function text(snapshot: PerformanceSnapshot) {
-  const locale = snapshot.display_locale === "am" ? "am" : "en";
+  const locale: "en" | "am" = snapshot.display_locale === "am" ? "am" : "en";
   const copy = (locale === "am" ? am : en).FarmPerformance;
   const labels = copy.labels as Record<string, string>, units = copy.units as Record<string, string>, explanations = copy.explanations as Record<string, string>;
   const saved = (locale === "am" ? am : en).SavedReports;
   const headings: Record<string, string> = {metric: saved.measure, current: saved.selectedPeriod, item: copy.record, supportingFigures: copy.figures};
-  return {locale, copy, label: (key: string) => headings[key] ?? (copy.states as Record<string, string>)[key] ?? labels[key] ?? (copy.views as Record<string, string>)[key] ?? (copy as unknown as Record<string, string>)[key] ?? copy.unavailable, unit: (key: string) => units[key] ?? key,
+  return {locale: locale as "en" | "am", copy, label: (key: string) => headings[key] ?? (copy.states as Record<string, string>)[key] ?? labels[key] ?? (copy.views as Record<string, string>)[key] ?? (copy as unknown as Record<string, string>)[key] ?? copy.unavailable, unit: (key: string) => units[key] ?? key,
     explanation: (key: string) => explanations[key] ?? key,
     number: (value: number | null | undefined) => value == null || !Number.isFinite(value) ? copy.unavailable : formatNumber(value, locale),
     date: (value: string) => formatOperationDate(value, locale)};
