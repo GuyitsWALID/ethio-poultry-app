@@ -55,4 +55,8 @@
 - [x] 5.2 Investigate staging Unavailable eggs against authoritative populated evidence; do not weaken assertions.
   - Staging read-only investigation on 2026-10-20 found one non-voided Daily Record in the selected 90 days, with null egg count and no positive egg records. Missing evidence correctly remains unavailable. The positive populated-data acceptance assertion is retained and cannot pass until an operator supplies an approved populated staging dataset.
 - [ ] 5.3 Run integrated full tests, TS/lint, production/Cloudflare builds and authenticated tablet/staging checks.
-- [ ] 5.4 Docker dry-run necessary migrations, migrate staging, validate and push to notmain; no production changes.
+  - [x] Full regression suite, TypeScript, ESLint and production build passed; latest runtime checkpoint `6b9bb97` passed GitHub Quality gate.
+  - [x] Cloudflare staging Worker build/deployment passed for runtime checkpoint `6b9bb97`.
+  - [ ] Populated signed-in staging acceptance. Required staging source evidence is missing; do not weaken the acceptance test.
+- [x] 5.4 Docker dry-run necessary migrations, migrate staging, validate and push to notmain; no production changes.
+  - [x] All six pending reporting migrations committed to verified staging; no pending migrations remain. Real staging REST location and authorized saved-report readers passed for current CEO/manager profiles. All runtime checkpoints through `6b9bb97` pushed to `notmain`; production untouched. Final application acceptance remains explicitly in 5.3.

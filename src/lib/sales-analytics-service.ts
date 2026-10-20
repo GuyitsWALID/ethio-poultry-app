@@ -112,7 +112,7 @@ export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchPar
         .order("id")),
       readReportQuery(() => supabaseAdmin
         .from("daily_farm_records")
-        .select("record_date, flock_id, farm_id, house_id, normal_eggs, broken_eggs, total_eggs, feed_intake_grams")
+        .select("record_date, flock_id, normal_eggs, broken_eggs, total_eggs, feed_intake_grams")
         .eq("org_id", ctx.orgId)
         .is("voided_at",null)
         .gte("record_date", dateFrom)

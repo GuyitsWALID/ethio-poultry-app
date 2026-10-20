@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {build} from "esbuild";
+import {readFile} from "node:fs/promises";
 import {captureConsistentPerformance} from "../src/lib/performance-snapshot.ts";
 import {legacyPerformanceView} from "../src/lib/farm-performance-view.ts";
 const section = {state: "missing", metrics: [{key: "eggs", value: null, previous: 2, unit: "eggs"}], series: [], explanations: ["MISSING_EVIDENCE"], coverage: null};
@@ -33,4 +34,13 @@ test("v2 frozen output covers all topics, escapes user HTML and neutralizes CSV 
 test("legacy saved and analytics views resolve without interstitial navigation", () => {
   assert.equal(legacyPerformanceView(new URLSearchParams("report_id=old")), "saved");
   assert.equal(legacyPerformanceView(new URLSearchParams("view=advanced")), "saved");
+});
+test("all authoritative Daily Record readers use the real schema and verified location evidence", async () => {
+  for (const file of ["farm-performance.server.ts", "operations-analytics-service.ts", "sales-analytics-service.ts"]) {
+    const source = await readFile(new URL(`../src/lib/${file}`, import.meta.url), "utf8");
+    const selections = [...source.matchAll(/\.from\("daily_farm_records"\)\s*\.select\("([^"]+)"\)/g)];
+    assert.ok(selections.length, file);
+    for (const [, columns] of selections) assert.ok(columns.split(",").every(column => !["farm_id", "house_id"].includes(column.trim())), file);
+    assert.ok(source.includes("reportRowInLocations"), file);
+  }
 });

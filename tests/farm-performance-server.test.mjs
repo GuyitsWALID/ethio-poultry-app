@@ -9,7 +9,12 @@ const state = {calls: [], logs: []};
 globalThis.__performanceTest = state;
 class Query {
   constructor(table) {this.table = table; this.filters = []; this.orders = [];}
-  select() {return this;}
+  select(columns = "*") {
+    // Match the migrated schema: Daily Records locate through flock evidence,
+    // not nonexistent farm_id/house_id columns. Do not let mocks invent them.
+    if (this.table === "daily_farm_records" && columns.split(",").some(key => ["farm_id", "house_id"].includes(key))) this.invalidColumn = true;
+    return this;
+  }
   eq(key, value) {this.filters.push(row => row[key] === value); return this;}
   is(key, value) {this.filters.push(row => (row[key] ?? null) === value); return this;}
   in(key, values) {this.filters.push(row => values.includes(row[key])); return this;}
@@ -18,6 +23,7 @@ class Query {
   or() {return this;}
   order(key) {this.orders.push(key); return this;}
   async range(from, to) {
+    if (this.invalidColumn) return {data: null, error: {code: "42703", message: "Unknown Daily Record location column"}};
     state.calls.push({table: this.table, from, to});
     if (state.failTable === this.table) return {data: null, error: {message: "private SQL details"}};
     const rows = (state.tables[this.table] ?? []).filter(row => this.filters.every(filter => filter(row))).sort((a, b) => {
