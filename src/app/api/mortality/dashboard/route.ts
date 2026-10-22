@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     if (!flockIds.length) return json(base);
     const breedIds = [...new Set(activeFlocks.map((row) => String(row.breed_id ?? "")).filter(Boolean))];
     const [dailyRaw, eventRaw, standards] = await Promise.all([
-      allRows<Row>((a, b) => db.from("daily_farm_records").select("id,flock_id,farm_id,house_id,record_date,deaths,culls,other_removals,transfers_out,transfers_in,deaths_cause,opening_birds,closing_birds").eq("org_id", orgId).is("voided_at",null).in("flock_id", flockIds).gte("record_date", previousFrom).lte("record_date", dateTo).order("record_date").order("id").range(a, b)),
+      allRows<Row>((a, b) => db.from("daily_farm_records").select("id,flock_id,record_date,deaths,culls,other_removals,transfers_out,transfers_in,deaths_cause,opening_birds,closing_birds").eq("org_id", orgId).is("voided_at",null).in("flock_id", flockIds).gte("record_date", previousFrom).lte("record_date", dateTo).order("record_date").order("id").range(a, b)),
       allRows<Row>((a, b) => db.from("mortality_events").select("id,flock_id,record_date,count,cause,diagnosis,recorded_time,notes").eq("org_id", orgId).in("flock_id", flockIds).gte("record_date", dateFrom).lte("record_date", dateTo).order("record_date", { ascending: false }).order("id").range(a, b)),
       breedIds.length ? allRows<Row>((a, b) => db.from("breed_standards").select("breed_id,week_number,target_mortality_pct").eq("org_id", orgId).in("breed_id", breedIds).order("id").range(a, b)) : Promise.resolve([]),
     ]);

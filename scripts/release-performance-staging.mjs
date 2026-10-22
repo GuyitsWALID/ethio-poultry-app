@@ -31,7 +31,7 @@ if (mode === "inspect") {
     'layer_parent_records',count(*) filter(where f.flock_type in ('layer','parent_stock')),
     'first_record',min(d.record_date),'last_record',max(d.record_date))
     from public.daily_farm_records d join public.flocks f on f.id=d.flock_id and f.org_id=d.org_id
-    where d.voided_at is null and d.record_date between date '2026-10-20'-89 and date '2026-10-20';`));
+    where d.voided_at is null and d.record_date between (now() at time zone 'Africa/Addis_Ababa')::date-89 and (now() at time zone 'Africa/Addis_Ababa')::date;`));
 } else {
   assert.ok(pending.every(file => /^202610(18|19|20)\d{6}_/.test(file)), "Pending migrations outside reporting release window require review.");
   const statements = [];

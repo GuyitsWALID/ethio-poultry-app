@@ -36,8 +36,8 @@ test("legacy saved and analytics views resolve without interstitial navigation",
   assert.equal(legacyPerformanceView(new URLSearchParams("view=advanced")), "saved");
 });
 test("all authoritative Daily Record readers use the real schema and verified location evidence", async () => {
-  for (const file of ["farm-performance.server.ts", "operations-analytics-service.ts", "sales-analytics-service.ts"]) {
-    const source = await readFile(new URL(`../src/lib/${file}`, import.meta.url), "utf8");
+  for (const file of ["lib/farm-performance.server.ts", "lib/operations-analytics-service.ts", "lib/sales-analytics-service.ts", "app/api/mortality/dashboard/route.ts"]) {
+    const source = await readFile(new URL(`../src/${file}`, import.meta.url), "utf8");
     const selections = [...source.matchAll(/\.from\("daily_farm_records"\)\s*\.select\("([^"]+)"\)/g)];
     assert.ok(selections.length, file);
     for (const [, columns] of selections) assert.ok(columns.split(",").every(column => !["farm_id", "house_id"].includes(column.trim())), file);
