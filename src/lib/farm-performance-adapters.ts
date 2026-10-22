@@ -76,6 +76,11 @@ export function projectFeedingPerformance(input: ReportInput, evidence: FeedingE
   ], [], coverage, evidenceHref("feeding", input), ["RECORDED_SESSION_PLAN_ONLY", "INCOMPLETE_FEED_DAYS", "FEED_NOT_A_HEALTH_DIAGNOSIS"]);
   result.rows = current.sessions.map(row => ({label: String(row.session_name), date: String(row.record_date), context: String(evidence.flocks.find(flock => flock.id === row.flock_id)?.flock_code ?? ""), unit: "kg", values: {planned: knownNumber(row.planned_feed_kg), actual: row.status === "completed" ? knownNumber(row.actual_feed_kg) : row.status === "missed" ? 0 : null}, evidenceHref: buildHistoryHref({category: "feeding", from: input.dateFrom, to: input.dateTo}, {kind: "feed_session", id: String(row.id)})}));
   result.breakdowns = [{key: "feedTypes", unit: "kg", rows: [...new Set(current.sessions.map(row => String(row.feed_type ?? "unavailable")))].map(label => ({label, value: sum(current.sessions.filter(row => String(row.feed_type ?? "unavailable") === label && row.status === "completed"), "actual_feed_kg")}))}];
+  result.breakdowns.push({key: "sessionStatus", unit: "sessions", rows: [
+    {label: "completed", value: current.sessions.filter(row => row.status === "completed").length},
+    {label: "missed", value: current.sessions.filter(row => row.status === "missed").length},
+    {label: "unfinished", value: current.sessions.filter(row => !["completed", "missed"].includes(String(row.status))).length},
+  ]});
   result.series = ["actual", "planned"].map(key => ({key: `session_${key}`, unit: "kg" as const, points: [...new Set(current.sessions.map(row => String(row.record_date)))].sort().map(date => {
     const sessions = current.sessions.filter(row => row.record_date === date);
     return {date, value: key === "planned" ? sum(sessions, "planned_feed_kg") : sessions.some(row => !["completed", "missed"].includes(String(row.status))) ? null : sum(sessions.filter(row => row.status === "completed"), "actual_feed_kg")};

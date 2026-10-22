@@ -1240,6 +1240,37 @@
     ]
   },
   "FarmPerformance": {
+    "dashboard": {
+      "moreFilters": "More filters",
+      "movementHint": "Receipts and consumption during the selected period, within the same warehouse and unit.",
+      "evidence": "Evidence coverage",
+      "evidenceHint": "Read results alongside their supporting records.",
+      "sourceStatus": "Source status, not record coverage",
+      "operations": "Across your operation",
+      "sectionFailed": "This source could not be read. Retry or inspect its records. Other topics remain available.",
+      "noComposition": "The recorded total is zero. There is no composition to compare.",
+      "stockHint": "Opening, period-end and current quantities, kept within the same warehouse and unit.",
+      "chartHints": {
+        "feedProduction": "Each dot is a laying flock: feed per bird-day horizontally, egg-production rate vertically. Association does not establish cause or an ideal ration.",
+        "eggs": "Recorded output by operating day. Gaps mean missing records, not zero production.",
+        "hdep": "Bird-day-weighted production against available age targets. Missing targets are not assumed.",
+        "marketableRate": "Saleable eggs as a share of recorded production over time.",
+        "eggQuality": "Recorded egg quality. Unknown quantities prevent a complete composition.",
+        "growth": "Latest measured weights and age targets. Check measurement dates below.",
+        "flockProduction": "Each flock’s recorded production beside its available target.",
+        "session_actual": "Actual feed in columns; recorded plans as a dashed line. No fixed feeding schedule is assumed.",
+        "feedPerBirdGrams": "Feed per bird-day. Lower intake alone does not mean better performance.",
+        "feedTypes": "Recorded quantities by feed type, using the same unit.",
+        "sessionStatus": "Completed, missed and unfinished sessions. Missed is not the same as unrecorded.",
+        "deaths": "Deaths and culls shown separately. Sales and supporting events are not counted again.",
+        "lossComposition": "Deaths and intentional culls within recorded losses, not a diagnosis.",
+        "recordedDeathCauses": "Recorded supporting causes, not additional deaths.",
+        "healthActivity": "Recorded treatments, completed vaccinations and health issues. Counts do not establish prevalence.",
+        "revenue": "Sales, collections against those sales and balances. This is not period cash flow.",
+        "expenseCategories": "Recorded costs by category. Missing costs limit margin interpretation.",
+        "collections": "Collections and outstanding balances against selected sales, not payment-date receipts."
+      }
+    },
     "title": "Farm performance",
     "subtitle": "Understand your farm’s results, check the evidence, and see what needs attention.",
     "views": {
@@ -1311,6 +1342,15 @@
       "overview": "Changes describe the previous equal-length period. Direction alone is not a judgment of good or bad performance."
     },
     "labels": {
+      "lossComposition": "Deaths and culls",
+      "feedProduction": "Feed and production by flock",
+      "healthActivity": "Recorded health work",
+      "collections": "Selected sales: collected and outstanding",
+      "flockProduction": "Flock production against target",
+      "sessionStatus": "Feeding session completion",
+      "completed": "Completed",
+      "missed": "Missed",
+      "unfinished": "Unfinished",
       "eggs": "Eggs produced",
       "hdep": "Egg production",
       "hdepTarget": "Age/breed target",
