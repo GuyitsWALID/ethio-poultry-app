@@ -32,11 +32,13 @@ loaded._compile(bundle.outputFiles[0].text, filename);
 const profiles = await db.from("profiles").select("id,org_id,role").eq("is_active", true).in("role", ["ceo", "farm_manager"]);
 assert.equal(profiles.error, null);
 const today = new Intl.DateTimeFormat("en-CA", {timeZone: "Africa/Addis_Ababa", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
+const smokeDays = Number(process.env.PERFORMANCE_SMOKE_DAYS ?? 90);
+assert.ok([7, 30, 90].includes(smokeDays), "Smoke period must be 7, 30 or 90 days");
 for (const role of ["ceo", "farm_manager"]) {
   const actor = profiles.data.find(row => row.role === role); assert.ok(actor);
   const ctx = {userId: actor.id, orgId: actor.org_id, homeOrgId: actor.org_id, role, capabilities: [], supportSessionId: null, supportExpiresAt: null};
   globalThis.__performanceStagingContext = ctx;
-  const input = {dateFrom: new Date(Date.parse(`${today}T00:00:00Z`) - 89 * 86400000).toISOString().slice(0, 10), dateTo: today};
+  const input = {dateFrom: new Date(Date.parse(`${today}T00:00:00Z`) - (smokeDays - 1) * 86400000).toISOString().slice(0, 10), dateTo: today};
   if (role === "farm_manager") {
     const grants = await db.from("user_farm_access").select("farm_id").eq("org_id", actor.org_id).eq("profile_id", actor.id).is("revoked_at", null).lte("starts_at", new Date().toISOString()).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).limit(1);
     assert.equal(grants.error, null); assert.ok(grants.data.length); input.farmId = grants.data[0].farm_id;

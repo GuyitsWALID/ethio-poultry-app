@@ -41,6 +41,12 @@
   - [x] Plot session plans/actuals, feed per bird, deaths/culls and cause/type breakdowns. Preserve null gaps, separate compatible conversion types and warn against automatic diagnosis.
 - [x] 3.4 Add Stock and Sales & Costs visuals with correctly labelled units, balances, collections and margins.
   - [x] Separate warehouse/unit balance and movement charts; show sales, collections, balances, expense categories and qualified estimates with readable explanations and table alternatives.
+### Visual refinement requested 2026-10-22
+- [x] Replace sparse repeated plots with a broader Overview, compact metric/evidence strips, area/composed/donut/ranking/target/scatter visuals and in-page chart figures.
+- [x] Preserve null gaps, compatible units, source authority and paired-flock evidence; distinguish zero compositions and unreconciled collections.
+- [x] Verify responsive EN/AM rendering, failed-source retry and existing workspace regressions locally.
+- [ ] Reproduce the user's exact Feeding failure if it persists. Real staging source checks for both roles returned partial evidence without read failures for 30/90 days; do not claim the root cause was fixed.
+
 ## 4. Saved reports and compatibility
 - [x] 4.1 Add all-topic consistent v2 evidence snapshots and authorized in-page detail API/preview.
   - [x] Capture all five domain sections between database evidence revisions; retry changing reads and reject failed sections. Atomic publication rechecks the revision and every recipient's resource access. Legacy snapshots remain unchanged.
