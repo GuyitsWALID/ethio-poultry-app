@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 95,
-  "latest": "20261020000000_performance_snapshot_consistency.sql",
-  "aggregateSha256": "294f4277f0952435f59511b27cc99202aab49dabd3512af5f050a4fad99b2b59",
+  "count": 96,
+  "latest": "20261023000000_fix_ceo_setup_age_at_placement.sql",
+  "aggregateSha256": "5eeaea08b074c9311bf7b24d5bb3d90046c832df269d0fcb7b03f1d0d691060a",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -175,6 +175,7 @@
     "20261019001000_atomic_management_report_schedules.sql": "3c1958241639df080b1dd912a1d281f35e0ffd242834d7bc9166de7d9b5ebc71",
     "20261019002000_management_report_pagination.sql": "398be8f5d7e26b29b062a471b0be0da35b2ff2abfca2aecdf332bcf894ff718e",
     "20261019003000_reporting_location_evidence.sql": "023a4889d5bec6c86cef11b7a9f400b2f2e5361f1d49b57ee12db4dd58442a49",
-    "20261020000000_performance_snapshot_consistency.sql": "2313615b2e1bf7e5f563e09d1fb95a6dafab1a613d34c93d53068e66931a5a2a"
+    "20261020000000_performance_snapshot_consistency.sql": "2313615b2e1bf7e5f563e09d1fb95a6dafab1a613d34c93d53068e66931a5a2a",
+    "20261023000000_fix_ceo_setup_age_at_placement.sql": "4311fd2b3a38f3eaed22f653c3a6dd4885424321fdb257df439cc55bdd588951"
   }
 }

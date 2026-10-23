@@ -27,6 +27,7 @@ interface SetupData {
     supplier_name: string;
     purchase_date: string;
     placement_date: string;
+    age_at_placement_days: number | "";
     total_count: number;
     purchase_cost_per_bird: number;
     transport_cost: number;
@@ -50,6 +51,7 @@ const initialData: SetupData = {
     supplier_name: "",
     purchase_date: "",
     placement_date: "",
+    age_at_placement_days: "",
     total_count: 0,
     purchase_cost_per_bird: 0,
     transport_cost: 0,
@@ -330,6 +332,25 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
                     value={formData.intakeBatch?.placement_date}
                     onChange={(e) => updateIntake("placement_date", e.target.value)}
                   />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-forest-700">Age at Placement (Days)</label>
+                  <input
+                    required
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputMode="numeric"
+                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
+                    value={formData.intakeBatch?.age_at_placement_days}
+                    onChange={(e) =>
+                      updateIntake(
+                        "age_at_placement_days",
+                        e.target.value === "" ? "" : Number(e.target.value)
+                      )
+                    }
+                  />
+                  <p className="text-xs text-forest-500">Use 0 for day-old chicks.</p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-forest-700">Total Count</label>

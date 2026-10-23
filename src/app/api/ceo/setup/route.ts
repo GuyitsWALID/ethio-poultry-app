@@ -70,6 +70,7 @@ export async function POST(req: Request) {
     }
     const body = await req.json();
     const { branch, intakeBatch, farms, manager } = body;
+    const ageAtPlacementDays = Number(intakeBatch?.age_at_placement_days);
 
     if (
       !branch?.name ||
@@ -81,6 +82,19 @@ export async function POST(req: Request) {
     ) {
       return new Response(
         JSON.stringify({ error: "Missing required setup fields" }),
+        { status: 400 }
+      );
+    }
+
+    if (
+      intakeBatch.age_at_placement_days === "" ||
+      !Number.isInteger(ageAtPlacementDays) ||
+      ageAtPlacementDays < 0
+    ) {
+      return new Response(
+        JSON.stringify({
+          error: "Age at placement must be a whole number of days, starting from 0",
+        }),
         { status: 400 }
       );
     }
@@ -113,7 +127,10 @@ export async function POST(req: Request) {
       {
         p_org_id: orgId,
         p_branch: branch,
-        p_intake_batch: intakeBatch,
+        p_intake_batch: {
+          ...intakeBatch,
+          age_at_placement_days: ageAtPlacementDays,
+        },
         p_farms: farms ?? [],
         p_manager: {
           user_id: createdAuthUserId,
