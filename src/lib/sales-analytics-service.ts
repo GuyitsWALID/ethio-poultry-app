@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only";
+import type {ReportReadSession} from "@/lib/report-read-session.server";
 import {managerWarehouseAccess} from "@/lib/warehouse-access";
 import {reportOperatingDate, reportTimestampBounds, reportWarehouseAllowed} from "@/lib/report-safety";
 import {readReportQuery} from "@/lib/report-pagination";
@@ -85,7 +87,7 @@ function aggregateByPeriod(
     }));
 }
 
-export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchParams, captureResources?: (resources: ReportResources) => void) {
+export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchParams, captureResources?: (resources: ReportResources) => void, reads?: ReportReadSession) {
   try {
     if (!ctx.canView) return json({ error: "You do not have access to sales analytics." }, 403);
 
@@ -95,13 +97,14 @@ export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchPar
     defaultFrom.setUTCDate(defaultFrom.getUTCDate() - 89);
     const dateFrom = params.get("date_from") ?? defaultFrom.toISOString().slice(0, 10);
     const dateTo = params.get("date_to") ?? todayDate;
+    reads?.assert(ctx, {dateFrom, dateTo, branchId: params.get("branch_id") ?? undefined, farmId: params.get("farm_id") ?? undefined, houseId: params.get("house_id") ?? undefined, flockId: params.get("flock_id") ?? undefined, batchId: params.get("batch_id") ?? undefined});
     let bounds: ReturnType<typeof reportTimestampBounds>;
     try { bounds = reportTimestampBounds(dateFrom, dateTo); }
     catch { return json({error: "Choose a valid report period of at most 366 days."}, 400); }
-    const warehouseIds = ctx.role === "farm_manager" && !ctx.supportSessionId ? new Set((await managerWarehouseAccess(ctx.userId, ctx.orgId)).map(row => row.id)) : null;
+    const warehouseIds = ctx.role === "farm_manager" && !ctx.supportSessionId ? new Set(reads ? (await reads.rows("warehouseAccess")).map(row => String(row.id)) : (await managerWarehouseAccess(ctx.userId, ctx.orgId)).map(row => row.id)) : null;
 
     const [salesRes, dailyRes, batchRes, inventoryRes, stockRes, flockRes, farmRes, lockedPeriodsRes, costEntriesRes] = await Promise.all([
-      readReportQuery(() => supabaseAdmin
+      (reads ? reads.rows<Record<string, any>>("daily_sales_records").then(rows => ({data: rows.filter(row => String(row.sale_date) >= dateFrom && String(row.sale_date) <= dateTo), error: null})) : readReportQuery(() => supabaseAdmin
         .from("daily_sales_records")
         .select("*")
         .eq("org_id", ctx.orgId)
@@ -109,32 +112,32 @@ export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchPar
         .gte("sale_date", dateFrom)
         .lte("sale_date", dateTo)
         .order("sale_date", { ascending: true })
-        .order("id")),
-      readReportQuery(() => supabaseAdmin
+        .order("id"))),
+      (reads ? reads.rows<Record<string, any>>("daily_farm_records").then(rows => ({data: rows.filter(row => String(row.record_date) >= dateFrom && String(row.record_date) <= dateTo), error: null})) : readReportQuery(() => supabaseAdmin
         .from("daily_farm_records")
         .select("record_date, flock_id, normal_eggs, broken_eggs, total_eggs, feed_intake_grams")
         .eq("org_id", ctx.orgId)
         .is("voided_at",null)
         .gte("record_date", dateFrom)
         .lte("record_date", dateTo)
-        .order("record_date").order("id")),
-      readReportQuery(() => supabaseAdmin
+        .order("record_date").order("id"))),
+      (reads ? reads.rows<Record<string, any>>("batches").then(rows => ({data: rows, error: null})) : readReportQuery(() => supabaseAdmin
         .from("batches")
         .select("id, org_id, farm_id, house_id, batch_code, total_count, purchase_cost_per_bird, transport_cost, other_cost, total_batch_cost")
         .eq("org_id", ctx.orgId)
-        .order("id")),
-      readReportQuery(() => supabaseAdmin.from("inventory_items").select("id, category, unit_cost").eq("org_id", ctx.orgId).order("id")),
-      readReportQuery(() => supabaseAdmin
+        .order("id"))),
+      (reads ? reads.rows<Record<string, any>>("inventory_items").then(rows => ({data: rows, error: null})) : readReportQuery(() => supabaseAdmin.from("inventory_items").select("id, category, unit_cost").eq("org_id", ctx.orgId).order("id"))),
+      (reads ? reads.rows<Record<string, any>>("stock_ledger").then(rows => ({data: rows.filter(row => ["issue", "return"].includes(String(row.transaction_type)) && Date.parse(String(row.transaction_date)) >= Date.parse(bounds.start) && Date.parse(String(row.transaction_date)) < Date.parse(bounds.end)), error: null})) : readReportQuery(() => supabaseAdmin
         .from("stock_ledger")
         .select("item_id, quantity, transaction_type, unit_cost, transaction_date, branch_id, farm_id, house_id, flock_id, batch_id, warehouse_id")
         .eq("org_id", ctx.orgId)
         .in("transaction_type", ["issue", "return"])
         .gte("transaction_date", bounds.start)
         .lt("transaction_date", bounds.end)
-        .order("transaction_date").order("id")),
-      readReportQuery(() => supabaseAdmin.from("flocks").select("id, org_id, flock_code, flock_type, farm_id, house_id, batch_id").eq("org_id", ctx.orgId).order("id")),
-      readReportQuery(() => supabaseAdmin.from("farms").select("id, org_id, name, branch_id").eq("org_id", ctx.orgId).order("id")),
-      readReportQuery(() => supabaseAdmin
+        .order("transaction_date").order("id"))),
+      (reads ? reads.rows<Record<string, any>>("flocks").then(rows => ({data: rows, error: null})) : readReportQuery(() => supabaseAdmin.from("flocks").select("id, org_id, flock_code, flock_type, farm_id, house_id, batch_id").eq("org_id", ctx.orgId).order("id"))),
+      (reads ? reads.rows<Record<string, any>>("farms").then(rows => ({data: rows, error: null})) : readReportQuery(() => supabaseAdmin.from("farms").select("id, org_id, name, branch_id").eq("org_id", ctx.orgId).order("id"))),
+      (reads ? reads.rows<Record<string, any>>("monthly_cost_periods").then(rows => ({data: rows.filter(row => row.status === "locked" && String(row.period_start) <= dateTo && String(row.period_end) >= dateFrom), error: null})) : readReportQuery(() => supabaseAdmin
         .from("monthly_cost_periods")
         .select("*")
         .eq("org_id", ctx.orgId)
@@ -142,14 +145,14 @@ export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchPar
         .lte("period_start", dateTo)
         .gte("period_end", dateFrom)
         .order("period_start", { ascending: false })
-        .order("id")),
-      readReportQuery(() => supabaseAdmin
+        .order("id"))),
+      (reads ? reads.rows<Record<string, any>>("cost_entries").then(rows => ({data: rows.filter(row => String(row.entry_date) >= dateFrom && String(row.entry_date) <= dateTo), error: null})) : readReportQuery(() => supabaseAdmin
         .from("cost_entries")
         .select("amount, category, entry_date, branch_id, farm_id, house_id, flock_id, batch_id, warehouse_id")
         .eq("org_id", ctx.orgId)
         .gte("entry_date", dateFrom)
         .lte("entry_date", dateTo)
-        .order("entry_date").order("id")),
+        .order("entry_date").order("id"))),
     ]);
 
     const scopedSales = ((salesRes.data ?? []) as DailySalesRecord[]).filter((record) => hasScopedAccess(ctx, record));
@@ -161,8 +164,8 @@ export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchPar
       flock_id: params.get("flock_id"),
       batch_id: params.get("batch_id"),
     };
-    const houses = requestedScope.house_id ? (await readReportQuery(() => supabaseAdmin.from("houses").select("id,org_id,farm_id").eq("org_id", ctx.orgId).eq("id", requestedScope.house_id!).order("id"))).data : undefined;
-    const locations = (await readReportQuery<ReportLocation>(()=>supabaseAdmin.rpc("report_flock_locations",{p_org:ctx.orgId}).order("flock_id").order("from_at").order("house_id"))).data;
+    const houses = requestedScope.house_id ? (await (reads ? reads.rows<Record<string, any>>("houses").then(rows => ({data: rows.filter(row => row.id === requestedScope.house_id), error: null})) : readReportQuery(() => supabaseAdmin.from("houses").select("id,org_id,farm_id").eq("org_id", ctx.orgId).eq("id", requestedScope.house_id!).order("id")))).data : undefined;
+    const locations = reads ? await reads.rows<ReportLocation>("locations") : (await readReportQuery<ReportLocation>(()=>supabaseAdmin.rpc("report_flock_locations",{p_org:ctx.orgId}).order("flock_id").order("from_at").order("house_id"))).data;
     const permittedFarms = farmRes.data.filter(row => hasScopedAccess(ctx,{farm_id:row.id}));
     const locationFilter={branchId:requestedScope.branch_id??undefined,farmId:requestedScope.farm_id??undefined,houseId:requestedScope.house_id??undefined,flockId:requestedScope.flock_id??undefined,batchId:requestedScope.batch_id??undefined};
     const selectedLocations=selectReportLocations(locations,flockRes.data,permittedFarms,locationFilter);

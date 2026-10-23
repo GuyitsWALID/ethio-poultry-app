@@ -45,7 +45,8 @@
 - [x] Replace sparse repeated plots with a broader Overview, compact metric/evidence strips, area/composed/donut/ranking/target/scatter visuals and in-page chart figures.
 - [x] Preserve null gaps, compatible units, source authority and paired-flock evidence; distinguish zero compositions and unreconciled collections.
 - [x] Verify responsive EN/AM rendering, failed-source retry and existing workspace regressions locally.
-- [ ] Reproduce the user's exact Feeding failure if it persists. Real staging source checks for both roles returned partial evidence without read failures for 30/90 days; do not claim the root cause was fixed.
+- [x] Reproduce the deployed Feeding/Sales failure using the actual Laba tenant and July 1–October 20 range under the Worker call budget; consolidate per-attempt source reads without changing the authoritative results.
+  - Local verification: original reader 68/81 calls for CEO/manager; consolidated reader 22/23. Both roles pass a 45-call budget and exact section/concern/options parity against the pre-fix reader. Staging deployment verification remains required.
 
 ## 4. Saved reports and compatibility
 - [x] 4.1 Add all-topic consistent v2 evidence snapshots and authorized in-page detail API/preview.
@@ -59,10 +60,10 @@
 ## 5. Verification and release
 - [x] 5.1 Add behavioral permission, lifecycle, boundary, scale, formula, concurrency, retry and compatibility regressions.
 - [x] 5.2 Investigate staging Unavailable eggs against authoritative populated evidence; do not weaken assertions.
-  - Staging read-only investigation on 2026-10-20 found one non-voided Daily Record in the selected 90 days, with null egg count and no positive egg records. Missing evidence correctly remains unavailable. The positive populated-data acceptance assertion is retained and cannot pass until an operator supplies an approved populated staging dataset.
+  - Correction 2026-10-23: the earlier first-profile inspection was not pinned to Laba and cannot establish that Laba lacks populated records. Explicit Laba inspection for July 1–October 20 returns populated partial production/feeding/health/sales evidence and available stock. Keep the positive populated assertion; rerun signed-in acceptance for the intended tenant rather than manufacturing data.
 - [ ] 5.3 Run integrated full tests, TS/lint, production/Cloudflare builds and authenticated tablet/staging checks.
   - [x] Full regression suite, TypeScript, ESLint and production build passed; latest runtime checkpoint `2a8b852` passed GitHub Quality gate.
   - [x] Cloudflare staging Worker build/deployment passed for runtime checkpoint `2a8b852`.
-  - [ ] Populated signed-in staging acceptance. Required staging source evidence is missing; do not weaken the acceptance test. Retained mortality reader needed the same schema fix; feed transport and intermittent CEO sign-in timeouts also prevented a clean final run.
+  - [ ] Populated signed-in staging acceptance for Laba. The earlier source-evidence claim was not tenant-pinned; the deployed Feed/Sales failure was reproduced as call-budget exhaustion and fixed locally. Deploy and verify the consolidated reader before rerunning the integrated signed-in gate. Preserve populated assertions.
 - [x] 5.4 Docker dry-run necessary migrations, migrate staging, validate and push to notmain; no production changes.
   - [x] All six pending reporting migrations committed to verified staging; no pending migrations remain. Real staging REST location and authorized saved-report readers passed for current CEO/manager profiles. All runtime checkpoints through `2a8b852` pushed to `notmain`; production untouched. Final application acceptance remains explicitly in 5.3.
