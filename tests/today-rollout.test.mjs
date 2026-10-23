@@ -58,3 +58,12 @@ test("rollout history is CEO-only, tenant-scoped and bounded; UI refreshes evide
   assert.match(control, /submitting.current/);
   assert.match(control, /formatOperationDateTime/);
 });
+
+test("organization rollout reads use the canonical profile-backed tenant identity", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/20261023001000_fix_organization_access_identity.sql", import.meta.url), "utf8");
+  assert.match(sql, /drop policy if exists organizations_org_access on public\.organizations/i);
+  assert.match(sql, /to authenticated/i);
+  assert.match(sql, /using \(id = public\.current_org_id\(\)\)/i);
+  assert.match(sql, /with check \(id = public\.current_org_id\(\)\)/i);
+  assert.doesNotMatch(sql, /auth_org_id\(/i);
+});
