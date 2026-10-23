@@ -17,6 +17,13 @@ test("CEO branch setup collects and validates age at placement", async () => {
   assert.match(route, /Age at placement must be a whole number of days/);
 });
 
+test("CEO branch setup uses the operation calendar for placement, not the branch name", async () => {
+  const modal = await read("../src/components/ceo/setup-modal.tsx");
+
+  assert.match(modal, /Branch Name<\/label>\s*<input/);
+  assert.match(modal, /Placement Date<\/label>\s*<OperationDateInput/);
+});
+
 test("CEO setup transaction persists the supplied age on batches and flocks", async () => {
   const migration = await read(
     "../supabase/migrations/20261023000000_fix_ceo_setup_age_at_placement.sql"

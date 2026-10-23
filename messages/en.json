@@ -1241,6 +1241,16 @@
   },
   "FarmPerformance": {
     "dashboard": {
+      "controlRoom": "Production · Resources · Results",
+      "alignedSignals": "Read the same day across every track",
+      "fingerprint": "Your farm’s operating rhythm",
+      "fingerprintHint": "Compare egg production, feed per bird and bird losses on aligned dates. Each track has its own scale. Shared timing is a clue to investigate—not proof of a cause.",
+      "flockComparison": "Results beside their targets",
+      "flockBoard": "How each flock is performing",
+      "flockBoardHint": "Laying flocks show egg production; growing flocks show the latest measured weight. Each rail uses its own unit and scale. Review coverage and measurement dates before comparing.",
+      "missingTarget": "No verified target available",
+      "targetMarker": "Dark marker = age target; bar = recorded result",
+      "supportedConcerns": "Where to look next",
       "moreFilters": "More filters",
       "movementHint": "Receipts and consumption during the selected period, within the same warehouse and unit.",
       "evidence": "Evidence coverage",

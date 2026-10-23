@@ -1,11 +1,31 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {composition, dashboardCharts, visualStyle} from "../src/lib/performance-dashboard.ts";
+import {composition, dashboardCharts, operationalSignals, targetRail, visualStyle} from "../src/lib/performance-dashboard.ts";
 import {projectFeedingPerformance} from "../src/lib/farm-performance-adapters.ts";
 
 const section = {state: "available", metrics: [], series: [], rows: [], breakdowns: []};
 const metric = (key, value) => ({key, value});
 const ring = values => ({points: values.map((value, i) => ({label: String(i), values: {value}})), lines: ["value"]});
+test("operating rhythm aligns dates without inventing missing results or mixing units", () => {
+  const series = (key, unit, dates) => ({...section, series: [{key, unit, points: dates.map(([date, value]) => ({date, value}))}]});
+  const sections = {production: series("hdep", "%", [["2026-10-01", 80], ["2026-10-03", 85]]), feeding: series("feedPerBirdGrams", "g/bird/day", [["2026-10-02", 110]]), health: series("deaths", "birds", [["2026-10-03", 0]])};
+  const charts = operationalSignals({sections});
+  assert.deepEqual(charts.map(chart => chart.unit), ["%", "g/bird/day", "birds"]);
+  for (const chart of charts) assert.deepEqual(chart.points.map(row => row.date), ["2026-10-01", "2026-10-02", "2026-10-03"]);
+  assert.equal(charts[0].points[1].values.hdep, null);
+  assert.equal(charts[2].points[2].values.deaths, 0);
+  sections.feeding.state = "failed";
+  assert.equal(operationalSignals({sections}).length, 2);
+});
+test("target rails keep missing targets distinct and do not clip over-target results", () => {
+  assert.equal(targetRail(null, 80).actual, null);
+  assert.equal(targetRail(80, null).target, null);
+  assert.equal(targetRail(Infinity, -1).actual, null);
+  assert.equal(targetRail(Infinity, -1).target, null);
+  const rail = targetRail(120, 80);
+  assert.ok(rail.actual > rail.target && rail.actual < 100);
+  assert.deepEqual(targetRail(0, 0), {actual: 0, target: 0});
+});
 test("composition never hides unknown, negative, infinite or zero evidence", () => {
   for (const values of [[1, null], [1, -1], [1, Infinity], [0, 0], []]) assert.equal(composition(ring(values)).drawable, false);
   assert.equal(composition(ring([8, 2])).total, 10);

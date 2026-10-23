@@ -1,7 +1,23 @@
-import type {PerformanceSection} from "./farm-performance";
+import type {PerformanceResponse, PerformanceSection} from "./farm-performance";
 import {performanceCharts, type PerformanceChart, type PerformanceView} from "./farm-performance-view.ts";
 
 export type VisualStyle = "area" | "target" | "plan" | "losses" | "donut" | "ranking" | "columns" | "scatter";
+// A common date domain makes synchronized cursors meaningful across missing days.
+// Each track retains its own unit and never fills missing evidence with zero.
+export function operationalSignals(data: PerformanceResponse): PerformanceChart[] {
+  const tracks = ([['production', 'hdep'], ['feeding', 'feedPerBirdGrams'], ['health', 'deaths']] as const).flatMap(([view, key]) => performanceCharts(view, data.sections[view]).filter(chart => chart.key === key));
+  const dates = [...new Set(tracks.flatMap(chart => chart.points.map(point => point.date!)))].sort();
+  return tracks.map(chart => {
+    const points = new Map(chart.points.map(point => [point.date, point]));
+    return {...chart, points: dates.map(date => points.get(date) ?? {date, label: date, values: Object.fromEntries(chart.lines.map(key => [key, null]))})};
+  });
+}
+
+export function targetRail(actual: number | null | undefined, target: number | null | undefined) {
+  const known = (value: number | null | undefined): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  const scale = Math.max(known(actual) ? actual : 0, known(target) ? target : 0, 1) * 1.1;
+  return {actual: known(actual) ? actual / scale * 100 : null, target: known(target) ? target / scale * 100 : null};
+}
 export function visualStyle(chart: PerformanceChart): VisualStyle {
   if (chart.key === "feedProduction") return "scatter";
   if (["eggQuality", "expenseCategories", "lossComposition", "collections", "sessionStatus"].includes(chart.key)) return "donut";

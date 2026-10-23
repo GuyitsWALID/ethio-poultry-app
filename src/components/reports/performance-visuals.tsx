@@ -1,15 +1,17 @@
 "use client";
 
 import {useId} from "react";
+import Link from "next/link";
+import {Activity, Egg, Wheat, HeartPulse, Wallet, Package, ArrowUpRight, ArrowDownRight} from "lucide-react";
 import {useLocale, useMessages, useTranslations} from "next-intl";
 import {Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart, Pie, PieChart, Scatter, ScatterChart, Tooltip, XAxis, YAxis} from "recharts";
 import {ChartContainer} from "@/components/ui/chart";
 import {formatEtb, formatNumber, formatOperationDate} from "@/i18n/formats";
-import type {PerformanceMetric, PerformanceResponse} from "@/lib/farm-performance";
+import type {PerformanceMetric, PerformanceResponse, PerformanceSection} from "@/lib/farm-performance";
 import {chartRange, type PerformanceChart} from "@/lib/farm-performance-view";
-import {composition, visualStyle} from "@/lib/performance-dashboard";
+import {composition, operationalSignals, targetRail, visualStyle} from "@/lib/performance-dashboard";
 
-const colors = ["#358e50", "#2b6cb0", "#a16207", "#c9472d", "#735e8b", "#536c70"];
+const palette = ["#358e50", "#2b6cb0", "#a16207", "#c9472d", "#735e8b", "#536c70"];
 export function usePerformanceText() {
   const t = useTranslations("FarmPerformance"), locale = useLocale();
   const copy = useMessages().FarmPerformance as {labels: Record<string, string>; units: Record<string, string>; explanations: Record<string, string>};
@@ -19,9 +21,9 @@ export function usePerformanceText() {
 export function MetricCards({metrics}: {metrics: PerformanceMetric[]}) {
   const {t, label, unit, number, explanation} = usePerformanceText();
   return <dl className="performance-metrics">{metrics.map(metric => <div key={metric.key} className="performance-metric">
-    <dt>{label(metric.key)}</dt>
+    <dt>{(() => {const Icon = ({eggs: Egg, hdep: Activity, sessionActualKg: Wheat, feedKg: Wheat, deaths: HeartPulse, revenue: Wallet, currentLowStockItems: Package} as Record<string, typeof Egg>)[metric.key] ?? Activity; return <Icon size={17} aria-hidden="true"/>;})()}{label(metric.key)}</dt>
     <dd className="performance-value">{number(metric.value)} <span>{metric.value !== null ? unit(metric.unit) : ""}</span></dd>
-    <dd className="performance-change"><span aria-hidden="true">{metric.delta === null ? "—" : metric.delta > 0 ? "↗" : metric.delta < 0 ? "↘" : "="}</span> {metric.delta === null ? t("noComparison") : `${metric.delta > 0 ? "+" : ""}${number(metric.delta, metric.unit)} ${metric.unit !== "ETB" ? unit(metric.unit) : ""}`}<br/><span>{t("previous")}: {number(metric.previous, metric.unit)}</span></dd>
+    <dd className="performance-change"><span aria-hidden="true">{metric.delta === null ? "—" : metric.delta > 0 ? <ArrowUpRight size={16}/> : metric.delta < 0 ? <ArrowDownRight size={16}/> : "="}</span> {metric.delta === null ? t("noComparison") : `${metric.delta > 0 ? "+" : ""}${number(metric.delta, metric.unit)} ${metric.unit !== "ETB" ? unit(metric.unit) : ""}`}<br/><span>{t("previous")}: {number(metric.previous, metric.unit)}</span></dd>
     <dd className="performance-metric-note">{explanation(metric.explanation)}</dd>
   </div>)}</dl>;
 }
@@ -35,8 +37,26 @@ export function EvidenceRibbon({data, onSelect}: {data: PerformanceResponse; onS
   </button>)}</div></section>;
 }
 
-export function PerformancePlot({chart, scopeLabel}: {chart: PerformanceChart; scopeLabel: string}) {
+export function OperationalFingerprint({data}: {data: PerformanceResponse}) {
+  const {t} = usePerformanceText();
+  const syncGroup = useId();
+  const tracks = operationalSignals(data);
+  return <section className="performance-fingerprint"><header><span className="performance-kicker">{t("dashboard.alignedSignals")}</span><h2>{t("dashboard.fingerprint")}</h2><p>{t("dashboard.fingerprintHint")}</p></header><div className="performance-signal-tracks">{tracks.map(chart => <PerformancePlot key={chart.key} chart={chart} scopeLabel={data.meta.scopeLabel} syncGroup={syncGroup}/>)}{!tracks.length ? <p className="p-5">{t("noChart")}</p> : null}</div></section>;
+}
+
+export function FlockComparison({section}: {section: PerformanceSection}) {
+  const {t, locale, label, number, unit} = usePerformanceText();
+  const rows = section.state === "failed" ? [] : (section.rows ?? []).filter(row => row.unit === "%" || row.unit === "g");
+  if (!rows.length) return null;
+  return <section className="performance-flock-board"><header><span className="performance-kicker">{t("dashboard.flockComparison")}</span><h2>{t("dashboard.flockBoard")}</h2><p>{t("dashboard.flockBoardHint")}</p></header><div className="performance-flock-grid">{rows.map((row, index) => {
+    const rail = targetRail(row.values.primary, row.values.target);
+    return <article key={`${row.label}-${index}`}><div className="performance-flock-title"><div><h3>{row.label}</h3><p>{row.context}</p></div><span>{label("coverage")}: {number(row.values.coverage)}{row.values.coverage != null ? "%" : ""}</span></div><div className="performance-flock-result"><strong>{number(row.values.primary)} <small>{unit(row.unit!)}</small></strong><span>{label("target")}: {number(row.values.target)} {row.values.target != null ? unit(row.unit!) : ""}</span></div><p className="text-xs text-forest-600">{label(row.unit === "g" ? "latestWeightG" : "hdep")}{row.unit === "g" && row.date ? ` · ${formatOperationDate(row.date, locale)}` : ""}</p><div className="performance-target-rail" aria-hidden="true">{rail.actual != null ? <span style={{width: `${rail.actual}%`}}/> : null}{rail.target != null ? <i style={{left: `${rail.target}%`}}/> : null}</div><div className="performance-flock-foot"><span>{t(rail.target == null ? "dashboard.missingTarget" : "dashboard.targetMarker")}</span>{row.evidenceHref ? <Link href={row.evidenceHref}>{t("check")} <ArrowUpRight size={15} aria-hidden="true"/></Link> : null}</div></article>;
+  })}</div>{section.rowsLimited ? <p className="p-5 text-sm">{t("preview", {shown: section.rows?.length ?? 0, total: section.rowCount ?? 0})}</p> : null}</section>;
+}
+
+export function PerformancePlot({chart, scopeLabel, syncGroup}: {chart: PerformanceChart; scopeLabel: string; syncGroup?: string}) {
   const {t, locale, label, unit, number} = usePerformanceText();
+  const colors = chart.key === "deaths" ? ["#c9472d", "#a16207"] : chart.key === "hdep" ? ["#358e50", "#a16207"] : chart.key === "feedPerBirdGrams" ? ["#3a513c"] : palette;
   const id = useId().replace(/:/g, ""), style = visualStyle(chart), ring = composition(chart);
   const stock = chart.key.startsWith("stock:") || chart.key.startsWith("movement:");
   const title = stock ? `${label(chart.key.split(":")[0])} · ${chart.key.slice(chart.key.indexOf(":") + 1)}` : label(chart.key);
@@ -59,8 +79,8 @@ export function PerformancePlot({chart, scopeLabel}: {chart: PerformanceChart; s
           : style === "scatter" ? <ScatterChart margin={{top: 12, right: 20, bottom: 24, left: 4}}><CartesianGrid stroke="#e8ece7" strokeDasharray="3 5"/><XAxis type="number" dataKey="feedPerBirdGrams" name={label("feedPerBirdGrams")} unit={` ${unit("g/bird/day")}`} tick={{fontSize: 12}} tickLine={false} axisLine={false}/><YAxis type="number" dataKey="hdep" name={label("hdep")} unit="%" tick={{fontSize: 12}} width={64} tickLine={false} axisLine={false}/><Tooltip content={({active, payload}) => {const row = payload?.[0]?.payload; return active && row ? <div className="rounded-lg border border-sand-200 bg-white p-3 text-sm"><strong>{row.label}</strong><p>{label("feedPerBirdGrams")}: {number(row.feedPerBirdGrams)} {unit("g/bird/day")}</p><p>{label("hdep")}: {number(row.hdep)}%</p></div> : null;}}/><Scatter name={title} data={points.map(row => ({label: row.label, ...row.values}))} fill={colors[0]} isAnimationActive={false}/></ScatterChart>
           : style === "ranking" ? <BarChart data={points} layout="vertical" barGap={3} margin={{top: 6, right: 18, bottom: 8, left: 4}}><CartesianGrid stroke="#e8ece7" horizontal={false} strokeDasharray="3 5"/><XAxis type="number" tick={{fontSize: 12}} tickLine={false} axisLine={false} tickFormatter={value => formatNumber(Number(value), locale)}/><YAxis type="category" dataKey="label" width={110} tick={{fontSize: 12, fill: "#3a513c"}} tickLine={false} axisLine={false} tickFormatter={value => String(value).length > 16 ? `${String(value).slice(0, 14)}…` : String(value)}/>{tooltip}{chart.lines.map((key, index) => <Bar key={key} name={label(key)} dataKey={`values.${key}`} fill={colors[index % colors.length]} radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false}/>)}</BarChart>
           : style === "plan" ? <ComposedChart data={points} margin={{top: 12, right: 8, bottom: 8, left: 0}}>{axes}<Bar name={label("session_actual")} dataKey="values.session_actual" fill={colors[0]} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false}/><Line name={label("session_planned")} dataKey="values.session_planned" stroke={colors[1]} strokeWidth={2.5} strokeDasharray="5 4" dot={{r: 3}} connectNulls={false} isAnimationActive={false}/></ComposedChart>
-          : style === "target" ? <LineChart data={points} margin={{top: 12, right: 8, bottom: 8, left: 0}}>{axes}{lines}</LineChart>
-          : style === "area" || style === "losses" ? <AreaChart data={points} margin={{top: 12, right: 8, bottom: 8, left: 0}}>{axes}{chart.lines.map((key, index) => <Area key={key} name={label(key)} dataKey={`values.${key}`} type="linear" stroke={colors[index % colors.length]} fill={colors[index % colors.length]} fillOpacity={index ? 0.05 : 0.13} strokeWidth={2.5} dot={{r: 2}} connectNulls={false} isAnimationActive={false}/>)}</AreaChart>
+          : style === "target" ? <LineChart syncId={syncGroup} data={points} margin={{top: 12, right: 8, bottom: 8, left: 0}}>{axes}{lines}</LineChart>
+          : style === "area" || style === "losses" ? <AreaChart syncId={syncGroup} data={points} margin={{top: 12, right: 8, bottom: 8, left: 0}}><defs>{chart.lines.map((key, index) => <linearGradient key={key} id={`${id}-fill-${index}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={colors[index % colors.length]} stopOpacity={0.28}/><stop offset="100%" stopColor={colors[index % colors.length]} stopOpacity={0.02}/></linearGradient>)}</defs>{axes}{chart.lines.map((key, index) => <Area key={key} name={label(key)} dataKey={`values.${key}`} type="linear" stroke={colors[index % colors.length]} fill={`url(#${id}-fill-${index})`} strokeWidth={2.5} dot={false} activeDot={{r: 4}} connectNulls={false} isAnimationActive={false}/>)}</AreaChart>
           : <BarChart data={points} margin={{top: 12, right: 8, bottom: 8, left: 0}}>{axes}{chart.lines.map((key, index) => <Bar key={key} name={label(key)} dataKey={`values.${key}`} fill={colors[index % colors.length]} radius={[4, 4, 0, 0]} maxBarSize={30} isAnimationActive={false}/>)}</BarChart>}
         </ChartContainer>
       </div>
