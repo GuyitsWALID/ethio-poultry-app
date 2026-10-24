@@ -3,6 +3,7 @@
 import {useState, type FormEvent, type ReactNode} from "react";
 import {useTranslations} from "next-intl";
 import {Save} from "lucide-react";
+import {todayErrorMessageKeys} from "@/i18n/today-copy";
 import {DraftFieldGroup, useDraftField, useDraftState, useDraftSubmit,useTodayOffline} from "@/components/today/offline-context";
 
 import type {TodayFlockContext, TodayTaskDetail} from "@/lib/today-workspace/contracts";
@@ -55,7 +56,7 @@ export function HealthTaskForm({detail, flock, onChanged, onSaved}: {detail: Tod
       const result = await send(command);
       if(result.status==="queued"){const next=[...new Set([...saved,...choices])];setSaved(next);setMessage({error:false,text:offlineText("waiting")});if(selected.every(choice=>next.includes(choice)))onSaved();else onChanged();return;}
       if (result.status !== "applied") {
-        setMessage({error: true, text: result.error_code === "RESOURCE_CONFLICT" ? errors("staleRevision") : errors("validation")});
+        setMessage({error: true, text: errors(result.error_code ? todayErrorMessageKeys[result.error_code] : "unknown")});
         return;
       }
       const next = [...new Set([...saved, ...choices])];

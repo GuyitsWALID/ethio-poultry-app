@@ -1,5 +1,7 @@
 import {addDays, ageOnDate, daysBetween, percent, round, summarizeDaily} from "../farm-manager-dashboard.ts";
 import type {BreedTarget, FlockType, ManagerDailyRow, WeightSample} from "../farm-manager-dashboard.ts";
+import {managerDestination} from "../manager-destinations.ts";
+import {buildReportHref} from "../report-workspace.ts";
 
 export const profilePeriods = [7, 30, 90] as const;
 export type ProfileDays = typeof profilePeriods[number];
@@ -82,6 +84,18 @@ export function buildFlockProfile(input: {
     } else if (["unfinished_feed", "missing_targets", "stale_weight", "feed_variance", "growth_variance"].includes(code) && flock.batchId) {
       query.set("filter_batchId", flock.batchId);
       href = `/app/feeding-log?${query}&feed_target=${code === "missing_targets" ? "template_management" : "feed_history"}`;
+    }
+    if (input.allowTodayActions === true) {
+      if (["feed_variance", "growth_variance"].includes(code) && period.from && period.to) {
+        href = buildReportHref(code === "feed_variance" ? "feed" : "production", {dateFrom: period.from, dateTo: period.to, farmId: flock.farmId, houseId: flock.houseId, flockId: flock.id, batchId: flock.batchId ?? undefined});
+      } else if (code === "stale_weight" && flock.batchId) {
+        href = `/app/feeding-log?${query}&feed_target=weight_checks`;
+      } else if (code === "unfinished_feed" && date && ["active", "quarantined"].includes(flock.status)) {
+        href = `/app/feeding-log?${query}&date=${date}&feed_target=today_sessions`;
+      }
+      const mapped = managerDestination(href, {role: "farm_manager", todayWorkspaceEnabled: true, today});
+      // A missing historical record cannot be selected in History; keep its repair scoped.
+      href = code === "missing_records" && (!mapped.startsWith("/app/today?") || !["active", "quarantined"].includes(flock.status)) ? `/app/reconciliation?${query}` : mapped;
     }
     steps.push({code, severity, rank, date, href: input.allowTodayActions !== false && task && flock.status === "active" && date === today ? todayHref(task, date) : href, ...(count === undefined ? {} : {count})});
   };

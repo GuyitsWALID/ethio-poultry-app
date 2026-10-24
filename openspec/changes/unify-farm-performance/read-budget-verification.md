@@ -35,4 +35,4 @@ No migration required. Separate CEO setup/age-at-placement edits and migrations 
 
 ## Release status
 
-Local implementation verified. User approved deployment through `notmain`; deployed staging verification follows the push. Production is outside this release.
+Fix committed as `6b56d2a` and deployed through `notmain`. The successor `8d7a053` passed Quality gate and Cloudflare staging build; the owner confirmed deployed Feeding/Sales fixed. Visual successor `a221ef2` also passed both checks. Integrated all-topic/saved-report/tablet acceptance remains in Task 5.3. Production is outside this release.

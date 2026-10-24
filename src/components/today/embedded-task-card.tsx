@@ -8,9 +8,12 @@ import {AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Info, P
 
 import type {TodayFlockContext, TodayTask, TodayTaskDetail} from "@/lib/today-workspace/contracts";
 import {todayErrorMessageKeys} from "@/i18n/today-copy";
+import {actionStatuses, type ActionStatus} from "@/lib/action-desk-contract";
 import {buildFinishReview, type FinishIssue, type ReviewTask} from "@/lib/today-workspace/finish-review";
 import {sendTodayCommand} from "@/lib/today-workspace/sync";
 import {HealthTaskForm} from "@/components/today/health-task-form";
+import {managerDestination} from "@/lib/manager-destinations";
+import {historyPeriod} from "@/lib/history/contracts";
 import {DraftFieldGroup, TaskDraftScope, useDraftField, useDraftState, useDraftSubmit, useTodayOffline} from "@/components/today/offline-context";
 
 type Row = Record<string, unknown>;
@@ -68,7 +71,7 @@ function useTaskSubmit() {
       const result = await send(command);
       if(result.status === "queued") {setMessage({tone:"success",text:offlineText("waiting")});onApplied();return result;}
       if (result.status !== "applied") {
-        setMessage({tone: "error", text: result.error_code === "RESOURCE_CONFLICT" ? errors("staleRevision") : result.error_code === "INSUFFICIENT_STOCK" ? errors("insufficientStock") : errors("validation")});
+        setMessage({tone: "error", text: errors(result.error_code ? todayErrorMessageKeys[result.error_code] : "unknown")});
         return result;
       }
       setMessage({tone: "success", text: success});
@@ -270,16 +273,20 @@ function SimpleFarmForm({detail, task, onChanged, onSaved, dayRevision, reviewTa
 }
 
 function AssignedFixes({detail, onChanged, onSaved}: {detail: TodayTaskDetail; onChanged: () => void; onSaved: () => void}) {
+  // Recovered offline Today has no FarmScopeProvider; its authorized workspace is manager-only.
+  const destination = (route: string) => managerDestination(route, {role: "farm_manager", todayWorkspaceEnabled: true, today: historyPeriod(1).to});
   const t = useTranslations("Today.embedded");
+  const notifications = useTranslations("Notifications");
+  const common = useTranslations("Common");
   const {saving, message, submit} = useTaskSubmit();
-  const actions = rows(detail.data.actions);
+  const actions = rows(detail.data.actions).map((action): Row => ({...action, source_route: action.source_route ? destination(String(action.source_route)) : null}));
   async function update(action: Row, eventType: "acknowledged" | "started" | "completion_submitted") {
     const note = eventType === "completion_submitted" ? window.prompt(t("completionNote"))?.trim() : t(eventType === "acknowledged" ? "acknowledgedNote" : "startedNote");
     if (!note) return;
     await submit({schema_version: 1, command_id: crypto.randomUUID(), type: "update_assigned_action", expected_resource_revision: String(action.revision), farm_id: detail.farmId, work_date: detail.workDate, payload: {action_id: String(action.id), event_type: eventType, note}}, t("fixUpdated"), eventType === "completion_submitted" ? onSaved : onChanged);
   }
   if (!actions.length) return <p className="rounded-xl bg-leaf-500/10 p-4 text-sm text-leaf-700">{t("noAssignedFixes")}</p>;
-  return <div className="grid gap-3">{actions.map((action) => <article key={String(action.id)} className="rounded-xl border border-sand-200 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h4 className="font-semibold text-forest-900">{String(action.title)}</h4><p className="mt-1 text-sm text-forest-600">{String(action.context)}</p></div><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{String(action.status)}</span></div><div className="mt-3 flex flex-wrap gap-2"><button disabled={saving} onClick={() => void update(action, "acknowledged")} className={secondaryClass}>{t("acknowledge")}</button><button disabled={saving} onClick={() => void update(action, "started")} className={secondaryClass}>{t("start")}</button><button disabled={saving} onClick={() => void update(action, "completion_submitted")} className={primaryClass}>{t("submitCompletion")}</button>{action.source_route ? <Link href={String(action.source_route)} className={secondaryClass}>{t("openEvidence")}<ExternalLink className="h-4 w-4"/></Link> : null}</div></article>)}<TaskMessage message={message}/></div>;
+  return <div className="grid gap-3">{actions.map((action) => <article key={String(action.id)} className="rounded-xl border border-sand-200 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h4 className="font-semibold text-forest-900">{String(action.title)}</h4><p className="mt-1 text-sm text-forest-600">{String(action.context)}</p></div><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{actionStatuses.includes(action.status as ActionStatus) ? notifications(`status.${action.status as ActionStatus}`) : common("notAvailable")}</span></div><div className="mt-3 flex flex-wrap gap-2"><button disabled={saving} onClick={() => void update(action, "acknowledged")} className={secondaryClass}>{t("acknowledge")}</button><button disabled={saving} onClick={() => void update(action, "started")} className={secondaryClass}>{t("start")}</button><button disabled={saving} onClick={() => void update(action, "completion_submitted")} className={primaryClass}>{t("submitCompletion")}</button>{action.source_route ? <Link href={String(action.source_route)} className={secondaryClass}>{t("openEvidence")}<ExternalLink className="h-4 w-4"/></Link> : null}</div></article>)}<TaskMessage message={message}/></div>;
 }
 
 export function EmbeddedTaskCard({task,flock,farmId,workDate,expanded,onToggle,onChanged,onSaved,dayRevision,reviewTasks,finishIssues,online,canFinish}:{task:TodayTask;flock?:TodayFlockContext;farmId:string;workDate:string;expanded:boolean;onToggle:()=>void;onChanged:()=>void;onSaved:()=>void;dayRevision?:string;reviewTasks?:ReviewTask[];finishIssues?:FinishIssue[];online?:boolean;canFinish?:boolean}){

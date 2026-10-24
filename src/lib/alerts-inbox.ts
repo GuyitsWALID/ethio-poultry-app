@@ -16,6 +16,8 @@ export function orderInbox(actions: ActionCard[], now = Date.now()) {
 export function alertDestinationKey(route: string) {
   const path = route.split(/[?#]/)[0];
   if (path === "/app/today") return "today";
+  if (path === "/app/history") return "history";
+  if (path === "/app/reports") return "performance";
   if (path === "/app/flocks" || path.startsWith("/app/flocks/")) return "flock";
   if (path === "/app/feeding-log") return "feed";
   if (path === "/app/daily-records") return "daily";

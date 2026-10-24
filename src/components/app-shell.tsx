@@ -2,7 +2,8 @@
 
 import { CalendarDays, Menu, PanelsTopLeft, ShieldX } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {feedSecondaryMode} from "@/lib/feed-navigation";
 import { Suspense, useEffect, useState } from "react";
 import {HistoryReturn} from "@/components/history/history-return";
 
@@ -40,10 +41,13 @@ const routeTitles = [
 
 export function AppShell({ children, viewerRole, todayWorkspaceEnabled }: { children: React.ReactNode; viewerRole: ActiveRole | null; todayWorkspaceEnabled: boolean }) {
   const pathname = usePathname();
+  const query = useSearchParams();
   const router = useRouter();
   const locale = useLocale() as AppLocale;
   const tCommon = useTranslations("Common");
   const tPage = useTranslations("PageTitles");
+  const navigation = useTranslations("Navigation");
+  const destinations = useTranslations("ManagerDestinations");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [support, setSupport] = useState<{ id:string;expiresAt: string; orgName: string } | null>(null);
 
@@ -63,7 +67,8 @@ export function AppShell({ children, viewerRole, todayWorkspaceEnabled }: { chil
   }, [mobileNavOpen]);
 
   const route = routeTitles.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-  const pageTitle = todayWorkspaceEnabled && (viewerRole === "ceo" || viewerRole === "farm_manager") && ["/app/reports", "/app/analytics"].includes(pathname) ? tPage("farmPerformance") : tPage(route?.[1] ?? "operationsWorkspace");
+  const feedMode = pathname === "/app/feeding-log" ? feedSecondaryMode(query, todayWorkspaceEnabled && viewerRole === "farm_manager") : null;
+  const pageTitle = feedMode ? feedMode === "template_management" ? navigation("templates") : destinations("weights") : todayWorkspaceEnabled && (viewerRole === "ceo" || viewerRole === "farm_manager") && ["/app/reports", "/app/analytics"].includes(pathname) ? tPage("farmPerformance") : tPage(route?.[1] ?? "operationsWorkspace");
   const pageGroup = tPage(route?.[2] ?? "groups.poultryManagement");
 
   return (

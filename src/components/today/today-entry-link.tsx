@@ -6,6 +6,7 @@ import {useSearchParams} from "next/navigation";
 import {useFarmScope} from "@/components/farm-scope-context";
 import type {TodayTaskCode} from "@/lib/today-workspace/contracts";
 import {buildTodayEntryHref, isLegacyCorrectionTarget, type TodayEntryTarget} from "@/lib/today-workspace/entry-routing";
+import {managerDestination} from "@/lib/manager-destinations";
 
 function addisToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -24,6 +25,11 @@ export function useTodayEntryMode() {
   const enabled = scope.isFarmManager && scope.todayWorkspaceEnabled && !isLegacyCorrectionTarget(query);
   const todayHref = (task: TodayTaskCode, target?: TodayEntryTarget) => buildTodayEntryHref(task, target ?? {}, scope.scope, scope.flocks, scope.houses, addisToday());
   return {enabled, todayHref};
+}
+
+export function useManagerDestination() {
+  const {role, todayWorkspaceEnabled} = useFarmScope();
+  return (route: string) => managerDestination(route, {role, todayWorkspaceEnabled, today: addisToday()});
 }
 
 export function TodayEntryLink({

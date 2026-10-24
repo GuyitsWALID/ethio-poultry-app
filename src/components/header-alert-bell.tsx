@@ -9,6 +9,7 @@ import type { AppLocale } from "@/i18n/locale";
 import {formatOperationDateTime} from "@/i18n/formats";
 import type { ActionCard, ActionStatus } from "@/lib/action-desk-contract";
 import type { NotificationCenter, NotificationItem } from "@/lib/notification-contract";
+import {useManagerDestination} from "@/components/today/today-entry-link";
 
 function timeLabel(value: string, locale: AppLocale, currentLabel: string) {
   const date = new Date(value);
@@ -28,6 +29,7 @@ const statusMessageKey: Record<ActionStatus, `status.${ActionStatus}`> = {
 };
 
 export function HeaderAlertBell() {
+  const destination = useManagerDestination();
   const t = useTranslations("Notifications");
   const [center, setCenter] = useState<NotificationCenter | null>(null);
   const [attention, setAttention] = useState<ActionCard[]>([]);
@@ -125,7 +127,7 @@ export function HeaderAlertBell() {
           </div>
 
           <div className="max-h-[min(440px,calc(100vh-16rem))] overflow-y-auto overscroll-contain">
-            {view === "attention" ? <AttentionList items={attention} loading={attentionLoading} error={attentionError} retry={loadAttention} close={() => setOpen(false)} /> : <UpdateList notifications={notifications} loading={notificationLoading} error={notificationError} retry={loadNotifications} openNotification={openNotification} markAll={() => void command({ command: "mark_all_read" })} unreadCount={unreadCount} />}
+            {view === "attention" ? <AttentionList items={attention.map(action => ({...action, route: destination(action.route)}))} loading={attentionLoading} error={attentionError} retry={loadAttention} close={() => setOpen(false)} /> : <UpdateList notifications={notifications.map(item => ({...item, route: destination(item.route)}))} loading={notificationLoading} error={notificationError} retry={loadNotifications} openNotification={openNotification} markAll={() => void command({ command: "mark_all_read" })} unreadCount={unreadCount} />}
           </div>
 
           <div className="grid grid-cols-2 gap-2 border-t border-sand-200 bg-sand-50 p-3"><Link href="/app/alerts" onClick={() => setOpen(false)} className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-forest-800 text-xs font-semibold text-forest-800 transition hover:bg-forest-900 hover:text-white">{t("openActionDesk")} <ChevronRight className="h-3.5 w-3.5" /></Link><Link href="/app/alerts#notification-settings" onClick={() => setOpen(false)} className="flex min-h-10 items-center justify-center gap-2 rounded-xl border border-sand-300 bg-white text-xs font-semibold text-forest-700"><Settings2 className="h-3.5 w-3.5" />{t("settings")}</Link></div>

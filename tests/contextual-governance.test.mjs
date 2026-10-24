@@ -53,8 +53,8 @@ test("feed-template governance opens the exact editor and previews every approve
   assert.match(banner, /Final review before applying/);
   assert.match(banner, /FeedTemplateReview rows=\{templateRows\}/);
   assert.doesNotMatch(banner, /String\(item\.value\?\?"Not recorded"\)/);
-  assert.match(templateReview, /approved feed-plan row/);
-  assert.match(templateReview, /Recommended g\/bird/);
+  assert.match(templateReview, /t\("rowCount", \{count: rows.length\}\)/);
+  assert.match(templateReview, /t\("recommended"\)/);
 });
 
 test("governance history and private evidence are append-only", () => {

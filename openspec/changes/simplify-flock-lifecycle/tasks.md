@@ -1,5 +1,14 @@
 # Tasks
 
+## Scope reconciliation — 2026-10-24
+
+Lifecycle implementation and staging migrations are complete; unchecked 11–12
+track final reviewed-release acceptance, not missing closure/correction code.
+The owner has inspected Flocks and reserved remaining localization for parent
+Tasks 4.5–4.6. Do not repeat the obsolete archived-correction implementation
+blockers in the chronological notes below. Current rebuilt staging sign-off
+and broader parent pilot checks remain open; no new production approval exists.
+
 ## Scoped review improvements — 2026-10-15
 
 Ponytail review/audit findings fixed: flock-specific sale eligibility and early

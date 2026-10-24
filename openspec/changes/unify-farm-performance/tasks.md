@@ -46,7 +46,7 @@
 - [x] Preserve null gaps, compatible units, source authority and paired-flock evidence; distinguish zero compositions and unreconciled collections.
 - [x] Verify responsive EN/AM rendering, failed-source retry and existing workspace regressions locally.
 - [x] Reproduce the deployed Feeding/Sales failure using the actual Laba tenant and July 1–October 20 range under the Worker call budget; consolidate per-attempt source reads without changing the authoritative results.
-  - Local verification: original reader 68/81 calls for CEO/manager; consolidated reader 22/23. Both roles pass a 45-call budget and exact section/concern/options parity against the pre-fix reader. Staging deployment verification remains required.
+  - Verification: original reader 68/81 calls for CEO/manager; consolidated reader 22/23. Both roles pass a 45-call budget and exact section/concern/options parity against the pre-fix reader. Fix `6b56d2a` deployed through notmain; successor `8d7a053` passed Quality gate and Cloudflare staging build. Owner confirmed deployed Feeding/Sales fixed. Later visual checkpoint `a221ef2` also passed both checks.
 
 ## 4. Saved reports and compatibility
 - [x] 4.1 Add all-topic consistent v2 evidence snapshots and authorized in-page detail API/preview.
@@ -64,6 +64,7 @@
 - [ ] 5.3 Run integrated full tests, TS/lint, production/Cloudflare builds and authenticated tablet/staging checks.
   - [x] Full regression suite, TypeScript, ESLint and production build passed; latest runtime checkpoint `2a8b852` passed GitHub Quality gate.
   - [x] Cloudflare staging Worker build/deployment passed for runtime checkpoint `2a8b852`.
-  - [ ] Populated signed-in staging acceptance for Laba. The earlier source-evidence claim was not tenant-pinned; the deployed Feed/Sales failure was reproduced as call-budget exhaustion and fixed locally. Deploy and verify the consolidated reader before rerunning the integrated signed-in gate. Preserve populated assertions.
+  - [x] Deploy the consolidated reader and verify the reported Feed/Sales failure is fixed on staging (owner confirmation, 2026-10-23). Production unchanged.
+  - [ ] Complete integrated signed-in/tablet acceptance for Laba across live topics, saved reports and permissions. Earlier source-evidence claim was not tenant-pinned; preserve populated assertions. Successful deployment and the owner's Feed/Sales confirmation do not by themselves complete every acceptance scenario.
 - [x] 5.4 Docker dry-run necessary migrations, migrate staging, validate and push to notmain; no production changes.
   - [x] All six pending reporting migrations committed to verified staging; no pending migrations remain. Real staging REST location and authorized saved-report readers passed for current CEO/manager profiles. All runtime checkpoints through `2a8b852` pushed to `notmain`; production untouched. Final application acceptance remains explicitly in 5.3.

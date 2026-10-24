@@ -5,7 +5,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {useRouter, useSearchParams} from "next/navigation";
-import {feedBatchChoices} from "@/lib/feed-navigation";
+import {feedBatchChoices, feedSecondaryMode} from "@/lib/feed-navigation";
+import {useTranslations} from "next-intl";
+import {buildHistoryHref} from "@/lib/history/contracts";
 import {ReportAnalyticsHandoff} from "@/components/reports/report-analytics-handoff";
 import {buildReportHref} from "@/lib/report-workspace";
 import { AlertTriangle, Check, ChevronDown, Clock3, PackageOpen, RefreshCw, Scale, Wheat, X } from "lucide-react";
@@ -64,12 +66,15 @@ function KpiCard({ title, metric, icon }: { title: string; metric: Metric; icon:
 }
 
 export default function FeedControlPage() {
+  const t = useTranslations("ManagerDestinations");
+  const navigation = useTranslations("Navigation");
   const { scope, setScope, period, batches, flocks, loading: scopeLoading } = useFarmScope();
   const {enabled: todayEntryEnabled} = useTodayEntryMode();
   const router = useRouter();
   const queryString = useSearchParams().toString();
+  const secondaryMode = feedSecondaryMode(new URLSearchParams(queryString), todayEntryEnabled);
   const [data, setData] = useState<FeedData | null>(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(""); const [message, setMessage] = useState("");
-  const [templateOpen, setTemplateOpen] = useState(false); const [weightTask, setWeightTask] = useState<Task | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(() => secondaryMode === "template_management"); const [weightTask, setWeightTask] = useState<Task | null>(null);
   const deepLinkHandled = useRef(false);
 
   const openFeedAction = useCallback((target: NonNullable<FeedData["exceptions"][number]["actionTarget"]>) => {
@@ -94,20 +99,24 @@ export default function FeedControlPage() {
       .sort((left, right) => String(right.placement_date ?? "").localeCompare(String(left.placement_date ?? "")));
     return feedBatchChoices(eligible, scope.batchId, new URLSearchParams(queryString));
   }, [batches, flocks, scope.branchId, scope.farmId, scope.flockId, scope.houseId, scope.batchId, queryString]);
+  const batchQuery = new URLSearchParams(queryString);
+  const requestedBatch = batchQuery.get("filter_batchId");
+  // FarmScope restores only filter_batchId; never substitute a remembered batch for an alias.
+  const secondaryTargetUnavailable = Boolean(secondaryMode && ((batchQuery.has("batch_id") && batchQuery.get("batch_id") !== requestedBatch) || (requestedBatch && !activeBatches.some(batch => batch.id === requestedBatch))));
 
   useEffect(() => {
-    if (scopeLoading || activeBatches.length === 0) return;
+    if (scopeLoading || secondaryTargetUnavailable || activeBatches.length === 0) return;
     if (activeBatches.some((batch) => batch.id === scope.batchId)) return;
     setScope((current) => ({ ...current, batchId: activeBatches[0].id }));
-  }, [activeBatches, scope.batchId, scopeLoading, setScope]);
+  }, [activeBatches, scope.batchId, scopeLoading, secondaryTargetUnavailable, setScope]);
 
   const load = useCallback(async () => {
-    if (!scope.batchId) { setData(null); setError(""); return; }
+    if (!scope.batchId || secondaryTargetUnavailable) { setData(null); setError(""); return; }
     setLoading(true); setError(""); setData((current) => current?.meta.batchId === scope.batchId ? current : null);
     const params = new URLSearchParams({ batch_id: scope.batchId, date_from: period.dateFrom, date_to: period.dateTo });
     try { const response = await fetch(`/api/feed/control?${params}`, { cache: "no-store" }); const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Feed Control could not load."); setData(body as FeedData); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Feed Control could not load."); } finally { setLoading(false); }
-  }, [period.dateFrom, period.dateTo, scope.batchId]);
+  }, [period.dateFrom, period.dateTo, scope.batchId, secondaryTargetUnavailable]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!data || deepLinkHandled.current) return;
@@ -117,15 +126,25 @@ export default function FeedControlPage() {
     openFeedAction(target);
   }, [data, openFeedAction]);
 
-  if (scopeLoading || (!scope.batchId && activeBatches.length > 0)) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10"><LoadingState /></main>;
+  if (scopeLoading) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10"><LoadingState /></main>;
+  if (secondaryTargetUnavailable) return <main className="p-6"><p role="alert">{t("noBatch")}</p></main>;
+  if (!scope.batchId && activeBatches.length > 0) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10"><LoadingState /></main>;
 
-  if (!scope.batchId) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10">
+  if (!scope.batchId && !secondaryMode) return <main className="mx-auto w-full max-w-[1560px] p-4 sm:p-6 lg:p-10">
     <FarmScopeFilters title="Feed Control filters" fields={["branch", "farm"]} showPeriod />
     <section className="rounded-3xl border border-[#ded2bc] bg-[#183324] p-7 text-white shadow-sm sm:p-10">
       <p className="text-xs font-semibold uppercase tracking-[.25em] text-[#d8c89a]">Feed control</p><h1 className="mt-3 text-3xl font-semibold">No active batch is available</h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-[#d6dfd8]">Feed Control opens active batches only. Activate or create a batch for the selected farm and house to begin the daily feed ledger.</p>
       <Link href="/app/batches" className="mt-7 inline-flex min-h-11 items-center rounded-xl border border-white/20 px-4 text-sm font-semibold hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Manage batches</Link>
     </section>
+  </main>;
+
+  if (secondaryMode) return <main className="mx-auto w-full max-w-[1560px] space-y-5 p-4 sm:p-6 lg:p-10">
+    <header className="rounded-2xl bg-forest-900 p-6 text-white"><h1 className="font-display text-3xl">{secondaryMode === "template_management" ? navigation("templates") : t("weights")}</h1><p className="mt-2 text-sm text-sand-100">{t(secondaryMode === "template_management" ? "configurationHelp" : "weightsHelp")}</p><nav className="mt-4 flex flex-wrap gap-3" aria-label={t("related")}><TodayEntryLink task="feeding" className="inline-flex min-h-12 items-center rounded-xl border border-white/30 px-4">{navigation("today")}</TodayEntryLink><Link className="inline-flex min-h-12 items-center rounded-xl border border-white/30 px-4" href={buildHistoryHref({category: "feeding", from: period.dateFrom, to: period.dateTo, farm: scope.farmId, house: scope.houseId, flock: scope.flockId, batch: scope.batchId})}>{navigation("history")}</Link><Link className="inline-flex min-h-12 items-center rounded-xl border border-white/30 px-4" href={buildReportHref("feed", {...period, ...scope})}>{navigation("performance")}</Link></nav></header>
+    <FarmScopeFilters title={t("scope")} fields={["branch", "farm"]}/>
+    <label className="grid gap-2 text-sm font-semibold">{t("batch")}<select value={scope.batchId} onChange={event => setScope(current => ({...current, batchId: event.target.value}))} className="min-h-12 rounded-xl border border-sand-300 bg-white px-3"><option value="">{t("chooseBatch")}</option>{activeBatches.map(batch => <option key={batch.id} value={batch.id}>{batch.batch_code}</option>)}</select></label>
+    {error ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{error}</p> : null}{message ? <p role="status">{message}</p> : null}
+    {!scope.batchId ? <p role="status">{t("noBatch")}</p> : loading && !data ? <LoadingState/> : data ? secondaryMode === "template_management" ? <TemplateManager data={data} open={templateOpen} setOpen={setTemplateOpen} reload={load} announce={setMessage} batchId={scope.batchId}/> : <><WeightTasks data={data} onRecord={setWeightTask}/>{weightTask ? <WeightDrawer task={weightTask} date={data.meta.today} close={() => setWeightTask(null)} reload={load} announce={setMessage}/> : null}</> : null}
   </main>;
 
   return <main className="mx-auto w-full max-w-[1560px] space-y-6 p-4 sm:p-6 lg:p-10">

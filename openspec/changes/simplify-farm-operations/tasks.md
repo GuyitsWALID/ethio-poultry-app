@@ -1,5 +1,15 @@
 # Tasks
 
+## Current completion boundary — 2026-10-24
+
+Implementation is not the same as pilot certification. Today, offline recovery,
+shared warehouse access, Flocks, History and Farm performance are implemented.
+The owner confirmed the deployed Feed/Sales repair and the offline staging flow.
+Remaining implementation is primarily Task 4.6's legacy/configuration/correction
+localization; release acceptance and the real seven-day pilot remain Task 8.
+See `completion-checkpoint.md` for current evidence and remaining work. Older
+dated notes below are retained as history, not renewed implementation blockers.
+
 ### Linked History navigation revision (2026-10-18)
 
 `unify-operational-history` supersedes the presentation described in 7.1 with Today, Flocks, Alerts, History, Reports and More (Approvals, Record Checks, Feed templates). It also documents the approved narrow exception to 7.4: enabled CEOs receive History and consolidated Approvals without activating the broader CEO workspace. Legacy routes, disabled-tenant navigation and the pilot acceptance gate remain intact. Verification of this revision is tracked in that linked change, not inferred from the older checked tasks below.
@@ -35,10 +45,14 @@
 - [x] 4.3 Add the CEO/Farm Manager English/Amharic header control, profile persistence, offline device fallback, and Admin exclusion; verify immediate switching, reload persistence, and Admin English-only behavior.
 - [x] 4.4 Build and partner-review the poultry terminology glossary using the selected Amharic references; verify every manager-facing Today term has an approved English and Amharic entry.
 - [ ] 4.5 Migrate Farm Manager navigation, Today, validation, notifications, loading, empty, success, and error text to catalog keys; verify the hard-coded-string check and translated browser tests pass.
+  - [x] Core Today/navigation/notification catalog migration and stable message mappings implemented. On 2026-10-24, bird, health and embedded saves were aligned with the full shared error map; assigned-fix status badges now reuse translated notification statuses.
+  - [x] Add a CI-enforced AST regression for visible Today text, accessible labels and static translation keys; preserve the existing English/Amharic key-parity and Ethiopian-calendar tests.
+  - [ ] Final rebuilt signed-in translated browser acceptance for the current integrated release. Earlier scoped tablet/browser evidence remains valid history but is not a new full-release sign-off.
 - [ ] 4.6 Migrate the remaining CEO/Farm Manager Feed, Health, Inventory, Sales, Alerts, Governance, Record Checks, and Reports interface text before broad bilingual release; verify missing-key checks and Amharic expansion layouts.
   - [x] Alerts, Action Desk, and notification preferences.
     - [x] Inventory and warehouse workflows.
   - [ ] Feed Control and template management.
+    - [x] Shared approved feed-template review: catalog headings/counts, existing bilingual feed types and locale number formatting; real English/Amharic rendering regressions. Main Feed Control/configuration screens remain open.
   - [ ] Health, vaccination, and mortality workflows.
   - [ ] Sales and expense workflows.
   - [ ] Governance and approval workflows.
@@ -100,9 +114,16 @@ unverified scenarios remain tracked for release/pilot acceptance.
 
 ## 8. Verification and Pilot Readiness
 
+### Approved navigation gap repair (2026-10-24)
+
+- [x] Share manager destination rules across Alerts, notification bell, Today assigned fixes and Flock next steps; keep routine work in Today, past evidence in History and analysis in Farm performance.
+- [x] Retain exact correction/approval/configuration targets and CEO/Admin/disabled behavior; isolate Feed templates and weight checks from the routine Feed dashboard.
+- [x] Add regressions for routing, historical/invalid scope, operating windows, offline caller compatibility and focused Feed presentation (532 unit tests passing). See `navigation-gap-repair.md`.
+- [ ] Verify the repaired links in signed-in staging tablet/Amharic and feature-disabled sessions before release acceptance.
+
 - [ ] 8.1 Run migration verification, RLS tests, SQL integration tests, focused Today/offline/localization tests, the full test suite, lint, TypeScript, and production build; record exact commands and passing results.
 - [ ] 8.2 Run Playwright in tablet portrait and landscape across Chromium plus supported cross-browser projects, including offline/reconnect, Amharic, deep-link, accessibility, and legacy-route regression scenarios.
-  - Full offline-day gate still requires a safe protected-page reload/restart shell, task-detail availability for offline entry, and an explicit revision/dependency-chain protocol for multiple pending edits to the same Daily Record/feed day. These implementation gaps must be resolved before claiming full-day acceptance; never bypass revision checks or cache authenticated HTML/API responses as a shortcut.
+  - Offline reload/restart shell, preloaded task details and receipt-based dependency chaining are implemented (2026-10-14). Owner confirmed localhost offline acceptance and subsequently reported the staging deployment tested. Remaining gate is documented cross-browser/device/upgrade-failure acceptance, not reimplementation of those features. Never bypass revision checks or cache authenticated HTML/API responses.
 - [ ] 8.3 Apply migrations and feature-disabled code to staging, run Cloudflare/Supabase end-to-end validation, and verify rollback by disabling the tenant feature flag.
 - [ ] 8.4 Produce an encrypted logical production backup, complete and document a restore drill, name the rollback owner, and verify daily backup monitoring before enabling authoritative pilot data.
 - [ ] 8.5 Enable Today only for the isolated production pilot organization and verify monitoring, notifications, command receipts, and legacy fallback routes.

@@ -1,4 +1,27 @@
 {
+  "ManagerDestinations": {
+    "weights": "Weight checks",
+    "configurationHelp": "Manage feed plans and versions here. Record daily feeding in Today; inspect past records in History.",
+    "weightsHelp": "Complete weight samples here. Feeding entry and analytics stay in Today and Farm performance.",
+    "related": "Related workspaces",
+    "scope": "Configuration scope",
+    "batch": "Batch",
+    "chooseBatch": "Choose a batch",
+    "noBatch": "No authorized batch is available for this selection. Check the farm and house filters."
+  },
+  "FeedTemplateReview": {
+    "empty": "No template rows were supplied.",
+    "rowCount": "{count, plural, one {# approved feed-plan row} other {# approved feed-plan rows}}",
+    "week": "Week",
+    "ageDays": "Age in days",
+    "standard": "Standard g/bird",
+    "recommended": "Recommended g/bird",
+    "targetWeight": "Target weight",
+    "feedType": "Feed type",
+    "lightsOn": "Lights on",
+    "lightsOff": "Lights off",
+    "grams": "g"
+  },
   "History": {
     "title": "History",
     "help": "Find past records. Choose a type and dates, then view a record.",
@@ -461,6 +484,8 @@
       "emptyHelp": "Check Available work, clear filters, or continue your daily work in Today."
     },
     "destinations": {
+      "history": "View history and evidence",
+      "performance": "Review farm performance",
       "today": "Open Today",
       "flock": "Review flock performance",
       "feed": "Review feeding record",

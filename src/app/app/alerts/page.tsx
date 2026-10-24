@@ -3,6 +3,7 @@
 
 import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
 import { useFarmScope } from "@/components/farm-scope-context";
+import {useManagerDestination} from "@/components/today/today-entry-link";
 
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
@@ -26,6 +27,7 @@ function dateTime(value: string, locale: AppLocale, unavailable: string) { const
 type DialogState = { action: ActionCard; command: "acknowledge" | "start" | "submit_resolution" } | null;
 
 export default function AlertsPage() {
+  const destination = useManagerDestination();
   const locale = useLocale() as AppLocale;
   const t = useTranslations("AlertsPage");
   const tNotifications = useTranslations("Notifications");
@@ -100,7 +102,7 @@ export default function AlertsPage() {
     finally { setBusy(null); }
   }, [load, t, desk, dialog]);
 
-  const actions = desk?.actions ?? [];
+  const actions = (desk?.actions ?? []).map(action => ({...action, route: destination(action.route)}));
   const isManager = desk?.role === "farm_manager";
   const managerView = view === "unassigned" || view === "verification" ? view : "mine";
   const visible = orderInbox(actions.filter((item) => {

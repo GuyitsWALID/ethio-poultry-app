@@ -40,5 +40,29 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     const detail = await get(`/api/history/records/${selected!.kind}/${selected!.id}`);
     expect(detail.status()).toBe(200);
     expect(detail.headers()["cache-control"]).toContain("no-store");
+    if (role === "FARM_MANAGER") {
+      const options = await get("/api/scope/options");
+      expect(options.status()).toBe(200);
+      const batch = (await options.json()).batches.find((row: {status: string}) => row.status === "active");
+      expect(batch, "An existing authorized active batch is required; do not create one to pass").toBeTruthy();
+      for (const [locale, width, height] of [["en", 1024, 768], ["am", 768, 1024]] as const) {
+        const copy = locale === "am" ? am : messages;
+        await page.context().addCookies([{name: "preferred_locale", value: locale, url: process.env.APP_BASE_URL!}]);
+        await page.setViewportSize({width, height});
+        const query = new URLSearchParams({filter_view: "1", filter_farmId: batch.farm_id, filter_batchId: batch.id, feed_target: "template_management"});
+        await page.goto(`/app/feeding-log?${query}`);
+        await expect(page.getByRole("heading", {level: 1, name: copy.Navigation.templates, exact: true})).toBeVisible();
+        await expect(page.getByLabel(copy.ManagerDestinations.batch, {exact: true})).toHaveValue(batch.id);
+        await expect(page.locator("#feed-template-management")).toBeVisible();
+        await expect(page.locator("#today-feed-sessions, #feed-history")).toHaveCount(0);
+        const links = page.getByRole("navigation", {name: copy.ManagerDestinations.related});
+        await expect(links.getByRole("link", {name: copy.Navigation.history, exact: true})).toHaveAttribute("href", /\/app\/history\?/);
+        await expect(links.getByRole("link", {name: copy.Navigation.performance, exact: true})).toHaveAttribute("href", /\/app\/reports\?/);
+        query.delete("filter_batchId"); query.set("batch_id", batch.id);
+        await page.goto(`/app/feeding-log?${query}`);
+        await expect(page.getByRole("alert").filter({hasText: copy.ManagerDestinations.noBatch})).toBeVisible();
+        await expect(page.locator("#feed-template-management")).toHaveCount(0);
+      }
+    }
   });
 }

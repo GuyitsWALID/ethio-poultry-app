@@ -6,6 +6,8 @@ import {useLocale, useTranslations} from "next-intl";
 import {Bird, ChevronDown, ChevronUp, Save} from "lucide-react";
 
 import {formatNumber} from "@/i18n/formats";
+import {todayErrorMessageKeys} from "@/i18n/today-copy";
+import {buildHistoryHref} from "@/lib/history/contracts";
 import type {AppLocale} from "@/i18n/locale";
 import type {TodayFlockContext, TodayTask} from "@/lib/today-workspace/contracts";
 import {assessBirdCheck} from "@/lib/today-workspace/bird-check";
@@ -34,7 +36,7 @@ function BirdCheckContent({flock, task, farmId, workDate, online, expanded, onTo
   const closing = initial.dailyRecordId ? initial.closingBirds : initial.openingBirds;
   const stateLabel = task.state === "complete" ? t("states.complete")
     : task.state === "needs_attention" ? t("states.needsAttention") : task.state === "waiting_to_sync" ? t("states.waiting") : task.state === "draft_on_tablet" ? t("states.draft") : t("states.notStarted");
-  const correctionHref = `/app/daily-records?${new URLSearchParams({farm_id: farmId, flock_id: flock.id, date: workDate})}`;
+  const correctionHref = buildHistoryHref({category: "daily", farm: farmId, flock: flock.id, from: workDate, to: workDate}, initial.dailyRecordId ? {kind: "daily_record", id: initial.dailyRecordId} : undefined);
 
   async function startDay() {
     if (flock.canRecord === false || !openingReady || initial.dailyRecordId || saving || pending) return;
@@ -51,7 +53,7 @@ function BirdCheckContent({flock, task, farmId, workDate, online, expanded, onTo
       });
       if (result.status === "applied") onSaved();
       else if(result.status === "queued"){setMessage(offlineText("waiting"));onSaved();}
-      else setMessage(result.error_code === "RESOURCE_CONFLICT" ? errors("staleRevision") : errors("validation"));
+      else setMessage(errors(result.error_code ? todayErrorMessageKeys[result.error_code] : "unknown"));
     } catch { setMessage(errors("unknown")); }
     finally { setSaving(false); }
   }
