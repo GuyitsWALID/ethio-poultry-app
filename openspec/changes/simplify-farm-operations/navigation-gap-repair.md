@@ -28,3 +28,12 @@ Approved scope: complete shared repair, not Alerts-only. Applies only to Today-e
 - Scoped ESLint passed. `npm run build` passed, including TypeScript and generation of all 104 static pages. Local-only warnings: unset `APP_RELEASE` and old Browserslist data; neither blocks this build.
 - No migration, dependency, business-data rewrite or deployment is included.
 - Signed-in tablet/Amharic navigation and staging rollback checks remain release acceptance work; unit/source-wiring checks do not replace browser acceptance.
+
+## Staging release evidence — 2026-10-24
+
+- Application repair pushed as `98f4747`; GitHub Quality gate and Cloudflare staging deployment passed. Follow-up commits `e8bb845` and `2ed20aa` correct browser-test selectors only. No production or database action occurred.
+- Read-only staging run: https://github.com/GuyitsWALID/ethio-poultry-app/actions/runs/40100573680 . CEO History passed. The manager reached both English landscape and Amharic portrait focused template views, with the selected authorized batch and no daily-feed/history dashboard sections.
+- Acceptance remains open: the Amharic related History-link locator could not find its expected target. Investigate rendered accessible names/locale behavior before claiming bilingual navigation acceptance.
+- Integrated Reports acceptance remains open: vaccination metric assertions expected 2 (CEO) and 1 (manager), while the UI showed 0. Investigate scope/period/rendering before attributing this to a calculation defect; do not manufacture records or weaken the populated assertions.
+- Earlier test failures were corrected without application changes: duplicate shell/content headings, implicit select-label matching and Next.js's empty global route-announcer alert. Report error assertions now stay inside `main`.
+- Feature-disabled live rollback and broader pilot checks remain unchecked. Unrelated Inventory work was excluded from these commits.
