@@ -84,7 +84,7 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     for (const view of views) {
       await page.getByRole("button", {name: messages.FarmPerformance.views[view], exact: true}).click();
       await expect(page).toHaveURL(/\/app\/reports/);
-      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.getByRole("alert"), `No error in ${view}`).toHaveText([]);
       if (view === "overview" || view === "saved") continue;
       for (const metric of performance.sections[view].metrics) {
         const label = messages.FarmPerformance.labels[metric.key as keyof typeof messages.FarmPerformance.labels] ?? messages.FarmPerformance.unavailable;

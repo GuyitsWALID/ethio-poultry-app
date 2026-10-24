@@ -51,7 +51,7 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
         await page.setViewportSize({width, height});
         const query = new URLSearchParams({filter_view: "1", filter_farmId: batch.farm_id, filter_batchId: batch.id, feed_target: "template_management"});
         await page.goto(`/app/feeding-log?${query}`);
-        await expect(page.getByRole("heading", {level: 1, name: copy.Navigation.templates, exact: true})).toBeVisible();
+        await expect(page.locator("main").getByRole("heading", {level: 1, name: copy.Navigation.templates, exact: true})).toBeVisible();
         await expect(page.getByLabel(copy.ManagerDestinations.batch, {exact: true})).toHaveValue(batch.id);
         await expect(page.locator("#feed-template-management")).toBeVisible();
         await expect(page.locator("#today-feed-sessions, #feed-history")).toHaveCount(0);
