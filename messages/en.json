@@ -682,8 +682,34 @@
     },
     "noWarehouse": {
       "title": "No active warehouse is assigned",
-      "copy": "The CEO must create and assign a warehouse before a Farm Manager can establish, receive, use, or count stock.",
-      "action": "Open access governance"
+      "copy": "The CEO must create and assign a warehouse before a Farm Manager can establish, receive, use, or count stock."
+    },
+    "warehouseSetup": {
+      "eyebrow": "CEO warehouse setup",
+      "title": "Create a warehouse",
+      "copy": "Create a farm store or a shared warehouse here. Farm stores inherit the Farm Manager assigned to that farm; shared warehouses can be assigned directly.",
+      "addAnother": "Add another warehouse",
+      "name": "Warehouse name",
+      "branch": "Branch",
+      "selectBranch": "Select a branch",
+      "farm": "Farm (optional)",
+      "shared": "Shared warehouse — no farm",
+      "type": "Warehouse type",
+      "manager": "Farm Manager (optional)",
+      "noManager": "Assign later in Access & Users",
+      "farmManager": "Farm Manager",
+      "inheritsManager": "This farm store will inherit the Farm Manager assigned to the selected farm.",
+      "save": "Create warehouse",
+      "saving": "Creating…",
+      "created": "{name} was created and is ready for inventory setup.",
+      "noBranch": "Create a branch before adding its warehouse.",
+      "openBranches": "Open Branch Network",
+      "types": {
+        "farmStore": "Farm store",
+        "central": "Central warehouse",
+        "pharmacy": "Pharmacy",
+        "equipment": "Equipment store"
+      }
     },
     "metrics": {
       "items": "Stocked items",

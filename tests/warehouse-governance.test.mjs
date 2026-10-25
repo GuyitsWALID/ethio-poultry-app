@@ -41,6 +41,17 @@ test("inventory presents warehouse-specific balances and setup", () => {
   assert.match(page,/usePageFilter<string>\("warehouseId", ""\)/);
 });
 
+test("CEO can create the first or another warehouse from Inventory", () => {
+  assert.equal(en.Inventory.warehouseSetup.title, "Create a warehouse");
+  assert.match(page, /data\?\.meta\.canManage&&warehouseSetupOptions/);
+  assert.match(page, /jsonRequest\("\/api\/inventory\/warehouses",\{method:"POST"/);
+  assert.match(page, /name="branchId"/);
+  assert.match(page, /name="farmId"/);
+  assert.match(page, /name="managerId"/);
+  assert.match(page, /result\.warehouse\.id/);
+  assert.doesNotMatch(page, /noWarehouse\.action/);
+});
+
 test("CEO can discover the access page and load assignable farm managers through the governed API", () => {
   assert.match(sidebar, /Access & Users/);
   assert.match(sidebar, /\/app\/users/);
