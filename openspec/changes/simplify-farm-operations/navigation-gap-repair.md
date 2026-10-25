@@ -44,3 +44,7 @@ Approved scope: complete shared repair, not Alerts-only. Applies only to Today-e
 - Run https://github.com/GuyitsWALID/ethio-poultry-app/actions/runs/40169101753 passed the prior vaccination checks and CEO/manager History, including the English/Amharic focused navigation checks. The two original failures are resolved.
 - Integrated Reports now stops at currency presentation: expected `ETB826,219.80`, rendered `826,219.8 ETB`. The numeric value matches; keep the formatting regression open under Task 4.6, without weakening the assertion.
 - Task 4.6 proceeds with the shared weight-entry sheet: bilingual copy, Ethiopian-calendar input, localized target numbers and 48px controls. No ledger or mutation-payload change.
+
+### Currency presentation correction
+
+The remaining gate mismatch was traced to `MetricCards`: current values called the generic number formatter without their unit, while previous values already supplied it. Current ETB values now use the existing currency formatter and omit the separate trailing currency label. No amounts, permissions, source readers or calculations change. The actual component rendering regression first reproduced `826,219.8 ETB` versus `ETB 826,219.80`; it also covers both locales, zero/negative values, missing evidence and non-currency units. Fresh deployed acceptance is still required before closing the integrated release gate.

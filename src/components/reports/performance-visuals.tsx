@@ -22,7 +22,7 @@ export function MetricCards({metrics}: {metrics: PerformanceMetric[]}) {
   const {t, label, unit, number, explanation} = usePerformanceText();
   return <dl className="performance-metrics">{metrics.map(metric => <div key={metric.key} className="performance-metric">
     <dt>{(() => {const Icon = ({eggs: Egg, hdep: Activity, sessionActualKg: Wheat, feedKg: Wheat, deaths: HeartPulse, revenue: Wallet, currentLowStockItems: Package} as Record<string, typeof Egg>)[metric.key] ?? Activity; return <Icon size={17} aria-hidden="true"/>;})()}{label(metric.key)}</dt>
-    <dd className="performance-value">{number(metric.value)} <span>{metric.value !== null ? unit(metric.unit) : ""}</span></dd>
+    <dd className="performance-value">{number(metric.value, metric.unit)} <span>{metric.value !== null && metric.unit !== "ETB" ? unit(metric.unit) : ""}</span></dd>
     <dd className="performance-change"><span aria-hidden="true">{metric.delta === null ? "—" : metric.delta > 0 ? <ArrowUpRight size={16}/> : metric.delta < 0 ? <ArrowDownRight size={16}/> : "="}</span> {metric.delta === null ? t("noComparison") : `${metric.delta > 0 ? "+" : ""}${number(metric.delta, metric.unit)} ${metric.unit !== "ETB" ? unit(metric.unit) : ""}`}<br/><span>{t("previous")}: {number(metric.previous, metric.unit)}</span></dd>
     <dd className="performance-metric-note">{explanation(metric.explanation)}</dd>
   </div>)}</dl>;

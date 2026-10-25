@@ -59,6 +59,7 @@ dated notes below are retained as history, not renewed implementation blockers.
   - [ ] Governance and approval workflows.
   - [ ] Record Checks and guided resolution workflows.
   - [ ] Reports and financial-close workflows.
+    - [x] Farm performance primary monetary cards reuse the shared ETB formatter in both locales, without duplicate currency units. Real-render regression covers positive/zero/negative amounts, missing evidence and non-money units; integrated staging acceptance remains separately gated.
   - [ ] Cross-module missing-key and Amharic expansion verification.
 
 ## 5. Offline Web Foundation
