@@ -48,3 +48,9 @@ Approved scope: complete shared repair, not Alerts-only. Applies only to Today-e
 ### Currency presentation correction
 
 The remaining gate mismatch was traced to `MetricCards`: current values called the generic number formatter without their unit, while previous values already supplied it. Current ETB values now use the existing currency formatter and omit the separate trailing currency label. No amounts, permissions, source readers or calculations change. The actual component rendering regression first reproduced `826,219.8 ETB` versus `ETB 826,219.80`; it also covers both locales, zero/negative values, missing evidence and non-currency units. Fresh deployed acceptance is still required before closing the integrated release gate.
+
+### Populated egg fixture — 2026-10-25
+
+Read-only staging inspection confirmed that Laba has 360 non-voided historical Daily Records from April 22 through July 20, including 180 positive layer egg records. Its two October records have no egg evidence. The gate's moving July 28–October 25 window therefore excluded every populated egg record; TestFarm is a separate empty organization, not a replacement fixture.
+
+`tests/fixtures/staging-reports.json` now pins the verified Laba organization, authorized Duo farm for the manager and April 22–July 20 operating period. The gate explicitly rejects wrong organizations or missing existing farm access, preserves positive egg and independent-source assertions, and uses identical dates for APIs and UI. No records, assignments or permissions are changed. This certifies historical calculations, not current-day completeness. Update the fixture only after an explicit read-only review of replacement evidence; do not advance it automatically or create data to pass.

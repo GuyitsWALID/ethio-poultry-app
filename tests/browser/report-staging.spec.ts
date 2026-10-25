@@ -2,6 +2,7 @@ import {expect, test} from "@playwright/test";
 import {loadReport, reportSections, type ReportInput} from "../../src/lib/report-workspace";
 import {formatEtb, formatNumber} from "../../src/i18n/formats";
 import messages from "../../messages/en.json";
+import fixture from "../fixtures/staging-reports.json";
 
 const stagingHost = "ethio-poultry-app-staging.walidmurad65.workers.dev";
 test.skip(new URL(process.env.APP_BASE_URL || "http://localhost:3000").hostname !== stagingHost, "Dedicated staging check only");
@@ -27,16 +28,18 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     expect(contextResponse.status()).toBe(200);
     const context = await contextResponse.json();
     expect(context.role).toBe(role === "CEO" ? "ceo" : "farm_manager");
+    expect(context.orgName, "Use the dedicated populated-fixture account; do not switch tenants or grant access to pass").toBe(fixture.organizationName);
     if (role === "FARM_MANAGER") expect(context.todayWorkspaceEnabled, "Do not enable rollout automatically to pass a test").toBe(true);
     const optionsResponse = await get("/api/scope/options");
     expect(optionsResponse.status()).toBe(200);
     const options = await optionsResponse.json();
     expect(options.farms.length, "Populated assigned-farm scope required").toBeGreaterThan(0);
-    const farmId = role === "FARM_MANAGER" ? options.farms[0].id as string : undefined;
-    const to = new Date().toISOString().slice(0, 10);
-    const start = new Date(`${to}T00:00:00Z`);
-    start.setUTCDate(start.getUTCDate() - 89);
-    const input: ReportInput = {dateFrom: start.toISOString().slice(0, 10), dateTo: to, farmId, month: to.slice(0, 7)};
+    const managerFarm = options.farms.find((farm: {name: string}) => farm.name === fixture.managerFarmName);
+    if (role === "FARM_MANAGER") expect(managerFarm, "The dedicated manager must already have access to the populated fixture farm; do not grant it automatically").toBeTruthy();
+    const farmId = role === "FARM_MANAGER" ? managerFarm.id as string : undefined;
+    // Historical fixture acceptance must not age out as the current date advances.
+    const to = fixture.dateTo;
+    const input: ReportInput = {dateFrom: fixture.dateFrom, dateTo: to, farmId, month: to.slice(0, 7)};
     const read = async (url: string) => {
       const response = await get(url);
       expect(response.status(), `Authorized source ${url.split("?")[0]}`).toBe(200);
