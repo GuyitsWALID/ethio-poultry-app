@@ -77,7 +77,7 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
       expect(source).not.toBeNull();
     }
     const views = ["overview", "production", "feeding", "health", "stock", "salesCosts", "saved"] as const;
-    const query = new URLSearchParams({filter_view: "1", filter_dateFrom: input.dateFrom, filter_dateTo: input.dateTo});
+    const query = new URLSearchParams({filter_view: "1", filter_preset: "custom", filter_dateFrom: input.dateFrom, filter_dateTo: input.dateTo, filter_page_dateFrom: input.dateFrom, filter_page_dateTo: input.dateTo});
     if (farmId) query.set("filter_farmId", farmId);
     await page.goto(`/app/reports?${query}`);
     await page.getByRole("group", {name: /^(Language|ቋንቋ)$/}).getByRole("button", {name: "EN", exact: true}).click({timeout: 30_000});

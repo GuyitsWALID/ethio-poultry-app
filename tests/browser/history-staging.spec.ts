@@ -45,12 +45,25 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
       expect(options.status()).toBe(200);
       const batch = (await options.json()).batches.find((row: {status: string}) => row.status === "active");
       expect(batch, "An existing authorized active batch is required; do not create one to pass").toBeTruthy();
+      let displayLocale: "en" | "am" = "en";
+      // Exercise localized presentation without changing the staging account's preference.
+      await page.route("**/api/me/context", async route => {
+        try {
+          const response = await route.fetch();
+          if (!response.ok()) {await route.fulfill({response}); return;}
+          await route.fulfill({response, json: {...await response.json(), preferredLocale: displayLocale}});
+        } catch {await route.abort();}
+      });
       for (const [locale, width, height] of [["en", 1024, 768], ["am", 768, 1024]] as const) {
+        displayLocale = locale;
         const copy = locale === "am" ? am : messages;
+        await page.evaluate(value => localStorage.setItem("ethiopoultry.preferred_locale", value), locale);
         await page.context().addCookies([{name: "preferred_locale", value: locale, url: process.env.APP_BASE_URL!}]);
         await page.setViewportSize({width, height});
         const query = new URLSearchParams({filter_view: "1", filter_farmId: batch.farm_id, filter_batchId: batch.id, feed_target: "template_management"});
         await page.goto(`/app/feeding-log?${query}`);
+        await expect(page.locator("html")).toHaveAttribute("lang", locale);
+        await expect(page.getByRole("group", {name: /^(Language|ቋንቋ)$/}).getByRole("button", {name: locale === "en" ? "EN" : "አማ", exact: true})).toHaveAttribute("aria-pressed", "true");
         await expect(page.locator("main").getByRole("heading", {level: 1, name: copy.Navigation.templates, exact: true})).toBeVisible();
         await expect(page.locator("main").getByLabel(copy.ManagerDestinations.batch)).toHaveValue(batch.id);
         await expect(page.locator("#feed-template-management")).toBeVisible();
