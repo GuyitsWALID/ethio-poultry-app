@@ -37,3 +37,10 @@ Approved scope: complete shared repair, not Alerts-only. Applies only to Today-e
 - Integrated Reports acceptance remains open: vaccination metric assertions expected 2 (CEO) and 1 (manager), while the UI showed 0. Investigate scope/period/rendering before attributing this to a calculation defect; do not manufacture records or weaken the populated assertions.
 - Earlier test failures were corrected without application changes: duplicate shell/content headings, implicit select-label matching and Next.js's empty global route-announcer alert. Report error assertions now stay inside `main`.
 - Feature-disabled live rollback and broader pilot checks remain unchecked. Unrelated Inventory work was excluded from these commits.
+
+### Follow-up — 2026-10-25
+
+- `ad7f85e` fixes the test period (canonical page-specific date filters) and read-only language setup (cookie/device storage plus a presentation-only profile-language override). Authorization and records are not mocked or changed.
+- Run https://github.com/GuyitsWALID/ethio-poultry-app/actions/runs/40169101753 passed the prior vaccination checks and CEO/manager History, including the English/Amharic focused navigation checks. The two original failures are resolved.
+- Integrated Reports now stops at currency presentation: expected `ETB826,219.80`, rendered `826,219.8 ETB`. The numeric value matches; keep the formatting regression open under Task 4.6, without weakening the assertion.
+- Task 4.6 proceeds with the shared weight-entry sheet: bilingual copy, Ethiopian-calendar input, localized target numbers and 48px controls. No ledger or mutation-payload change.

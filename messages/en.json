@@ -1,4 +1,20 @@
 {
+  "FeedWeight": {
+    "eyebrow": "Shared Feed and Health record",
+    "title": "Record weight sample",
+    "close": "Close weight entry",
+    "recordDate": "Record date",
+    "sampleCount": "Sample count",
+    "averageWeightG": "Average weight (g)",
+    "minWeightG": "Minimum weight (g)",
+    "maxWeightG": "Maximum weight (g)",
+    "uniformityPct": "Uniformity (%)",
+    "target": "Target: {min}–{max} g for the sample’s age.",
+    "saving": "Saving…",
+    "save": "Save shared sample",
+    "saved": "Weight and uniformity sample recorded.",
+    "failed": "The weight sample could not be saved. Try again."
+  },
   "ManagerDestinations": {
     "weights": "Weight checks",
     "configurationHelp": "Manage feed plans and versions here. Record daily feeding in Today; inspect past records in History.",

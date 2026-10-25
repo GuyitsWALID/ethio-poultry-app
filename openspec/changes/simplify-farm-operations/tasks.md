@@ -52,6 +52,7 @@ dated notes below are retained as history, not renewed implementation blockers.
   - [x] Alerts, Action Desk, and notification preferences.
     - [x] Inventory and warehouse workflows.
   - [ ] Feed Control and template management.
+    - [x] Shared weight-entry sheet: bilingual fields/status/fallback messages, locale-formatted targets, Ethiopian-calendar date entry and 48px controls. Focused regression covers visible text, catalog parity and unchanged mutation payload; live layout acceptance remains open.
     - [x] Shared approved feed-template review: catalog headings/counts, existing bilingual feed types and locale number formatting; real English/Amharic rendering regressions. Main Feed Control/configuration screens remain open.
   - [ ] Health, vaccination, and mortality workflows.
   - [ ] Sales and expense workflows.
