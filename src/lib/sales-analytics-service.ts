@@ -395,6 +395,7 @@ export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchPar
         brokenEggs: costBasis.brokenEggs,
         absorbedCost: round(costBasis.absorbedCost),
         costBasisSource: costBasis.sourceLabel,
+        costBasisPeriod: costBasis.status === "locked" && lockedPeriod ? {from: String(lockedPeriod.period_start), to: String(lockedPeriod.period_end)} : null,
         belowTargetCount,
         belowBreakEvenCount,
         missingCostReasons,

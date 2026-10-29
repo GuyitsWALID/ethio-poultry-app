@@ -27,7 +27,8 @@ test("report generation reuses protected authoritative analytics and hashes ever
   assert.match(service, /createHash\("sha256"\)/);
   assert.match(service, /snapshot_sha256/);
   assert.match(route, /getAccessContext\(\{ tenant: true \}\)/);
-  assert.match(route, /loadOperationsAnalytics\(access, request\.nextUrl\.searchParams\)/);
+  assert.match(route, /loadOperationsAnalytics\(access, request\.nextUrl\.searchParams, undefined, undefined,/);
+  assert.match(route, /getTranslations\("AnalyticsEvidence"\)/);
   assert.match(analyticsService, /export async function loadOperationsAnalytics/);
   assert.doesNotMatch(route, /internal_org_id|MONITORING_INGEST_TOKEN/);
 });

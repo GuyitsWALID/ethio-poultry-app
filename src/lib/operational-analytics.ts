@@ -1,3 +1,5 @@
+export type AnalyticsText = (key: string, values?: Record<string, string | number>) => string;
+
 import type { BreedTarget, FlockType, WeightSample } from "@/lib/farm-manager-dashboard";
 
 export type AnalyticsDailyRow = {
@@ -136,6 +138,7 @@ export type OperationsAnalyticsResponse = {
     previousTo: string;
     timezone: "Africa/Addis_Ababa";
     scopeLabel: string;
+    farmCount?: number;
     refreshedAt: string;
     latestRecordAt: string | null;
     activeFlocks: number;
@@ -452,8 +455,10 @@ export function buildFlockAnalytics(input: {
   dateTo: string;
   warningVariancePct: number;
   criticalVariancePct: number;
+  translate?: AnalyticsText;
 }): FlockAnalyticsRow {
   const { flock } = input;
+  const say = (key: string, fallback: string, values?: Record<string, string | number>) => input.translate?.(key, values) ?? fallback;
   const layerMode = flock.type === "layer" || flock.type === "parent_stock";
   const layerIds = new Set(layerMode ? [flock.id] : []);
   const expected = expectedRecordsForPeriod([flock], input.dateFrom, input.dateTo);
@@ -483,19 +488,19 @@ export function buildFlockAnalytics(input: {
     : null;
 
   let status: FlockAnalyticsRow["status"] = "good";
-  let statusReason = "Operating within the available comparison bands.";
+  let statusReason = say("within", "Operating within the available comparison bands.");
   let attentionScore = 0;
   if (summary.records === 0) {
     status = "insufficient";
-    statusReason = "No Daily Records were found in this period.";
+    statusReason = say("noRecords", "No Daily Records were found in this period.");
     attentionScore = 100;
   } else if ((summary.recordCoveragePct ?? 0) < 70) {
     status = "critical";
-    statusReason = `Only ${round(summary.recordCoveragePct ?? 0)}% of expected flock-days are recorded.`;
+    statusReason = say("lowCoverage", `Only ${round(summary.recordCoveragePct ?? 0)}% of expected flock-days are recorded.`, {percent: round(summary.recordCoveragePct ?? 0)});
     attentionScore = 95;
   } else if ((summary.recordCoveragePct ?? 0) < 90) {
     status = "watch";
-    statusReason = `Record coverage is ${round(summary.recordCoveragePct ?? 0)}%.`;
+    statusReason = say("coverage", `Record coverage is ${round(summary.recordCoveragePct ?? 0)}%.`, {percent: round(summary.recordCoveragePct ?? 0)});
     attentionScore = 65;
   }
 
@@ -504,36 +509,36 @@ export function buildFlockAnalytics(input: {
     const watchGap = layerMode ? targetGap < -3 : (targetAttainmentPct ?? 100) < 95;
     if (criticalGap && attentionScore < 90) {
       status = "critical";
-      statusReason = `${layerMode ? "HDEP" : "Weight"} is materially below the age target.`;
+      statusReason = say("farBelow", `${layerMode ? say("hdep", "HDEP") : say("weight", "Weight")} is materially below the age target.`, {metric: layerMode ? say("hdep", "HDEP") : say("weight", "Weight")});
       attentionScore = 90;
     } else if (watchGap && attentionScore < 60) {
       status = "watch";
-      statusReason = `${layerMode ? "HDEP" : "Weight"} is below the age target.`;
+      statusReason = say("below", `${layerMode ? say("hdep", "HDEP") : say("weight", "Weight")} is below the age target.`, {metric: layerMode ? say("hdep", "HDEP") : say("weight", "Weight")});
       attentionScore = 60;
     }
   } else if (layerMode && summary.hdep !== null && previous.hdep !== null && previous.hdep - summary.hdep > 5 && attentionScore < 55) {
     status = "watch";
-    statusReason = "HDEP declined by more than five points from the previous period.";
+    statusReason = say("decline", "HDEP declined by more than five points from the previous period.");
     attentionScore = 55;
   }
 
   if (mortalityIntensityTarget !== null && summary.mortalityPer1000BirdDays !== null && summary.mortalityPer1000BirdDays > mortalityIntensityTarget && attentionScore < 85) {
     status = "critical";
-    statusReason = "Mortality is above the available breed/week target.";
+    statusReason = say("mortalityTarget", "Mortality is above the available breed/week target.");
     attentionScore = 85;
   }
   if (feedVariancePct !== null && Math.abs(feedVariancePct) >= input.criticalVariancePct && attentionScore < 80) {
     status = "critical";
-    statusReason = "Feed per bird is outside the critical target variance band.";
+    statusReason = say("feedCritical", "Feed per bird is outside the critical target variance band.");
     attentionScore = 80;
   } else if (feedVariancePct !== null && Math.abs(feedVariancePct) >= input.warningVariancePct && attentionScore < 50) {
     status = "watch";
-    statusReason = "Feed per bird is outside the warning target variance band.";
+    statusReason = say("feedWarning", "Feed per bird is outside the warning target variance band.");
     attentionScore = 50;
   }
   if (!layerMode && (!latestWeight || daysBetween(latestWeight.record_date, input.dateTo) > 14) && attentionScore < 70) {
     status = "watch";
-    statusReason = "The latest weight sample is more than 14 days old.";
+    statusReason = say("staleWeight", "The latest weight sample is more than 14 days old.");
     attentionScore = 70;
   }
 
@@ -547,7 +552,7 @@ export function buildFlockAnalytics(input: {
     houseName: flock.houseName,
     ageWeeks,
     liveBirds: flock.currentBirds,
-    primaryLabel: layerMode ? "Period HDEP" : "Latest weight",
+    primaryLabel: layerMode ? say("periodHdep", "Period HDEP") : say("latestWeight", "Latest weight"),
     primaryValue,
     primaryUnit: layerMode ? "%" : "g",
     target: primaryTarget,

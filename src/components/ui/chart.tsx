@@ -63,11 +63,13 @@ export function ChartTooltipContent({
   active,
   payload,
   label,
+  labelFormatter,
   indicator = "dot",
 }: {
   active?: boolean;
   payload?: TooltipPayload[];
   label?: string | number;
+  labelFormatter?: (label: string | number) => React.ReactNode;
   indicator?: "dot" | "line";
 }) {
   const { config } = useChart();
@@ -76,7 +78,7 @@ export function ChartTooltipContent({
 
   return (
     <div className="rounded-xl border border-sand-200 bg-white px-3 py-2 text-xs shadow-lg">
-      {label ? <p className="mb-2 font-medium text-forest-900">{label}</p> : null}
+      {label !== undefined ? <p className="mb-2 font-medium text-forest-900">{labelFormatter ? labelFormatter(label) : label}</p> : null}
       <div className="space-y-1.5">
         {payload.map((item) => {
           const key = String(item.dataKey ?? item.name ?? "");

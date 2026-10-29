@@ -118,7 +118,7 @@ async function oneLabel(table: string, id: unknown, column: string) {
   return data?.[column] ? String(data[column]) : null;
 }
 
-async function prepareFinding(ctx: AccessContext, id: string): Promise<PreparedFinding> {
+async function prepareFinding(ctx: AccessContext, id: string, locale: "en" | "am" = "en"): Promise<PreparedFinding> {
   const row = await authorizeFinding(ctx, id);
   const [farmName, houseName, flockCode, batchCode, warehouseName, responseResult] = await Promise.all([
     oneLabel("farms", row.farm_id, "name"),
@@ -182,6 +182,7 @@ async function prepareFinding(ctx: AccessContext, id: string): Promise<PreparedF
   for (const note of reviewNotes) addEvidence(`Review note · ${note.action}`, note.note);
 
   const packet: ReconciliationAiEvidencePacket = {
+    ...(locale === "am" ? {responseLanguage: "am" as const} : {}),
     finding: {
       title: label(workflow.plainTitle, "Record difference"),
       explanation: label(workflow.plainExplanation, "Related records do not agree."),
@@ -214,6 +215,7 @@ function analysisFromRow(row: Row, currentHash: string, cached = false): Reconci
     status: String(row.status) === "completed" ? "completed" : "failed",
     output: parsed?.success ? parsed.data : null,
     generatedAt: String(row.created_at),
+    language: snapshot?.responseLanguage === "am" ? "am" : "en",
     provider: "groq",
     model: String(row.model),
     evidenceHash: String(row.evidence_hash),
@@ -239,13 +241,13 @@ async function historyForFinding(ctx: AccessContext, findingId: string, currentH
   return (data ?? []).map((row) => analysisFromRow(row, currentHash));
 }
 
-export async function getReconciliationAiAnalysis(ctx: AccessContext, findingId: string): Promise<ReconciliationAiResponse> {
-  const prepared = await prepareFinding(ctx, findingId);
+export async function getReconciliationAiAnalysis(ctx: AccessContext, findingId: string, locale: "en" | "am" = "en"): Promise<ReconciliationAiResponse> {
+  const prepared = await prepareFinding(ctx, findingId, locale);
   if (!aiEnabled()) return { enabled: false, latest: null, currentEvidenceHash: prepared.evidenceHash, history: [] };
   const history = await historyForFinding(ctx, findingId, prepared.evidenceHash);
   return {
     enabled: true,
-    latest: history.find((item) => item.status === "completed" && item.output) ?? history[0] ?? null,
+    latest: history.find((item) => item.status === "completed" && item.output && item.evidenceHash === prepared.evidenceHash) ?? history.find((item) => item.status === "completed" && item.output) ?? history[0] ?? null,
     currentEvidenceHash: prepared.evidenceHash,
     history,
   };
@@ -314,11 +316,12 @@ async function writeAudit(ctx: AccessContext, eventType: string, analysisId: str
 export async function analyzeReconciliationFinding(
   ctx: AccessContext,
   findingId: string,
-  options: { regenerate?: boolean; requestKey?: string } = {},
+  options: { regenerate?: boolean; requestKey?: string; locale?: "en" | "am" } = {},
   dependencies: ReconciliationAiDependencies = {},
 ): Promise<ReconciliationAiAnalysis> {
+  const locale = options.locale ?? "en";
   if (!aiEnabled()) throw new ReconciliationAiError("AI guidance is not enabled for this deployment.", 503, "AI_DISABLED", true);
-  const prepared = await prepareFinding(ctx, findingId);
+  const prepared = await prepareFinding(ctx, findingId, locale);
   const model = modelName();
 
   if (options.requestKey) {

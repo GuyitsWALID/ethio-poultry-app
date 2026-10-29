@@ -22,6 +22,7 @@ export type ReconciliationWorkflowInput = {
 export type ReconciliationWorkflow = {
   plainTitle: string;
   plainExplanation: string;
+  recordedExplanation?: string;
   whyItMatters: string;
   likelyCauses: string[];
   owner: string;
@@ -201,8 +202,11 @@ function stage(status: string): Pick<ReconciliationWorkflow, "stage" | "stageLab
 export function reconciliationWorkflow(
   finding: ReconciliationWorkflowInput,
   role: string,
+  translate?: (key: string) => string,
 ): ReconciliationWorkflow {
   const guide = rules[finding.rule_code];
+  const ruleText = (field: string, fallback: string) => translate ? translate(`rules.${finding.rule_code}.${field}`) : fallback;
+  const state = stage(finding.status);
   const governance = finding.severity === "critical" || finding.domain === "governance" || finding.domain === "lineage";
   const priorityKind = finding.severity === "low" ? "guidance" : governance ? "governance" : "operational";
   const priorityLabel = priorityKind === "guidance" ? "Guidance" : priorityKind === "governance" ? "Management attention" : finding.severity === "high" ? "Action soon" : "Action needed";
@@ -219,19 +223,21 @@ export function reconciliationWorkflow(
       : guide?.href ?? "/app/reconciliation";
 
   return {
-    plainTitle: guide?.title ?? finding.title,
-    plainExplanation: guide?.explanation ?? finding.explanation,
-    whyItMatters: domainWhy[finding.domain] ?? "Related operational reports may be unreliable until the source records agree.",
-    likelyCauses: guide?.causes ?? ["A source record may be missing, duplicated, or entered incorrectly."],
-    owner,
+    plainTitle: guide ? ruleText("title", guide.title) : finding.title,
+    plainExplanation: guide && translate ? ruleText("explanation", guide.explanation ?? guide.destinationContext) : guide?.explanation ?? finding.explanation,
+    recordedExplanation: guide && translate && !guide.explanation ? finding.explanation : undefined,
+    whyItMatters: translate ? translate(domainWhy[finding.domain] ? `domains.${finding.domain}` : "fallback.why") : domainWhy[finding.domain] ?? "Related operational reports may be unreliable until the source records agree.",
+    likelyCauses: guide ? guide.causes.map((cause, index) => ruleText(`cause${index}`, cause)) : [translate ? translate("fallback.cause") : "A source record may be missing, duplicated, or entered incorrectly."],
+    owner: translate ? translate(role === "ceo" ? governance || finding.domain === "financial" ? "owner.ceoGovernance" : "owner.ceoOperational" : governance ? "owner.managerGovernance" : "owner.managerOperational") : owner,
     destination: {
       href: destinationHref,
-      label: guide?.destination ?? "Review the source records",
-      context: guide?.destinationContext ?? finding.recommended_action,
+      label: guide ? ruleText("destination", guide.destination) : translate ? translate("fallback.destination") : "Review the source records",
+      context: guide ? ruleText("destinationContext", guide.destinationContext) : finding.recommended_action,
     },
-    verification: guide?.verification ?? "After the source record is corrected, run the check again to confirm that the records agree.",
-    ...stage(finding.status),
-    priorityLabel,
+    verification: guide ? ruleText("verification", guide.verification) : translate ? translate("fallback.verification") : "After the source record is corrected, run the check again to confirm that the records agree.",
+    ...state,
+    stageLabel: translate ? translate(`stages.${["accepted_exception", "cleared", "resolved", "acknowledged", "investigating"].includes(finding.status) ? finding.status : "needs_action"}`) : state.stageLabel,
+    priorityLabel: translate ? translate(`priority.${priorityKind === "operational" ? finding.severity === "high" ? "high" : "other" : priorityKind}`) : priorityLabel,
     priorityKind,
   };
 }

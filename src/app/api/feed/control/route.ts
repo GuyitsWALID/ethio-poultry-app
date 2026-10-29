@@ -1,4 +1,5 @@
 import { addisDate, calculateFeedPerBirdDay, calculateInventoryCover, dateDays, feedAdmin, feedJson, getFeedContext, resolveFeedBatch, roundFeed, statusFromVariance } from "@/lib/feed-control";
+import {getTranslations} from "next-intl/server";
 import {calculateReportFcr} from "@/lib/feed-calculations";
 import {managerWarehouseAccess} from "@/lib/warehouse-access";
 import {reportConsumptionCost,reportTimestampBounds,validReportDate} from "@/lib/report-safety";
@@ -29,27 +30,28 @@ const number = (value: unknown) => typeof value === "number" ? value : Number(va
 const nullable = (value: number, valid: boolean) => valid && Number.isFinite(value) ? roundFeed(value) : null;
 
 export async function GET(request: Request) {
+  const t = await getTranslations("FeedEvidence");
   try {
   const ctx = await getFeedContext();
   if (ctx instanceof Response) return ctx;
   const url = new URL(request.url);
   const batchId = url.searchParams.get("batch_id");
-  if (!batchId) return feedJson({ error: "Select a batch to open Feed Control." }, 400);
+  if (!batchId) return feedJson({ error: t("selectBatch") }, 400);
   const resolved = await resolveFeedBatch(ctx, batchId);
   if (!resolved.batch) return feedJson({ error: resolved.error }, 403);
 
   const today = addisDate();
   const dateTo = url.searchParams.get("date_to") ?? today;
-  if(!validReportDate(dateTo))return feedJson({error:"Choose a valid final report date."},400);
+  if(!validReportDate(dateTo))return feedJson({error:t("invalidFinalDate")},400);
   const requestedFrom = url.searchParams.get("date_from");
   const dateFrom = requestedFrom ?? new Date(Date.parse(`${dateTo}T00:00:00Z`) - 29 * 86_400_000).toISOString().slice(0, 10);
-  try{reportTimestampBounds(dateFrom,dateTo);}catch{return feedJson({error:"Use a valid reporting period of at most 366 days."},400);}
+  try{reportTimestampBounds(dateFrom,dateTo);}catch{return feedJson({error:t("invalidPeriod")},400);}
   const sourceFrom = dateFrom < today ? dateFrom : today;
   const sourceTo = dateTo > today ? dateTo : today;
 
   const db = feedAdmin;
   const org = ctx.orgId;
-  if(url.searchParams.get("branch_id")&&url.searchParams.get("branch_id")!==resolved.batch.branch_id)return feedJson({error:"The branch and batch filters do not agree."},400);
+  if(url.searchParams.get("branch_id")&&url.searchParams.get("branch_id")!==resolved.batch.branch_id)return feedJson({error:t("scopeMismatch")},400);
   const [flocksS, templatesS, schedulesS, sessionsS, closuresS, dailyS, weightsS, tasksS, itemsS, warehousesS, ledgerS, settingsS, standardsS, executionsS] = await Promise.all([
     source(db.from("flocks").select("id,flock_code,flock_type,breed_id,current_count,initial_count,placement_date,age_at_placement_days,farm_id,house_id,status").eq("org_id", org).eq("batch_id", batchId).order("id")),
     source(db.from("batch_feed_templates").select("id,name,source_type,is_active,created_at,batch_feed_template_rows(*),batch_feed_template_milestones(*)").eq("org_id", org).eq("batch_id", batchId).order("created_at", { ascending: false })),
@@ -100,7 +102,7 @@ export async function GET(request: Request) {
 
   const sources = { flocks: flocksS, templates: templatesS, schedules: schedulesS, sessions: sessionsS, closures: closuresS, dailyRecords: dailyS, weights: weightsS, tasks: tasksS, inventory: itemsS, warehouses: warehousesS, stockLedger: ledgerS, settings: settingsS, breedStandards: standardsS, milestoneExecutions: executionsS };
   const sourceStatuses = Object.fromEntries(Object.entries(sources).map(([key, value]) => [key, { status: value.error ? "failed" : "available", error: value.error }]));
-  if (Object.values(sources).some(value=>value.error)) return feedJson({ error: "Feed evidence could not be completely loaded.", meta: { sources: sourceStatuses } }, 500);
+  if (Object.values(sources).some(value=>value.error)) return feedJson({ error: t("loadFailed"), meta: { sources: sourceStatuses } }, 500);
 
   const settings = settingsS.data[0];
   const warning = number(settings?.warning_variance_pct || 5);
@@ -149,7 +151,7 @@ export async function GET(request: Request) {
     const dayPlan = schedule ? number(schedule.planned_feed_kg) : 0;
     actualFeed += dayActual; plannedFeed += dayPlan; birdDays += dayBirds;
     if (isCovered) coveredDays += 1; if (isLegacy) legacyDays += 1;
-    trend.push({ date, plannedKg: roundFeed(dayPlan), actualKg: isCovered ? roundFeed(dayActual) : null, openingBirds: dayBirds || null, source: isLegacy ? "Legacy daily total" : isCovered ? "Closed sessions" : "Missing" });
+    trend.push({ date, plannedKg: roundFeed(dayPlan), actualKg: isCovered ? roundFeed(dayActual) : null, openingBirds: dayBirds || null, source: isLegacy ? "Legacy daily total" : isCovered ? "Closed sessions" : "Missing", sourceLabel: t((isLegacy ? "legacySource" : isCovered ? "closedSource" : "missingSource") as Parameters<typeof t>[0]) });
   }
 
   const movement = (type: unknown, quantity: unknown) => ["issue", "transfer_out"].includes(String(type)) ? -Math.abs(number(quantity)) : String(type) === "adjustment" ? number(quantity) : Math.abs(number(quantity));
@@ -189,11 +191,11 @@ export async function GET(request: Request) {
   const applicableFcr = reportFcr.mixed ? null : layerMetric ? reportFcr.layer : reportFcr.growth;
   const expectedDays = expectedFlockDays;
   const exceptions: Row[] = [];
-  if (!activeTemplate) exceptions.push({ severity: "critical", title: "Feed template not configured", reason: "This batch has no active age-based ration and weight standard.", action: "Open template management", actionTarget: "template_management" });
-  else if (!currentTarget) exceptions.push({ severity: "critical", title: "Batch age is outside the active template", reason: `Age day ${ageToday} has no matching template row.`, action: "Extend template age ranges", actionTarget: "template_management" });
-  if (todayFlocks.some((flock) => flock.sessions.some((session: Row) => session.status !== "completed"))) exceptions.push({ severity: "warning", title: "Today’s feeding is incomplete", reason: "Complete each planned session before closing the day.", action: "Record today’s sessions", actionTarget: "today_sessions" });
-  if (coveredFlockDays < expectedDays) exceptions.push({ severity: "warning", title: `${expectedDays - coveredFlockDays} flock-days missing`, reason: "Coverage includes closed sessions and clearly labelled legacy daily totals only; pre-placement and future dates are excluded.", action: "Reconcile feed history", actionTarget: "feed_history" });
-  if (inventoryCover !== null && inventoryCover < 7) exceptions.push({ severity: inventoryCover < 3 ? "critical" : "warning", title: "Feed cover is low", reason: `${inventoryCover} days of compatible stock remain at the current consumption rate.`, action: "Review Inventory" });
+  if (!activeTemplate) exceptions.push({ severity: "critical", title: t("noTemplateTitle"), reason: t("noTemplateReason"), action: t("openTemplates"), actionTarget: "template_management" });
+  else if (!currentTarget) exceptions.push({ severity: "critical", title: t("outsideTemplate"), reason: t("ageReason", {age: ageToday}), action: t("extendTemplate"), actionTarget: "template_management" });
+  if (todayFlocks.some((flock) => flock.sessions.some((session: Row) => session.status !== "completed"))) exceptions.push({ severity: "warning", title: t("feedingIncomplete"), reason: t("completeSessions"), action: t("recordSessions"), actionTarget: "today_sessions" });
+  if (coveredFlockDays < expectedDays) exceptions.push({ severity: "warning", title: t("missingDays", {count: expectedDays - coveredFlockDays}), reason: t("coverageReason"), action: t("reconcile"), actionTarget: "feed_history" });
+  if (inventoryCover !== null && inventoryCover < 7) exceptions.push({ severity: inventoryCover < 3 ? "critical" : "warning", title: t("stockLow"), reason: t("stockLowReason", {days: inventoryCover}), action: t("reviewStock") });
 
   const tasks = tasksS.data.map((task) => {
     const weight = weightsS.data.find((row) => row.id === task.weight_record_id); const target = task.batch_feed_template_rows as Row | null;
@@ -209,24 +211,24 @@ export async function GET(request: Request) {
   const suggestedRows = standardsS.data.filter((row) => flocksS.data.some((flock) => flock.breed_id === row.breed_id)).map((row) => ({ week_number: number(row.week_number), age_day_start: number(row.week_number) * 7, age_day_end: number(row.week_number) * 7 + 6, feed_intake_std_g_per_head: row.target_feed_g, feed_intake_recommended_g_per_head: row.target_feed_g, target_weight_min_g: roundFeed(number(row.target_weight_g) * .95), target_weight_max_g: roundFeed(number(row.target_weight_g) * 1.05), feed_type_plan: number(row.week_number) < 7 ? "starter_feed" : number(row.week_number) < 18 ? "grower_pullet_feed" : layerMetric ? "layer_feed" : "broiler_feed", light_on_time: "06:00", light_off_time: "18:00" }));
 
   return feedJson({
-    meta: { batchId, today, dateFrom, dateTo, timezone: "Africa/Addis_Ababa", refreshedAt: new Date().toISOString(), sources: sourceStatuses, confidence: legacyDays ? "Estimate" : coveredDays ? "Actual" : "Unavailable" },
+    meta: { batchId, today, dateFrom, dateTo, timezone: "Africa/Addis_Ababa", refreshedAt: new Date().toISOString(), sources: sourceStatuses, confidence: legacyDays ? "Estimate" : coveredDays ? "Actual" : "Unavailable", confidenceLabel: legacyDays ? t("estimate") : coveredDays ? t("actual") : t("unavailable") },
     batch: { ...resolved.batch, ageDays: ageToday, totalBirds, flockTypes: [...flockTypes] }, flocks: flocksS.data,
     today: { schedule: scheduleToday ?? null, flocks: todayFlocks },
     kpis: {
-      planCompletion: { value: nullable(actualFeed / plannedFeed * 100, plannedFeed > 0), unit: "%", status: plannedFeed > 0 ? "In progress" : activeTemplate ? "Awaiting schedule" : "Not configured", reason: plannedFeed > 0 ? `${roundFeed(actualFeed)} kg recorded against ${roundFeed(plannedFeed)} kg planned.` : "No planned feed exists in the selected period." },
-      feedVariance: { value: variancePct, unit: "%", ...statusFromVariance(variancePct, warning, critical), actualKg: roundFeed(actualFeed), plannedKg: roundFeed(plannedFeed) },
-      feedPerBirdDay: { value: calculateFeedPerBirdDay(actualFeed, birdDays), unit: "g/bird/day", status: birdDays > 0 ? "Available" : "Unavailable", reason: birdDays > 0 ? `${birdDays.toLocaleString()} opening bird-days.` : "Opening birds are missing from daily records." },
-      stockCover: { value: inventoryCover, unit: "days", status: inventoryCover === null ? "Unavailable" : inventoryCover < 7 ? "Review" : "Available", reason: inventoryCover === null ? "Stock or consumption history is missing." : `Based on ${trailingDays} covered consumption days.` },
-      weight: { value: weightedWeight, unit: "g", variancePct: weightVariance, uniformityPct: weightedUniformity, sampleCount: sampleTotal, status: weightedWeight === null ? "Awaiting weight sample" : targetSamples === sampleTotal ? "Available" : "Unavailable", reason: weightedWeight === null ? "No weight sample is recorded." : targetSamples === sampleTotal ? `Sample-count weighted; each result is compared with its target at the sample’s actual age (${roundFeed(targetMid)} g weighted midpoint).` : "One or more samples has no target at its recorded age." },
-      fcr: { value: applicableFcr, layer:reportFcr.layer,growth:reportFcr.growth, unit: "kg/kg", kind: reportFcr.mixed?"Separate layer and growth ratios":layerMetric ? "Layer feed / egg mass" : "Growth feed / biomass gain", status: applicableFcr === null ? "Unavailable" : "Available", reason: reportFcr.mixed?"Layer egg-mass and growth FCR are different measures; no combined ratio is shown.":applicableFcr === null ? layerMetric ? "Complete layer feed, recorded average egg weights and egg output are required." : "Two valid weights, complete interval feed and a consistent recorded population are required. Removed-bird weights cannot be guessed." : "Calculated only from compatible production inputs." },
-      coverage: { value: !unverifiedArchive&&expectedDays ? roundFeed(coveredFlockDays / expectedDays * 100) : null, unit: "%", coveredDays: coveredFlockDays, expectedDays:unverifiedArchive?null:expectedDays, legacyDays,reason:unverifiedArchive?"Verified completion evidence is missing for an archived flock.":null },
+      planCompletion: { value: nullable(actualFeed / plannedFeed * 100, plannedFeed > 0), unit: "%", status: plannedFeed > 0 ? t("inProgress") : activeTemplate ? t("awaitingSchedule") : t("notConfigured"), reason: plannedFeed > 0 ? t("planReason", {actual: roundFeed(actualFeed), planned: roundFeed(plannedFeed)}) : t("noPlan") },
+      feedVariance: { value: variancePct, unit: "%", ...statusFromVariance(variancePct, warning, critical), label: t((`variance.${statusFromVariance(variancePct, warning, critical).tone}`) as Parameters<typeof t>[0]), actualKg: roundFeed(actualFeed), plannedKg: roundFeed(plannedFeed) },
+      feedPerBirdDay: { value: calculateFeedPerBirdDay(actualFeed, birdDays), unit: "g/bird/day", status: birdDays > 0 ? t("available") : t("unavailable"), reason: birdDays > 0 ? t("birdDays", {count: birdDays}) : t("missingOpening") },
+      stockCover: { value: inventoryCover, tone: inventoryCover === null ? "neutral" : inventoryCover < 7 ? "critical" : "good", unit: "days", status: inventoryCover === null ? t("unavailable") : inventoryCover < 7 ? t("review") : t("available"), reason: inventoryCover === null ? t("missingConsumption") : t("consumptionDays", {count: trailingDays}) },
+      weight: { value: weightedWeight, unit: "g", variancePct: weightVariance, uniformityPct: weightedUniformity, sampleCount: sampleTotal, status: weightedWeight === null ? t("awaitingWeight") : targetSamples === sampleTotal ? t("available") : t("unavailable"), reason: weightedWeight === null ? t("noWeight") : targetSamples === sampleTotal ? t("weightReason", {target: roundFeed(targetMid)}) : t("missingTarget") },
+      fcr: { value: applicableFcr, layer:reportFcr.layer,growth:reportFcr.growth, unit: "kg/kg", kind: reportFcr.mixed?t("mixedFcr"):layerMetric ? t("layerFcr") : t("growthFcr"), status: applicableFcr === null ? t("unavailable") : t("available"), reason: reportFcr.mixed?t("mixedFcrReason"):applicableFcr === null ? layerMetric ? t("missingLayerFcr") : t("missingGrowthFcr") : t("validFcr") },
+      coverage: { value: !unverifiedArchive&&expectedDays ? roundFeed(coveredFlockDays / expectedDays * 100) : null, unit: "%", coveredDays: coveredFlockDays, expectedDays:unverifiedArchive?null:expectedDays, legacyDays,reason:unverifiedArchive?t("missingCompletion"):null },
     },
     trends: { daily: trend }, inventory: { balances, totalOnHand: roundFeed(totalOnHand), estimatedValue: roundFeed(balances.reduce((sum, row) => sum + row.value, 0)) },
-    financials: { feedCostEtb: feedCostEtb !== null ? roundFeed(feedCostEtb) : null, costCoveragePct: nullable(costedFeedKg / actualFeed * 100, actualFeed > 0), leftoversKg: roundFeed(leftoversKg), leftoverPct: nullable(leftoversKg / actualFeed * 100, actualFeed > 0), confidence: feedCostEtb!==null?"Actual":"Unavailable" },
+    financials: { feedCostEtb: feedCostEtb !== null ? roundFeed(feedCostEtb) : null, costCoveragePct: nullable(costedFeedKg / actualFeed * 100, actualFeed > 0), leftoversKg: roundFeed(leftoversKg), leftoverPct: nullable(leftoversKg / actualFeed * 100, actualFeed > 0), confidence: feedCostEtb!==null?"Actual":"Unavailable", confidenceLabel: feedCostEtb!==null?t("actual"):t("unavailable") },
     template: activeTemplate ? { ...activeTemplate, rows: templateRows, currentTarget } : null, templateVersions: templatesS.data.map((template) => ({ id: template.id, name: template.name, source_type: template.source_type, is_active: template.is_active, created_at: template.created_at })), suggestedRows,
-    tasks, milestones, nextCheck: pendingTasks[0] ?? { displayStatus: "All checks complete" }, exceptions,
+    tasks: tasks.map(task => ({...task, displayStatusLabel: task.status === "completed" ? task.result ? t("completeResult", {result: t((task.result === "Below target" ? "belowTarget" : task.result === "Above target" ? "aboveTarget" : "onTarget") as Parameters<typeof t>[0])}) : t("missingResult") : task.displayStatus === "Overdue" ? t("overdue") : t("scheduled")})), milestones: milestones.map(item => ({...item, displayStatusLabel: item.execution ? item.execution.status === "skipped" ? t("skipped") : t("complete") : item.displayStatus === "Overdue" ? t("overdue") : t("upcoming")})), nextCheck: pendingTasks[0] ?? { displayStatus: "All checks complete" }, exceptions,
     settings: { warningVariancePct: warning, criticalVariancePct: critical },
     permissions: { canManage: ctx.canManage, canConfigure: false, canRecordWeight: ctx.role === "farm_manager", templateChangeMode: !ctx.canManage ? "read_only" : ctx.supportSessionId ? "direct" : "governance" },
   });
-  } catch {return feedJson({error:"Feed evidence could not be completely loaded. Refresh and try again."},500);}
+  } catch {return feedJson({error:t("loadFailed")},500);}
 }

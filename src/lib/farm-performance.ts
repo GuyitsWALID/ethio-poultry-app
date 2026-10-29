@@ -25,7 +25,7 @@ export type PerformanceResponse = {
   schemaVersion: 1;
   options?: {warehouses: Array<{id: string; name: string}>};
   concerns?: Array<{key: "coverage" | "criticalFlock" | "productionDown" | "mortalityUp" | "quality" | "targets"; severity: "critical" | "watch" | "info"; flockLabel?: string; evidenceHref: string}>;
-  meta: {dateFrom: string; dateTo: string; previousFrom: string; previousTo: string; days: number; timezone: "Africa/Addis_Ababa"; generatedAt: string; scopeLabel: string};
+  meta: {dateFrom: string; dateTo: string; previousFrom: string; previousTo: string; days: number; timezone: "Africa/Addis_Ababa"; generatedAt: string; scopeLabel: string; farmCount?: number};
   sections: {production: PerformanceSection; feeding: PerformanceSection; health: PerformanceSection; stock: PerformanceSection; salesCosts: PerformanceSection};
 };
 export class PerformanceError extends Error {
@@ -92,7 +92,7 @@ export function projectPerformance(input: ReportInput, operations: OperationsAna
       const flock = key === "criticalFlock" ? operations.flocks.find(row => row.id === insight.id.slice(9)) : undefined;
       return [{key, severity: insight.severity, flockLabel: flock?.code, evidenceHref: evidenceHref(key === "mortalityUp" ? "losses" : "daily", {...input, flockId: flock?.id ?? input.flockId})}];
     }),
-    meta: {dateFrom: input.dateFrom, dateTo: input.dateTo, ...performancePeriod(input), timezone: "Africa/Addis_Ababa", generatedAt: operations.meta.refreshedAt, scopeLabel: operations.meta.scopeLabel},
+    meta: {dateFrom: input.dateFrom, dateTo: input.dateTo, ...performancePeriod(input), timezone: "Africa/Addis_Ababa", generatedAt: operations.meta.refreshedAt, scopeLabel: operations.meta.scopeLabel, farmCount: operations.meta.farmCount},
     sections: {
       production: {...section([make("eggs", "eggs"), make("hdep", "%", "WEIGHTED_RATE"), make("marketableRate", "%", "WEIGHTED_RATE")], [series("eggs", "eggs"), series("hdep", "%"), series("hdepTarget", "%"), series("marketableRate", "%")], coverage, evidenceHref("daily", input)), rows: operations.flocks.map(row => ({label: row.code, date: row.latestWeightDate ?? undefined, context: `${row.farmName} · ${row.houseName}`, unit: row.primaryUnit, values: {primary: row.primaryValue, target: row.target, latestWeightG: row.latestWeightG, weightChangePerDay: row.weightChangePerDay, hdep: row.hdep, feedPerBirdGrams: row.feedPerBirdGrams, coverage: row.recordCoveragePct}, evidenceHref: evidenceHref("daily", {...input, flockId: row.id})})), breakdowns: [{key: "eggQuality", unit: "eggs", rows: operations.breakdowns.eggQuality.map(row => ({label: row.label, value: row.value}))}]},
       feeding: section([metric("feedKg", "kg", current.feedKg, previous.feedKg, feedCoverage, "RECORDED_TOTAL"), metric("feedPerBirdGrams", "g/bird/day", current.feedPerBirdGrams, previous.feedPerBirdGrams, feedCoverage, "WEIGHTED_RATE"), metric("layerFcr", "kg/kg", current.layerFcr, previous.layerFcr, feedCoverage, "LAYER_FCR_ONLY")], [series("feedPerBirdGrams", "g/bird/day")], feedCoverage, evidenceHref("feeding", input), ["FEED_NOT_A_HEALTH_DIAGNOSIS", "LAYER_FCR_ONLY"]),

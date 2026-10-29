@@ -1,7 +1,8 @@
+import {getTranslations} from "next-intl/server";
 import { NextRequest } from "next/server";
 
 import { getSalesContext, hasScopedAccess, json, supabaseAdmin } from "@/lib/sales";
-import {FarmOperationError, recordExpense} from "@/lib/farm-operations";
+import {FarmOperationError, farmOperationErrorBody, recordExpense} from "@/lib/farm-operations";
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
     });
 
     const { data, error } = await query;
-    if (error) return json({ error: error.message }, 500);
+    if (error) return json({error: error.message}, 500);
     const scoped =
       ctx.role === "farm_manager"
         ? (data ?? []).filter((row) => hasScopedAccess(ctx, row))
@@ -38,17 +39,18 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const validation = await getTranslations("OperationValidation");
   try {
     const ctx = await getSalesContext();
     if (ctx instanceof Response) return ctx;
     if (!ctx.canMutate) {
-      return json({ error: "Only farm managers can create operational cost entries." }, 403);
+      return json({ error: validation("onlyFarmManagersCanCreateOperationalCostEntries") }, 403);
     }
     const body = await request.json();
     const data = await recordExpense(ctx, body);
     return json({ costEntry: data }, 201);
   } catch (error: unknown) {
-    if (error instanceof FarmOperationError) return json({error: error.message}, error.status);
+    if (error instanceof FarmOperationError) return json(await farmOperationErrorBody(error), error.status);
     return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
   }
 }

@@ -93,3 +93,6 @@ jobs:
       - name: Verify read-only populated History for CEO and assigned manager
         if: ${{ !cancelled() }}
         run: npx playwright test tests/browser/history-staging.spec.ts --workers=1 --retries=0 --trace=off
+      - name: Verify English and Amharic operational screens on tablet viewports
+        if: ${{ !cancelled() }}
+        run: npx playwright test tests/browser/localization-staging.spec.ts --workers=1 --retries=0 --trace=off

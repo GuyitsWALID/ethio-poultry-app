@@ -1,3 +1,5 @@
+import {formatOperationDate} from "../i18n/formats.ts";
+
 type FindingRow = Record<string, unknown>;
 
 export function finiteNumber(value: unknown): number | null {
@@ -20,10 +22,11 @@ export function formatReconciliationNumber(
   value: unknown,
   unit = "",
   unavailable = "Evidence gap",
+  locale?: string,
 ): string {
   const numeric = finiteNumber(value);
   if (numeric === null) return unavailable;
-  return `${numeric.toLocaleString()}${unit ? ` ${unit}` : ""}`;
+  return `${numeric.toLocaleString(locale === "am" ? "am-ET" : locale === "en" ? "en-ET" : undefined)}${unit ? ` ${unit}` : ""}`;
 }
 
 const evidenceLabels: Record<string, string> = {
@@ -94,32 +97,44 @@ export type EvidenceDisplayContext = {
   warehouseName?: string | null;
   recordDate?: string | null;
   resolveId?: (id: string) => string | null;
+  locale?: string;
+  translate?: (key: string, values?: Record<string, string | number>) => string | undefined;
 };
 
 function contextualRecordName(key: string, evidence: Record<string, unknown>, context: EvidenceDisplayContext) {
-  const scope = context.flockCode ?? context.warehouseName ?? context.farmName ?? "affected operation";
-  const date = context.recordDate ? ` · ${context.recordDate}` : "";
-  if (/dailyRecordId$/i.test(key)) return `Daily Record · ${scope}${date}`;
-  if (key === "closureId") return `Feed close · ${scope}${date}`;
-  if (key === "physicalCountId") return `Physical stock count · ${scope}${date}`;
-  if (key === "periodId") return `Financial period${date}`;
-  if (key === "saleId") return `Sale record${date}`;
-  if (key === "costEntryId") return `Cost record · ${String(evidence.invoiceNumber ?? evidence.description ?? context.farmName ?? "selected expense")}`;
-  return `Related ${key.replace(/Ids?$/i, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase()} record`;
+  const say = (key: string, fallback: string, values?: Record<string, string | number>) => context.translate?.(key, values) ?? fallback;
+  const scope = context.flockCode ?? context.warehouseName ?? context.farmName ?? say("operation", "affected operation");
+  const date = context.recordDate ? ` · ${context.locale ? formatOperationDate(`${context.recordDate}T12:00:00Z`, context.locale === "am" ? "am" : "en") : context.recordDate}` : "";
+  if (/dailyRecordId$/i.test(key)) return say("daily", `Daily Record · ${scope}${date}`, {scope, date});
+  if (key === "closureId") return say("close", `Feed close · ${scope}${date}`, {scope, date});
+  if (key === "physicalCountId") return say("physical", `Physical stock count · ${scope}${date}`, {scope, date});
+  if (key === "periodId") return say("period", `Financial period${date}`, {date});
+  if (key === "saleId") return say("sale", `Sale record${date}`, {date});
+  if (key === "costEntryId") return say("cost", `Cost record · ${String(evidence.invoiceNumber ?? evidence.description ?? context.farmName ?? "selected expense")}`, {scope: String(evidence.invoiceNumber ?? evidence.description ?? context.farmName ?? say("expense", "selected expense"))});
+  return say("related", `Related ${key.replace(/Ids?$/i, "").replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase()} record`);
 }
 
 export function userFacingReconciliationEvidence(evidence: unknown, context: EvidenceDisplayContext = {}): EvidenceEntry[] {
   if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return [];
   const source = evidence as Record<string, unknown>;
-  return reconciliationEvidenceEntries(evidence).map((entry) => {
+  const say = (key: string, fallback: string, values?: Record<string, string | number>) => context.translate?.(key, values) ?? fallback;
+  return reconciliationEvidenceEntries(evidence).map((originalEntry) => {
+    const entry = {...originalEntry, label: say(`fields.${originalEntry.key}`, originalEntry.label)};
     if (!entry.technical) {
-      if (entry.key === "sourceKey") return { ...entry, label: "Linked feed day", value: `Feed Control · ${context.flockCode ?? "affected flock"}${context.recordDate ? ` · ${context.recordDate}` : ""}` };
+      if (entry.key === "sourceKey") {
+        const scope = context.flockCode ?? say("flock", "affected flock");
+        const date = context.recordDate ? ` · ${context.locale ? formatOperationDate(`${context.recordDate}T12:00:00Z`, context.locale === "am" ? "am" : "en") : context.recordDate}` : "";
+        return {...entry, value: say("linkedFeed", `Feed Control · ${scope}${date}`, {scope, date})};
+      }
+      if (typeof source[entry.key] === "boolean") return {...entry, value: source[entry.key] ? say("yes", "Yes") : say("no", "No")};
+      if (entry.key.endsWith("Etb")) return {...entry, value: formatReconciliationNumber(source[entry.key], "ETB", say("unavailable", "Unavailable"), context.locale)};
+      if (entry.key === "entryDate" && typeof source[entry.key] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(String(source[entry.key])) && context.locale) return {...entry, value: formatOperationDate(`${source[entry.key]}T12:00:00Z`, context.locale === "am" ? "am" : "en")};
       return entry;
     }
     const original = source[entry.key];
     if (Array.isArray(original)) {
       const names = original.map((id) => context.resolveId?.(String(id))).filter((name): name is string => Boolean(name));
-      return { ...entry, technical: false, value: names.length === original.length ? names.join(", ") : `${original.length} related record${original.length === 1 ? "" : "s"}` };
+      return { ...entry, technical: false, value: names.length === original.length ? names.join(", ") : say("relatedCount", `${original.length} related record${original.length === 1 ? "" : "s"}`, {count: original.length}) };
     }
     const resolved = context.resolveId?.(String(original));
     return { ...entry, technical: false, value: resolved ?? contextualRecordName(entry.key, source, context) };

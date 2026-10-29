@@ -108,6 +108,7 @@ function FarmPerformanceContent() {
     {name: "flockId" as const, label: "flock" as const, options: filteredFlocks.map(row => ({id: row.id, name: row.flock_code}))},
     {name: "batchId" as const, label: "batch" as const, options: filteredBatches.map(row => ({id: row.id, name: row.batch_code}))},
   ];
+  const scopeLabel = data?.meta.farmCount !== undefined && data.meta.farmCount !== 1 ? t("farmScope", {count: data.meta.farmCount}) : data?.meta.scopeLabel ?? t("title");
   if (!permitted && !loading) return <p role="alert">{t("denied")}</p>;
   const overview = data ? [
     data.sections.production.metrics.find(row => row.key === "eggs"),
@@ -137,8 +138,8 @@ function FarmPerformanceContent() {
     </section></div>
     <nav aria-label={t("title")} className="performance-navigation flex flex-wrap">{performanceViews.map(id => <button type="button" key={id} onClick={() => selectView(id)} aria-pressed={view === id} className={`${actionClass} ${view === id ? "border-forest-900 bg-forest-900 text-white" : "bg-white"}`}>{t(`views.${id}`)}</button>)}</nav>
     <div aria-live="polite" aria-busy={view !== "saved" && !current && valid && !offline}>
-      {offline ? <p role="status" className="rounded-xl bg-sand-100 p-4">{t("offline")}</p> : !valid ? <p role="alert">{t("invalid")}</p> : view === "saved" ? <div className="space-y-4"><p className="rounded-xl bg-sand-100 p-4 text-sm">{t("savedNote")}</p><ManagementReportCenter scope={{...scope, farmId: scope.farmId || (role === "farm_manager" && filteredFarms.length === 1 ? filteredFarms[0].id : undefined), warehouseId: warehouseId || undefined}} dateFrom={dateFrom} dateTo={dateTo} scopeLabel={data?.meta.scopeLabel ?? t("title")}/></div> : current?.error ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{t(current.error as "failed")}</p> : !data ? <p role="status">{t("loading")}</p> : <div className="space-y-5">
-        <p className="text-sm text-forest-700">{t("scope", {scope: data.meta.scopeLabel})} · {t("period", {from: formatOperationDate(data.meta.dateFrom, locale), to: formatOperationDate(data.meta.dateTo, locale)})}<br/>{t("comparison", {from: formatOperationDate(data.meta.previousFrom, locale), to: formatOperationDate(data.meta.previousTo, locale)})}</p>
+      {offline ? <p role="status" className="rounded-xl bg-sand-100 p-4">{t("offline")}</p> : !valid ? <p role="alert">{t("invalid")}</p> : view === "saved" ? <div className="space-y-4"><p className="rounded-xl bg-sand-100 p-4 text-sm">{t("savedNote")}</p><ManagementReportCenter scope={{...scope, farmId: scope.farmId || (role === "farm_manager" && filteredFarms.length === 1 ? filteredFarms[0].id : undefined), warehouseId: warehouseId || undefined}} dateFrom={dateFrom} dateTo={dateTo} scopeLabel={scopeLabel}/></div> : current?.error ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-800">{t(current.error as "failed")}</p> : !data ? <p role="status">{t("loading")}</p> : <div className="space-y-5">
+        <p className="text-sm text-forest-700">{t("scope", {scope: scopeLabel})} · {t("period", {from: formatOperationDate(data.meta.dateFrom, locale), to: formatOperationDate(data.meta.dateTo, locale)})}<br/>{t("comparison", {from: formatOperationDate(data.meta.previousFrom, locale), to: formatOperationDate(data.meta.previousTo, locale)})}</p>
         {view === "overview" ? <>
           <MetricCards metrics={overview}/><div className="performance-analysis-grid"><OperationalFingerprint data={data}/>
           <section className="performance-attention rounded-2xl border border-sand-200 bg-white p-5"><span className="performance-kicker">{t("dashboard.supportedConcerns")}</span><h2 className="text-xl font-semibold">{t("concerns")}</h2>
@@ -147,8 +148,8 @@ function FarmPerformanceContent() {
               {performanceConcerns(data).map(item => <li key={item.key} className="flex flex-wrap items-center justify-between gap-3 border-t border-sand-100 py-2"><span>{t(`views.${item.key as "production"}`)} · {t(`states.${item.state}`)}</span><button className={actionClass} onClick={() => selectView(item.key)} type="button">{t("figures")}</button></li>)}
             </ul>
             {!performanceConcerns(data).length && !data.concerns?.length ? <p className="mt-3 text-sm">{t("noConcerns")}</p> : null}
-          </section></div><EvidenceRibbon data={data} onSelect={selectView}/><FlockComparison section={data.sections.production}/><div className="performance-overview-heading"><h2>{t("dashboard.operations")}</h2><p>{t("notices.overview")}</p></div><div className="performance-plots performance-overview-plots">{overviewCharts.map(chart => <PerformancePlot key={chart.key} chart={chart} scopeLabel={data.meta.scopeLabel}/>)}</div>
-        </> : <TopicView key={view} view={view} section={data.sections[view]} scopeLabel={data.meta.scopeLabel} dateFrom={dateFrom} dateTo={dateTo} onRetry={() => setRefresh(value => value + 1)}/>}
+          </section></div><EvidenceRibbon data={data} onSelect={selectView}/><FlockComparison section={data.sections.production}/><div className="performance-overview-heading"><h2>{t("dashboard.operations")}</h2><p>{t("notices.overview")}</p></div><div className="performance-plots performance-overview-plots">{overviewCharts.map(chart => <PerformancePlot key={chart.key} chart={chart} scopeLabel={scopeLabel}/>)}</div>
+        </> : <TopicView key={view} view={view} section={data.sections[view]} scopeLabel={scopeLabel} dateFrom={dateFrom} dateTo={dateTo} onRetry={() => setRefresh(value => value + 1)}/>}
       </div>}
     </div>
   </div>;

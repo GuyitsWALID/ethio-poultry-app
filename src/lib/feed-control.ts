@@ -1,3 +1,4 @@
+import {getTranslations} from "next-intl/server";
 import { createClient } from "@supabase/supabase-js";
 
 import { hasCapability } from "@/lib/permissions";
@@ -55,9 +56,10 @@ export function dateDays(start: string, end: string) {
 }
 
 export async function getFeedContext(): Promise<FeedContext | Response> {
+  const t = await getTranslations("FeedValidation");
   const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return access;const role=access.role;const support=Boolean(access.supportSessionId);
   if (!support&&!hasCapability(role, "tenant:view")) {
-    return feedJson({ error: "Feed Control access is required." }, 403);
+    return feedJson({ error: t("access") }, 403);
   }
   const now = new Date().toISOString();
   const farms = role === "farm_manager"
@@ -74,30 +76,32 @@ export async function getFeedContext(): Promise<FeedContext | Response> {
 }
 
 export async function resolveFeedBatch(ctx: FeedContext, batchId: string) {
+  const t = await getTranslations("FeedValidation");
   const { data, error } = await feedAdmin.from("batches")
     .select("id,batch_code,org_id,branch_id,farm_id,house_id,placement_date,age_at_placement_days,total_count,status")
     .eq("id", batchId).eq("org_id", ctx.orgId).maybeSingle();
   if (error) return { error: error.message };
-  if (!data) return { error: "Batch is not available in this organization." };
+  if (!data) return { error: t("missingBatch") };
   if (ctx.role === "farm_manager" && !ctx.allowedFarmIds.has(data.farm_id)) {
-    return { error: "You do not have access to this batch." };
+    return { error: t("batchDenied") };
   }
   return { batch: data };
 }
 
-export function validateTemplateRows(rows: FeedTemplateInputRow[]) {
-  if (!rows.length) return "Add at least one template row.";
+export function validateTemplateRows(rows: FeedTemplateInputRow[], translate?: (key: string, values?: Record<string, string | number>) => string) {
+  const say = (key: string, fallback: string, values?: Record<string, string | number>) => translate?.(key, values) ?? fallback;
+  if (!rows.length) return say("addRow", "Add at least one template row.");
   const weeks = new Set<number>();
   const ordered = [...rows].sort((a, b) => a.age_day_start - b.age_day_start);
   for (let index = 0; index < ordered.length; index += 1) {
     const row = ordered[index];
-    if (!Number.isInteger(row.week_number) || row.week_number < 0 || weeks.has(row.week_number)) return "Every template week must be a unique non-negative whole number.";
+    if (!Number.isInteger(row.week_number) || row.week_number < 0 || weeks.has(row.week_number)) return say("weekUnique", "Every template week must be a unique non-negative whole number.");
     weeks.add(row.week_number);
-    if (row.age_day_start < 0 || row.age_day_end < row.age_day_start) return `Week ${row.week_number} has an invalid age range.`;
-    if (index > 0 && row.age_day_start <= ordered[index - 1].age_day_end) return `Week ${row.week_number} overlaps the previous age range.`;
-    if (row.feed_intake_recommended_g_per_head === null || row.feed_intake_recommended_g_per_head < 0) return `Week ${row.week_number} needs a non-negative recommended feed target.`;
-    if (row.target_weight_min_g === null || row.target_weight_max_g === null || row.target_weight_min_g < 0 || row.target_weight_max_g < row.target_weight_min_g) return `Week ${row.week_number} needs a valid weight band.`;
-    if (!row.feed_type_plan.trim()) return `Week ${row.week_number} needs a feed plan.`;
+    if (row.age_day_start < 0 || row.age_day_end < row.age_day_start) return say("age", `Week ${row.week_number} has an invalid age range.`, {week: row.week_number});
+    if (index > 0 && row.age_day_start <= ordered[index - 1].age_day_end) return say("overlap", `Week ${row.week_number} overlaps the previous age range.`, {week: row.week_number});
+    if (row.feed_intake_recommended_g_per_head === null || row.feed_intake_recommended_g_per_head < 0) return say("feed", `Week ${row.week_number} needs a non-negative recommended feed target.`, {week: row.week_number});
+    if (row.target_weight_min_g === null || row.target_weight_max_g === null || row.target_weight_min_g < 0 || row.target_weight_max_g < row.target_weight_min_g) return say("weight", `Week ${row.week_number} needs a valid weight band.`, {week: row.week_number});
+    if (!row.feed_type_plan.trim()) return say("plan", `Week ${row.week_number} needs a feed plan.`, {week: row.week_number});
   }
   return null;
 }

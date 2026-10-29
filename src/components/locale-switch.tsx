@@ -43,7 +43,7 @@ export function LocaleSwitch({ viewerRole }: { viewerRole: ActiveRole | null }) 
   };
 
   return (
-    <div className="flex min-h-11 items-center rounded-xl border border-sand-200 bg-white p-1" role="group" aria-label={t("language")}>
+    <div className="flex min-h-12 items-center rounded-xl border border-sand-200 bg-white p-1" role="group" aria-label={t("language")}>
       <Languages className="mx-2 hidden h-4 w-4 text-forest-500 lg:block" aria-hidden="true" />
       {(["en", "am"] as const).map((locale) => (
         <button
@@ -51,7 +51,7 @@ export function LocaleSwitch({ viewerRole }: { viewerRole: ActiveRole | null }) 
           type="button"
           onClick={() => selectLocale(locale)}
           aria-pressed={activeLocale === locale}
-          className={`min-h-9 rounded-lg px-2.5 text-xs font-semibold transition ${activeLocale === locale ? "bg-forest-900 text-white" : "text-forest-700 hover:bg-sand-50"}`}
+          className={`min-h-12 rounded-lg px-2.5 text-xs font-semibold transition ${activeLocale === locale ? "bg-forest-900 text-white" : "text-forest-700 hover:bg-sand-50"}`}
         >
           {locale === "en" ? "EN" : "አማ"}
         </button>

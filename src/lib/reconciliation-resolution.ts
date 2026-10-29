@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only";
+import {getLocale, getTranslations} from "next-intl/server";
+import {formatNumber, formatOperationDate} from "@/i18n/formats";
 
 import { canAccessFarm, canAccessWarehouse, governanceAdmin, type AccessContext } from "@/lib/access-context";
 import {managerWarehouseAccess} from "@/lib/warehouse-access";
@@ -8,6 +10,31 @@ import { reconciliationWorkflow } from "@/lib/reconciliation-workflow";
 import { resolutionHref, resolutionRules, type ReconciliationResolution, type ResolutionAction, type ResolutionOwner, type ResolutionSourceRecord } from "@/lib/reconciliation-resolution-contract";
 
 type Row = Record<string, any>;
+const resolutionPageKeys: Record<string, string> = {
+  "BIRD_DAY_COUNTS_MISSING": "daily",
+  "BIRD_DAY_IMBALANCE": "daily",
+  "EGG_CLASSIFICATION_MISMATCH": "daily",
+  "LOCKED_RECORD_CHANGED_WITHOUT_APPROVAL": "daily",
+  "BIRD_DAY_CONTINUITY_BREAK": "daily",
+  "EGG_OPENING_BALANCE_UNAVAILABLE": "daily",
+  "MORTALITY_ALLOCATION_MISMATCH": "mortality",
+  "FLOCK_CURRENT_COUNT_MISMATCH": "flocksDaily",
+  "FEED_SESSION_CLOSE_MISMATCH": "feed",
+  "FEED_DAILY_SYNC_MISMATCH": "feed",
+  "FEED_STOCK_ISSUE_MISMATCH": "feedStock",
+  "EGG_SALE_UNLINKED": "sales",
+  "EGG_SALE_UNIT_UNCONVERTED": "sales",
+  "EGG_SALES_EXCEED_PRODUCTION": "sales",
+  "POSSIBLE_DUPLICATE_SALE": "sales",
+  "PHYSICAL_STOCK_VARIANCE": "stock",
+  "REPEATED_STOCK_ADJUSTMENTS": "stock",
+  "COST_ALLOCATION_MISMATCH": "financial",
+  "LOCKED_FINANCIAL_PERIOD_HAS_GAPS": "financial",
+  "PAST_FINANCIAL_PERIOD_UNLOCKED": "financial",
+  "ACTIVE_FLOCK_LINEAGE_BROKEN": "flocks",
+  "BATCH_FLOCK_PLACEMENT_MISMATCH": "flocks"
+};
+type SourceEvidence = Omit<ResolutionSourceRecord, "fields"> & {sourceType?: string; sourceDate?: string | null; sourceEndDate?: string | null; sourceContext?: string | null; fields: Array<{label: string; value: string; key?: string; rawValue?: unknown}>};
 const db = governanceAdmin as any;
 const text = (value: unknown) => typeof value === "string" ? value : value == null ? "" : String(value);
 
@@ -24,7 +51,7 @@ async function label(table: string, id: unknown, column: string) {
   return data?.[column] ? text(data[column]) : null;
 }
 
-async function eligibleOwners(ctx: AccessContext, finding: Row): Promise<ResolutionOwner[]> {
+async function eligibleOwners(ctx: AccessContext, finding: Row, labels: {manager: string; organization: string}): Promise<ResolutionOwner[]> {
   if (ctx.role !== "ceo") return [];
   const now = new Date().toISOString();
   const { data: people } = await db.from("profiles").select("id,full_name").eq("org_id", ctx.orgId).eq("role", "farm_manager").eq("is_active", true).order("full_name");
@@ -40,7 +67,7 @@ async function eligibleOwners(ctx: AccessContext, finding: Row): Promise<Resolut
       const store = (await managerWarehouseAccess(text(person.id), ctx.orgId)).find(row => row.id === finding.warehouse_id);
       allowed = Boolean(store); if (store) scopes.push(store.name);
     }
-    if (allowed) owners.push({ id: text(person.id), name: text(person.full_name) || "Farm Manager", scope: scopes.join(" · ") || "Organization assignment" });
+    if (allowed) owners.push({ id: text(person.id), name: text(person.full_name) || labels.manager, scope: scopes.join(" · ") || labels.organization });
   }
   return owners;
 }
@@ -61,7 +88,7 @@ function readableEvidenceField(field: string) {
   const words = field.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
-async function sourceRecords(ctx: AccessContext, finding: Row): Promise<ResolutionSourceRecord[]> {
+async function sourceRecords(ctx: AccessContext, finding: Row): Promise<SourceEvidence[]> {
   const evidence = finding.evidence && typeof finding.evidence === "object" ? finding.evidence as Row : {};
   const specifications: Array<{ keys: string[]; table: string; columns: string; title: (row: Row) => string }> = [
     { keys: ["dailyRecordId", "priorDailyRecordId", "currentDailyRecordId"], table: "daily_farm_records", columns: "id,flock_id,record_date,opening_birds,closing_birds,deaths,culls,transfers_in,transfers_out,other_removals,total_eggs,normal_eggs,broken_eggs,dirty_eggs", title: row => `Daily Record · ${display(row.record_date)}` },
@@ -73,26 +100,32 @@ async function sourceRecords(ctx: AccessContext, finding: Row): Promise<Resoluti
     { keys: ["costEntryId"], table: "cost_entries", columns: "id,entry_date,category,description,amount,allocation_method", title: row => `Cost record · ${display(row.description)}` },
     { keys: ["flockIds"], table: "flocks", columns: "id,flock_code,initial_count,status", title: row => `Flock placement · ${display(row.flock_code)}` },
   ];
-  const records: ResolutionSourceRecord[] = [];
+  const records: SourceEvidence[] = [];
   for (const specification of specifications) for (const key of specification.keys) {
     const ids = (Array.isArray(evidence[key]) ? evidence[key] : evidence[key] ? [evidence[key]] : []).map(String);
     if (!ids.length) continue;
     const { data } = await db.from(specification.table).select(specification.columns).eq("org_id", ctx.orgId).in("id", ids);
-    for (const row of data ?? []) records.push({ label: specification.title(row), fields: Object.entries(row).filter(([field]) => field !== "id" && field !== "flock_id").map(([field, value]) => ({ label: fieldLabels[field] ?? field.replaceAll("_", " "), value: display(value) })) });
+    for (const row of data ?? []) records.push({ label: specification.title(row), sourceType: specification.table, sourceDate: row.record_date ?? row.sale_date ?? row.transaction_date ?? row.count_date ?? row.period_start ?? null, sourceEndDate: row.period_end ?? null, sourceContext: row.description ?? row.product_label ?? row.flock_code ?? null, fields: Object.entries(row).filter(([field]) => field !== "id" && field !== "flock_id").map(([field, value]) => ({ label: fieldLabels[field] ?? field.replaceAll("_", " "), value: display(value), key: field, rawValue: value })) });
   }
   if (finding.flock_id && finding.record_date && text(finding.rule_code) === "MORTALITY_ALLOCATION_MISMATCH") {
     const { data } = await db.from("mortality_events").select("record_date,count,cause").eq("org_id", ctx.orgId).eq("flock_id", finding.flock_id).eq("record_date", finding.record_date);
-    for (const [index, row] of (data ?? []).entries()) records.push({ label: `Mortality event ${index + 1} · ${display(row.record_date)}`, fields: [{ label: "Birds", value: display(row.count) }, { label: "Cause", value: display(row.cause) }] });
+    for (const [index, row] of (data ?? []).entries()) records.push({ label: `Mortality event ${index + 1} · ${display(row.record_date)}`, sourceType: "mortality_events", sourceDate: row.record_date, sourceContext: String(index + 1), fields: [{ label: "Birds", value: display(row.count), key: "count", rawValue: row.count }, { label: "Cause", value: display(row.cause), key: "cause", rawValue: row.cause }] });
   }
   const contextualFields = Object.entries(evidence).flatMap(([field, value]) => {
     const readable = readableEvidenceField(field);
-    return readable ? [{ label: readable, value: display(value) }] : [];
+    return readable ? [{ label: readable, value: display(value), key: field, rawValue: value }] : [];
   });
-  if (contextualFields.length) records.push({ label: "Values captured when the difference was found", fields: contextualFields });
+  if (contextualFields.length) records.push({ label: "Values captured when the difference was found", sourceType: "captured", fields: contextualFields });
   return records;
 }
 
 export async function loadFindingResolution(ctx: AccessContext, findingId: string): Promise<ReconciliationResolution> {
+  const locale = await getLocale();
+  const guidance = await getTranslations("RecordCheckGuidance");
+  const feedback = await getTranslations("OperationFeedback");
+  const resolutionText = await getTranslations("ResolutionGuidance");
+  const fieldText = await getTranslations("History.fields");
+  const codeText = await getTranslations("History.codes");
   const { data: finding, error } = await db.from("reconciliation_findings").select("*").eq("id", findingId).eq("org_id", ctx.orgId).maybeSingle();
   if (error) throw error;
   if (!finding) throw Object.assign(new Error("Record Check not found."), { status: 404 });
@@ -109,12 +142,13 @@ export async function loadFindingResolution(ctx: AccessContext, findingId: strin
     title: finding.title, explanation: finding.explanation, recommended_action: finding.recommended_action,
     finding_date: finding.record_date, farm_id: finding.farm_id, house_id: finding.house_id, flock_id: finding.flock_id,
     batch_id: finding.batch_id, farm_name: farmName, flock_code: flockCode, warehouse_name: warehouseName,
-  }, ctx.role);
+  }, ctx.role, locale === "am" ? key => guidance(key as Parameters<typeof guidance>[0]) : undefined);
   const unit = text(finding.unit);
-  const scopeLabel = [farmName, houseName, flockCode, batchCode, warehouseName, finding.record_date].filter(Boolean).join(" · ") || "Organization-wide check";
+  const scopeLabel = [farmName, houseName, flockCode, batchCode, warehouseName, finding.record_date ? formatOperationDate(`${text(finding.record_date)}T12:00:00Z`, locale) : null].filter(Boolean).join(" · ") || feedback("organizationCheck");
   const action = actionView(actionResult.data ?? null);
   if (action && ["cleared", "resolved"].includes(text(finding.status))) action.sourceCorrected = true;
   const resolvedSourceRecords = await sourceRecords(ctx, finding);
+  if (workflow.recordedExplanation) resolvedSourceRecords.push({label: guidance("recordedExplanation"), fields: [{label: guidance("recordedExplanation"), value: workflow.recordedExplanation}]});
   const choices = (rule.choices ?? []).map(choice => ({ ...choice, href: resolutionHref(choice.path, findingId, choice.id) }));
   if (text(finding.rule_code) === "EGG_OPENING_BALANCE_UNAVAILABLE") {
     const legacy = choices.find(choice => choice.id === "legacy_balance");
@@ -133,18 +167,41 @@ export async function loadFindingResolution(ctx: AccessContext, findingId: strin
       conversion.href = `/app/governance?${params.toString()}`;
     }
   }
+  const presentValue = (field: SourceEvidence["fields"][number]) => {
+    const value = field.rawValue;
+    if (!field.key || locale !== "am") return field.value;
+    if (value === null || value === undefined || value === "") return resolutionText("missing");
+    if (typeof value === "number") return formatNumber(value, locale);
+    if (Array.isArray(value)) return resolutionText((field.key === "reconciliation_warnings" ? "warnings" : "entries") as Parameters<typeof resolutionText>[0], {count: value.length});
+    if (typeof value === "object") return resolutionText("details");
+    if (typeof value === "string" && /^(record_date|sale_date|transaction_date|count_date|period_start|period_end|entry_date)$/.test(field.key) && /^\d{4}-\d{2}-\d{2}$/.test(value)) return formatOperationDate(`${value}T12:00:00Z`, locale);
+    if (["status", "transaction_type", "product_label", "allocation_method", "category", "unit"].includes(field.key) && codeText.has((String(value)) as Parameters<typeof codeText>[0])) return codeText((String(value)) as Parameters<typeof codeText>[0]);
+    return field.value;
+  };
+  const presentedSources = resolvedSourceRecords.map(record => ({
+    label: locale === "am" && record.sourceType ? [
+      resolutionText((`sourceTypes.${record.sourceType}`) as Parameters<typeof resolutionText>[0]),
+      record.sourceDate ? formatOperationDate(`${record.sourceDate}T12:00:00Z`, locale) : null,
+      record.sourceEndDate ? formatOperationDate(`${record.sourceEndDate}T12:00:00Z`, locale) : null,
+      record.sourceContext && codeText.has((record.sourceContext) as Parameters<typeof codeText>[0]) ? codeText((record.sourceContext) as Parameters<typeof codeText>[0]) : record.sourceContext,
+    ].filter(Boolean).join(" · ") : record.label,
+    fields: record.fields.map(field => ({
+      label: locale === "am" && field.key ? fieldText.has((field.key) as Parameters<typeof fieldText>[0]) ? fieldText((field.key) as Parameters<typeof fieldText>[0]) : resolutionText.has((`fields.${field.key}`) as Parameters<typeof resolutionText>[0]) ? resolutionText((`fields.${field.key}`) as Parameters<typeof resolutionText>[0]) : field.label : field.label,
+      value: presentValue(field),
+    })),
+  }));
   return {
     findingId, ruleCode: text(finding.rule_code), status: text(finding.status), title: workflow.plainTitle,
     problem: workflow.plainExplanation, scopeLabel, recordDate: finding.record_date ? text(finding.record_date) : null,
     mode: rule.mode,
-    correction: { label: rule.label, href: resolutionHref(rule.path, findingId), page: rule.page, instruction: rule.instruction, focusFields: rule.focusFields },
+    correction: { label: locale === "am" ? resolutionText((`rules.${finding.rule_code}.label`) as Parameters<typeof resolutionText>[0]) : rule.label, href: resolutionHref(rule.path, findingId), page: resolutionText((`pages.${resolutionPageKeys[finding.rule_code]}`) as Parameters<typeof resolutionText>[0]), instruction: locale === "am" ? resolutionText((`rules.${finding.rule_code}.instruction`) as Parameters<typeof resolutionText>[0]) : rule.instruction, focusFields: rule.focusFields },
     comparison: {
-      expected: formatReconciliationNumber(finding.expected_value, unit, "Evidence unavailable"),
-      recorded: formatReconciliationNumber(finding.recorded_value, unit, "Evidence unavailable"),
-      difference: formatReconciliationNumber(finding.variance, unit, "Evidence gap"),
+      expected: formatReconciliationNumber(finding.expected_value, locale === "am" && codeText.has((unit) as Parameters<typeof codeText>[0]) ? codeText((unit) as Parameters<typeof codeText>[0]) : unit, locale === "am" ? resolutionText("missing") : "Evidence unavailable", locale),
+      recorded: formatReconciliationNumber(finding.recorded_value, locale === "am" && codeText.has((unit) as Parameters<typeof codeText>[0]) ? codeText((unit) as Parameters<typeof codeText>[0]) : unit, locale === "am" ? resolutionText("missing") : "Evidence unavailable", locale),
+      difference: formatReconciliationNumber(finding.variance, locale === "am" && codeText.has((unit) as Parameters<typeof codeText>[0]) ? codeText((unit) as Parameters<typeof codeText>[0]) : unit, locale === "am" ? resolutionText("missing") : "Evidence gap", locale),
     },
-    choices,
-    sourceRecords: resolvedSourceRecords,
+    choices: locale === "am" ? choices.map(choice => ({...choice, label: resolutionText((`rules.${finding.rule_code}.choices.${choice.id}.label`) as Parameters<typeof resolutionText>[0]), explanation: resolutionText((`rules.${finding.rule_code}.choices.${choice.id}.explanation`) as Parameters<typeof resolutionText>[0])})) : choices,
+    sourceRecords: presentedSources,
     target: {
       farmName, houseName, flockCode, batchCode, warehouseName,
       date: text(finding.rule_code) === "EGG_OPENING_BALANCE_UNAVAILABLE" ? text((finding.evidence as Row | null)?.placementDate) || (finding.record_date ? text(finding.record_date) : null) : finding.record_date ? text(finding.record_date) : null,
@@ -156,6 +213,6 @@ export async function loadFindingResolution(ctx: AccessContext, findingId: strin
     canAssign: ctx.role === "ceo" && !["cleared", "resolved", "accepted_exception"].includes(text(finding.status)),
     canWork: ctx.role === "farm_manager" && action?.ownerId === ctx.userId,
     action,
-    eligibleOwners: await eligibleOwners(ctx, finding),
+    eligibleOwners: await eligibleOwners(ctx, finding, {manager: feedback("manager"), organization: feedback("organizationAssignment")}),
   };
 }

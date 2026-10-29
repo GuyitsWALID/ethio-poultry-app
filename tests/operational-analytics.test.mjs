@@ -46,6 +46,18 @@ const layer = {
   breedId: "breed-a",
 };
 
+test("localized flock guidance does not alter measurements or severity", () => {
+  const input = {flock: layer, rows: [], previousRows: [], weights: [], targets: [], dateFrom: "2026-07-01", dateTo: "2026-07-30", warningVariancePct: 5, criticalVariancePct: 10};
+  const original = buildFlockAnalytics(input);
+  const translated = buildFlockAnalytics({...input, translate: key => `am:${key}`});
+  assert.equal(translated.statusReason, "am:noRecords");
+  assert.equal(translated.primaryLabel, "am:periodHdep");
+  const {statusReason: originalReason, primaryLabel: originalLabel, ...originalValues} = original;
+  const {statusReason: translatedReason, primaryLabel: translatedLabel, ...translatedValues} = translated;
+  assert.ok(originalReason && originalLabel && translatedReason && translatedLabel);
+  assert.deepEqual(translatedValues, originalValues);
+});
+
 test("period HDEP, feed, and mortality use the eligible recorded bird-days", () => {
   const result = summarizePeriod([
     daily(),

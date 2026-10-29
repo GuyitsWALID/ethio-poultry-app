@@ -1,3 +1,4 @@
+import {getTranslations} from "next-intl/server";
 type ExtractedRow = {
   week_number: number;
   age_day_start: number;
@@ -138,16 +139,17 @@ function extractJson(text: string) {
 }
 
 export async function POST(request: Request) {
+  const t = await getTranslations("FeedValidation");
   try {
     const ctx = await getFeedContext();
     if (ctx instanceof Response) return ctx;
-    if (!ctx.canManage) return feedJson({ error: "Only an operations manager can import feed templates." }, 403);
+    if (!ctx.canManage) return feedJson({ error: t("importAccess") }, 403);
     const formData = await request.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
-      return Response.json({ error: "Upload a feed template file." }, { status: 400 });
+      return Response.json({ error: t("upload") }, { status: 400 });
     }
-    if (file.size > 5 * 1024 * 1024) return feedJson({ error: "Template files must be 5 MB or smaller." }, 413);
+    if (file.size > 5 * 1024 * 1024) return feedJson({ error: t("size") }, 413);
 
     const contentType = file.type || "application/octet-stream";
     const name = file.name.toLowerCase();
@@ -158,11 +160,11 @@ export async function POST(request: Request) {
     }
 
     if (contentType.includes("pdf") || name.endsWith(".pdf")) {
-      return feedJson({ error: "PDF extraction is not supported. Upload CSV, text, PNG, JPEG, or WebP." }, 415);
+      return feedJson({ error: t("pdf") }, 415);
     }
 
     if (!["image/png", "image/jpeg", "image/webp"].includes(contentType)) {
-      return Response.json({ error: "Unsupported file type. Use CSV, text, PNG, JPEG, or WebP." }, { status: 415 });
+      return Response.json({ error: t("fileType") }, { status: 415 });
     }
 
     const bytes = Buffer.from(await file.arrayBuffer());
@@ -192,7 +194,7 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       return Response.json(
-        { error: "Ollama vision extraction is unavailable. Start Ollama locally or enter the template manually." },
+        { error: t("extraction") },
         { status: 503 }
       );
     }

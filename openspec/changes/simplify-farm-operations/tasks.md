@@ -5,8 +5,9 @@
 Implementation is not the same as pilot certification. Today, offline recovery,
 shared warehouse access, Flocks, History and Farm performance are implemented.
 The owner confirmed the deployed Feed/Sales repair and the offline staging flow.
-Remaining implementation is primarily Task 4.6's legacy/configuration/correction
-localization; release acceptance and the real seven-day pilot remain Task 8.
+Task 4.6's legacy/configuration/correction localization implementation is complete;
+its integrated verification is deferred. Release acceptance and the real
+seven-day pilot remain Task 8.
 See `completion-checkpoint.md` for current evidence and remaining work. Older
 dated notes below are retained as history, not renewed implementation blockers.
 
@@ -49,18 +50,21 @@ dated notes below are retained as history, not renewed implementation blockers.
   - [x] Add a CI-enforced AST regression for visible Today text, accessible labels and static translation keys; preserve the existing English/Amharic key-parity and Ethiopian-calendar tests.
   - [ ] Final rebuilt signed-in translated browser acceptance for the current integrated release. Earlier scoped tablet/browser evidence remains valid history but is not a new full-release sign-off.
 - [ ] 4.6 Migrate the remaining CEO/Farm Manager Feed, Health, Inventory, Sales, Alerts, Governance, Record Checks, and Reports interface text before broad bilingual release; verify missing-key checks and Amharic expansion layouts.
+  - 2026-10-29 implementation phase: migrated operational controls, dynamic states, auxiliary panels and compatibility Reports; added explicit catalogs for generated analytics/mortality explanations, all 22 Record Check rules, exact-source correction guidance, authoritative operation validation, Feed configuration validation and AI error codes. Amharic dates reuse the Ethiopian calendar; wire dates, status codes, calculations and access checks remain unchanged. New AI analyses are language-scoped in their evidence hash; frozen analyses and original names/notes/evidence are not rewritten. Implementation checkboxes below do not certify the release: new tests, type/lint/build checks, signed-in browser acceptance and partner terminology review remain deferred at the user's request. No staging deployment or production approval is implied.
   - [x] Alerts, Action Desk, and notification preferences.
     - [x] Inventory and warehouse workflows.
-  - [ ] Feed Control and template management.
+  - [x] Feed Control and template management implementation; integrated verification deferred.
     - [x] Shared weight-entry sheet: bilingual fields/status/fallback messages, locale-formatted targets, Ethiopian-calendar date entry and 48px controls. Focused regression covers visible text, catalog parity and unchanged mutation payload; live layout acceptance remains open.
-    - [x] Shared approved feed-template review: catalog headings/counts, existing bilingual feed types and locale number formatting; real English/Amharic rendering regressions. Main Feed Control/configuration screens remain open.
-  - [ ] Health, vaccination, and mortality workflows.
-  - [ ] Sales and expense workflows.
-  - [ ] Governance and approval workflows.
-  - [ ] Record Checks and guided resolution workflows.
-  - [ ] Reports and financial-close workflows.
+    - [x] Shared approved feed-template review: catalog headings/counts, existing bilingual feed types and locale number formatting; real English/Amharic rendering regressions. Main Feed Control/configuration implementation is now migrated; integrated verification remains open.
+    - [x] Feed-template editor controls, approval guidance, import/save feedback, accessible row labels and version history translated; version and weight-check dates use the Ethiopian calendar in Amharic. Weight-check list labels/statuses, generated Feed KPI/exceptions and template validation now use catalogs. Existing names and mutation values remain unchanged. Tablet layout acceptance is still pending.
+  - [x] Health, vaccination, and mortality workflow implementation; generated investigations, chart legends and completion feedback included.
+  - [x] Sales and expense workflow implementation; chart captions, financial states, cost-source descriptions and core validation included.
+  - [x] Governance and approval workflow implementation; field labels, audit controls, counts and feedback included. Immutable request evidence remains in its original language.
+  - [x] Record Checks and guided resolution implementation; auxiliary assignment/AI panels, rule guidance, source labels, verification explanations and Ethiopian deadline dates included.
+  - [x] Reports and financial-close presentation implementation; compatibility report sections, CSV headings, date/number formatting, generated explanations and live/saved multi-farm scope captions included. Business calculations and old snapshot contents remain unchanged.
     - [x] Farm performance primary monetary cards reuse the shared ETB formatter in both locales, without duplicate currency units. Real-render regression covers positive/zero/negative amounts, missing evidence and non-money units; integrated staging acceptance remains separately gated.
   - [ ] Cross-module missing-key and Amharic expansion verification.
+    - 2026-10-29 local checks passed: 551 tests, TypeScript, zero-warning lint, production build, Cloudflare build, 97-file migration contract and 33 browser-test discovery. Final focused catalog/calendar/AI regressions: 23 passed. User chose GitHub staging accounts for post-push signed-in tablet/locale acceptance; that gate now includes a dedicated bilingual operational-screen test. See `docs/deployment/localization-verification-2026-10-29.md`. Final staging and partner terminology acceptance are not marked complete.
 
 ## 5. Offline Web Foundation
 

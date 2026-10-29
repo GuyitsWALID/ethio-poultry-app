@@ -110,7 +110,7 @@ test("vaccination completion records the actual date without rewriting its plann
   assert.match(healthEventsRoute,/recordHealthEvidence/);
   assert.match(farmOperations,/p_administered_on: administeredOn/);
   assert.match(healthPage,/name="administered_on"/);
-  assert.match(healthPage,/Scheduled for/);
+  assert.match(healthPage,/ui\("scheduledFor"\)/);
 });
 
 test("automatic operating-day locking keeps a governed seven-day entry window",()=>{

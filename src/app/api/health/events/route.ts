@@ -1,6 +1,7 @@
+import {getTranslations} from "next-intl/server";
 import {accessJson,canAccessFarm,getAccessContext,governanceAdmin,isAccessResponse} from "@/lib/access-context";
 import {recordAuditEvent} from "@/lib/audit-ledger";
-import {FarmOperationError,recordHealthEvidence} from "@/lib/farm-operations";
+import {FarmOperationError, farmOperationErrorBody,recordHealthEvidence} from "@/lib/farm-operations";
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
 
@@ -26,25 +27,27 @@ export async function GET(){
 }
 
 export async function POST(request:Request){
+  const validation = await getTranslations("OperationValidation");
   const ctx=await getAccessContext({tenant:true});if(isAccessResponse(ctx))return ctx;
-  if(ctx.role!=="farm_manager"&&!ctx.supportSessionId)return accessJson({error:"Only an assigned farm manager can record health evidence."},403);
+  if(ctx.role!=="farm_manager"&&!ctx.supportSessionId)return accessJson({error:validation("onlyAnAssignedFarmManagerCanRecordHealth")},403);
   const body=await request.json().catch(()=>null) as Record<string,unknown>|null;
   try{
     const result=await recordHealthEvidence(ctx,body);
     return result.kind==="vaccination"?accessJson({completion:result.data},201):accessJson({event:result.data},201);
   }catch(error){
-    if(error instanceof FarmOperationError)return accessJson({error:error.message,...(error.guidance??{})},error.status);
+    if(error instanceof FarmOperationError)return accessJson(await farmOperationErrorBody(error),error.status);
     return accessJson({error:error instanceof Error?error.message:"Unknown error"},500);
   }
 }
 
 export async function PATCH(request:Request){
+  const validation = await getTranslations("OperationValidation");
   const ctx=await getAccessContext({tenant:true});if(isAccessResponse(ctx))return ctx;if(ctx.role!=="farm_manager"&&!ctx.supportSessionId)return accessJson({error:"Only an assigned farm manager can update health schedule evidence."},403);
   const body=await request.json().catch(()=>null) as Record<string,unknown>|null;
   const scheduleId=String(body?.schedule_id??"").trim();const eventDate=String(body?.event_date??"").trim();const flockId=String(body?.flock_id??"").trim();const farmId=String(body?.farm_id??"").trim();const houseId=String(body?.house_id??"").trim();
   if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(scheduleId)||!DATE.test(eventDate)||!flockId||!farmId)return accessJson({error:"Schedule, date, farm, and flock are required."},400);
   const {data:flock}=await governanceAdmin.from("flocks").select("farm_id").eq("id",flockId).eq("org_id",ctx.orgId).maybeSingle();
-  if(!flock||!(await canAccessFarm(ctx,String(flock.farm_id))))return accessJson({error:"Active farm assignment is required."},403);
+  if(!flock||!(await canAccessFarm(ctx,String(flock.farm_id))))return accessJson({error:validation("activeFarmAssignmentIsRequired")},403);
   const beforeResult=await governanceAdmin.from("health_events").select("id,event_date,flock_id,description").eq("org_id",ctx.orgId).or(`description.like.SCHEDULE_TARGET|${scheduleId}|%,description.like.SCHEDULE_STATUS|${scheduleId}|%`);
   if(beforeResult.error)return accessJson({error:beforeResult.error.message},500);
   const [targetResult,statusResult]=await Promise.all([

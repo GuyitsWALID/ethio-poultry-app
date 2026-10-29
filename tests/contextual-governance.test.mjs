@@ -13,9 +13,9 @@ test("requester identity and scope are immutable review evidence", () => {
   assert.match(migration, /requester_name_snapshot.*set not null/s);
   assert.match(migration, /requester_role_snapshot.*set not null/s);
   assert.match(workflow, /requester_scope_snapshot:requester\.scope/);
-  assert.match(desk, /Proposed by/);
-  assert.match(desk, /Assigned at submission/);
-  assert.match(desk, /Latest revision/);
+  assert.match(desk, /ui\("proposedBy"\)/);
+  assert.match(desk, /ui\("assignedAtSubmission"\)/);
+  assert.match(desk, /ui\("latestRevision"\)/);
 });
 
 test("approval authorizes a seven-day one-time application instead of changing data", () => {
@@ -24,7 +24,7 @@ test("approval authorizes a seven-day one-time application instead of changing d
   assert.doesNotMatch(decision, /update public\.(flocks|batches|daily_farm_records|health_events)/);
   assert.match(migration, /if v_row\.status<>'approved'/);
   assert.match(migration, /status='applied'/);
-  assert.match(banner, /Apply approved correction/);
+  assert.match(banner, /ui\("applyApprovedCorrection"\)/);
 });
 
 test("stale, expired, and reused authorizations cannot bypass protected records", () => {
@@ -38,10 +38,10 @@ test("stale, expired, and reused authorizations cannot bypass protected records"
 test("guided desk replaces raw identifiers and JSON editing with readable actions", () => {
   assert.doesNotMatch(desk, /Proposed values \(JSON\)/);
   assert.doesNotMatch(desk, /Farm ID \(when scoped\)/);
-  assert.match(desk, /What will change/);
-  assert.match(desk, /Revise and resubmit/);
-  assert.match(desk, /Supporting files/);
-  assert.match(desk, /Inspect affected record/);
+  assert.match(desk, /ui\("whatWillChange"\)/);
+  assert.match(desk, /ui\("reviseAndResubmit"\)/);
+  assert.match(desk, /ui\("supportingFiles"\)/);
+  assert.match(desk, /ui\("inspectAffectedRecord"\)/);
 });
 
 test("feed-template governance opens the exact editor and previews every approved row", () => {
@@ -50,7 +50,7 @@ test("feed-template governance opens the exact editor and previews every approve
   assert.match(desk, /feed-template-management/);
   assert.match(feedPage, /get\("feed_target"\)/);
   assert.match(feedPage, /openFeedAction\(target\)/);
-  assert.match(banner, /Final review before applying/);
+  assert.match(banner, /ui\("finalReviewBeforeApplying"\)/);
   assert.match(banner, /FeedTemplateReview rows=\{templateRows\}/);
   assert.doesNotMatch(banner, /String\(item\.value\?\?"Not recorded"\)/);
   assert.match(templateReview, /t\("rowCount", \{count: rows.length\}\)/);

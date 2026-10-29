@@ -1,0 +1,43 @@
+# Operational localization verification — 2026-10-29
+
+Scope: Tasks 4.5–4.6 operational interfaces, retained report/correction routes,
+generated guidance, validation, frozen-report presentation and Ethiopian dates.
+No business-data migration, ledger rewrite or production deployment is included.
+
+## Local evidence
+
+- `npm test`: 551 passed, zero failed or skipped.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed with zero warnings.
+- `npm run build`: passed; all 104 static-generation entries completed.
+- `npm run cloudflare:build`: passed; OpenNext worker generated.
+- `npm run migrations:verify`: passed, 97 unchanged migrations through
+  `20261023001000_fix_organization_access_identity.sql`.
+- `npm run test:browser:list`: 33 tests discovered in nine files.
+- Final focused localization/calendar/AI regressions: 23 passed.
+- `git diff --check`: clean before release.
+
+Verification fixed missing Feed hooks, a remaining correction label, typed dynamic
+catalog keys, unsupported tooltip formatting, an accidentally translated wire
+status, localized-filter captions and outdated source-string assertions.
+Existing authoritative calculation, access, audit and mutation tests remain in
+the full suite. AI accusation rejection also covers Amharic output.
+
+Local build notices: APP_RELEASE was unset (local unversioned build), Browserslist
+data is old, and OpenNext warns about native Windows support. None prevented
+successful builds. Staging CI must build the committed revision independently.
+
+## Signed-in staging acceptance
+
+Local CEO/manager credentials were not configured. The user explicitly chose
+GitHub staging accounts for post-push acceptance. The staging reports-only gate
+now includes `localization-staging.spec.ts`: both roles, both languages,
+portrait/landscape tablet widths, report tabs, keyboard focus, touch targets,
+Ethiopian date inputs, reload persistence and retained operational screens.
+Only the account language preference is changed and restored; the test does not
+record operations, grant access, alter rollout or generate paid AI analyses.
+
+Staging results are pending. Tasks 4.5–4.6 retain their final verification
+checkboxes until that evidence is available. New terminology is not represented
+as partner-reviewed; physical-device usability and Task 8 pilot evidence remain
+separate acceptance requirements.

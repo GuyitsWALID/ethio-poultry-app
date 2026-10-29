@@ -1,5 +1,8 @@
 "use client";
 
+import {useLocale, useTranslations} from "next-intl";
+import {formatOperationDate, formatHeaderDate} from "@/i18n/formats";
+
 import {OperationDateInput} from "@/components/operation-date-input";
 import { usePageFilter, ResetPageFilters } from "@/components/page-filter-controls";
 
@@ -29,20 +32,6 @@ import {TodayEntryLink, useTodayEntryMode} from "@/components/today/today-entry-
 import { governanceGuidanceUrl, type GovernanceGuidance } from "@/lib/governance-guidance";
 import { createClient } from "@/utils/supabase/client";
 
-async function saveHealthEvent(payload: Record<string, unknown>) {
-  const response = await fetch("/api/health/events", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const body = await response.json().catch(() => ({}));
-  if (response.status === 423 && body.governance) {
-    window.location.assign(governanceGuidanceUrl(body.governance as GovernanceGuidance));
-    throw new Error("Opening a prefilled governed-change request…");
-  }
-  if (!response.ok) throw new Error(body.error ?? "Health evidence could not be saved.");
-  return body;
-}
 
 type ScheduleItem = {
   id: string;
@@ -95,17 +84,34 @@ const addDays = (date: string, days: number) => {
   return value.toISOString().slice(0, 10);
 };
 
-const formatDate = (date: string, includeYear = false) =>
-  new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: includeYear ? "numeric" : undefined, timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
-
-const scheduleTypeLabel = (type: ScheduleItem["type"]) => type === "vaccination" ? "Vaccination" : type === "cleanup" ? "Biosecurity" : "Weight check";
-
 const ScheduleTypeIcon = ({ type, className = "h-4 w-4" }: { type: ScheduleItem["type"]; className?: string }) => {
   const Icon = type === "vaccination" ? Syringe : type === "cleanup" ? Eraser : Scale;
   return <Icon className={className} aria-hidden="true" />;
 };
 
 export default function HealthPage() {
+  const rest = useTranslations("OperationRemainder");
+  const ui = useTranslations("OperationUI");
+  const feedback = useTranslations("OperationFeedback");
+  const chartText = useTranslations("OperationCharts");
+async function saveHealthEvent(payload: Record<string, unknown>) {
+  const response = await fetch("/api/health/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (response.status === 423 && body.governance) {
+    window.location.assign(governanceGuidanceUrl(body.governance as GovernanceGuidance));
+    throw new Error(ui("openingAPrefilledGovernedChangeRequest"));
+  }
+  if (!response.ok) throw new Error(body.error ?? ui("healthEvidenceCouldNotBeSaved"));
+  return body;
+}
+
+  const locale = useLocale();
+  const formatDate = (date: string, includeYear = false) => includeYear ? formatOperationDate(`${date}T12:00:00Z`, locale) : formatHeaderDate(`${date}T12:00:00Z`, locale);
+  const scheduleTypeLabel = (type: ScheduleItem["type"]) => ui((type === "vaccination" ? "vaccination" : type === "cleanup" ? "biosecurity" : "weightCheck") as Parameters<typeof ui>[0]);
   const { scope, filteredFarms, filteredHouses, filteredFlocks, batches } = useFarmScope();
   const {enabled: todayEntryEnabled, todayHref} = useTodayEntryMode();
   const [healthFarmId, setHealthFarmId] = usePageFilter<string>("healthFarmId", "");
@@ -192,8 +198,8 @@ export default function HealthPage() {
   useEffect(()=>{void fetch("/api/me/context",{cache:"no-store"}).then(response=>response.ok?response.json():null).then(data=>setCurrentRole(data?.supportSessionId?"support":data?.role??null))},[]);
   useEffect(()=>{void Promise.all([fetch("/api/inventory/catalog",{cache:"no-store"}),fetch("/api/inventory/warehouses",{cache:"no-store"})]).then(async([itemsResponse,warehousesResponse])=>{const items=itemsResponse.ok?await itemsResponse.json():{};const warehouses=warehousesResponse.ok?await warehousesResponse.json():{};setHealthInventoryItems((items.items??[]) as HealthInventoryItem[]);setHealthWarehouses((warehouses.warehouses??[]) as HealthWarehouse[])})},[]);
 
-  const submitHealthEvidence=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setSaving(true);setError(null);const form=new FormData(event.currentTarget);const payload=Object.fromEntries(form.entries());const response=await fetch("/api/health/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const body=await response.json();setSaving(false);if(!response.ok){setError(body.error??"Health evidence could not be recorded.");return}setShowEvidenceModal(false);setSuccess("Health evidence recorded with its veterinarian recommendation and implementation status.");await loadSchedules()};
-  const submitTreatmentInventory=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setSaving(true);setError(null);const form=new FormData(event.currentTarget);try{await saveHealthEvent({...Object.fromEntries(form.entries()),event_type:"treatment",quantity:Number(form.get("quantity"))});setShowTreatmentInventoryModal(false);setSuccess("Treatment and medicine usage saved together.");await loadSchedules()}catch(cause){setError(cause instanceof Error?cause.message:"Treatment could not be recorded.")}finally{setSaving(false)}};
+  const submitHealthEvidence=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setSaving(true);setError(null);const form=new FormData(event.currentTarget);const payload=Object.fromEntries(form.entries());const response=await fetch("/api/health/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const body=await response.json();setSaving(false);if(!response.ok){setError(body.error??ui("healthEvidenceCouldNotBeRecorded"));return}setShowEvidenceModal(false);setSuccess(ui("healthEvidenceRecordedWithItsVeterinarianRecommendationAndImplementationStatus"));await loadSchedules()};
+  const submitTreatmentInventory=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();setSaving(true);setError(null);const form=new FormData(event.currentTarget);try{await saveHealthEvent({...Object.fromEntries(form.entries()),event_type:"treatment",quantity:Number(form.get("quantity"))});setShowTreatmentInventoryModal(false);setSuccess(ui("treatmentAndMedicineUsageSavedTogether"));await loadSchedules()}catch(cause){setError(cause instanceof Error?cause.message:ui("treatmentCouldNotBeRecorded"))}finally{setSaving(false)}};
   const parseCleanupReason = (value: string | null) => {
     if (!value) return { cleanupType: "", notes: "" };
     const [cleanupType, ...rest] = value.split("|").map((part) => part.trim());
@@ -312,7 +318,7 @@ export default function HealthPage() {
         farmId: target?.farmId ?? c.farm_id,
         houseId: target?.houseId ?? null,
         flockId: target?.flockId ?? null,
-        scheduleReason: c.notes?.startsWith("SCHEDULE|") ? c.notes.replace("SCHEDULE|", "").trim() : "Farm cleanup",
+        scheduleReason: c.notes?.startsWith("SCHEDULE|") ? c.notes.replace("SCHEDULE|", "").trim() : rest("cleanup"),
         status:
           s?.status ??
           (c.completed_by
@@ -344,14 +350,14 @@ export default function HealthPage() {
         batchId: task.batch_id,
         dueWeekNumber: task.due_week_number,
         weightRecordId: task.weight_record_id,
-        scheduleReason: `Week ${task.due_week_number} sample body weight`,
+        scheduleReason: chartText("weekSample", {week: task.due_week_number}),
         status:
           task.status === "completed" || task.status === "missed"
             ? task.status
             : new Date(task.due_date) < new Date(new Date().toISOString().slice(0, 10))
               ? "overdue"
               : "scheduled",
-        reason: task.weight_record_id ? "Weight sample recorded" : null,
+        reason: task.weight_record_id ? rest("weightRecorded") : null,
       };
     });
 
@@ -362,7 +368,7 @@ export default function HealthPage() {
   useEffect(() => {
     void loadSchedules();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     if (!actionMenu.open) return;
@@ -398,31 +404,31 @@ export default function HealthPage() {
       const selectedHouseId = vaccHouseId || scope.houseId;
       const selectedFlockId = vaccFlockId || scope.flockId;
       if (!selectedFarmId || !selectedHouseId || !selectedFlockId) {
-        throw new Error("Select farm, house, and flock in vaccination modal.");
+        throw new Error(ui("selectFarmHouseAndFlockInVaccinationModal"));
       }
 
       const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unable to verify your session.");
+      if (!user) throw new Error(ui("unableToVerifyYourSession"));
       const { data: profile } = await supabase
         .from("profiles")
         .select("org_id")
         .eq("id", user.id)
         .single();
-      if (!profile?.org_id) throw new Error("Organization context not found.");
+      if (!profile?.org_id) throw new Error(ui("organizationContextNotFound"));
 
       const plannedDate = parseText(formData.get("planned_date"));
       const vaccineName = parseText(formData.get("vaccine_name"));
       const dosage = parseText(formData.get("dosage"));
       const routeText = parseText(formData.get("route"));
       if (!plannedDate || !vaccineName || !dosage || !routeText) {
-        throw new Error("Planned date, vaccine name, dosage, and route are required.");
+        throw new Error(ui("plannedDateVaccineNameDosageAndRouteAreRequired"));
       }
       const vaccineRoutes = ["water", "injection", "spray", "eye_drop"] as const;
       if (!vaccineRoutes.includes(routeText as (typeof vaccineRoutes)[number])) {
-        throw new Error("Route is not valid.");
+        throw new Error(ui("routeIsNotValid"));
       }
       const route = routeText as (typeof vaccineRoutes)[number];
 
@@ -454,10 +460,10 @@ export default function HealthPage() {
 
       setShowVaccineModal(false);
       form.reset();
-      setSuccess("Vaccination schedule created.");
+      setSuccess(rest("vaccinationCreated"));
       await loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create schedule.");
+      setError(e instanceof Error ? e.message : ui("failedToCreateSchedule"));
     } finally {
       setSaving(false);
     }
@@ -472,22 +478,22 @@ export default function HealthPage() {
     setSaving(true);
     try {
       const selectedFarmId = cleanFarmId || scope.farmId;
-      if (!selectedFarmId) throw new Error("Select a farm in cleanup modal.");
+      if (!selectedFarmId) throw new Error(ui("selectAFarmInCleanupModal"));
       const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unable to verify your session.");
+      if (!user) throw new Error(ui("unableToVerifyYourSession"));
       const { data: profile } = await supabase
         .from("profiles")
         .select("org_id")
         .eq("id", user.id)
         .single();
-      if (!profile?.org_id) throw new Error("Organization context not found.");
+      if (!profile?.org_id) throw new Error(ui("organizationContextNotFound"));
 
       const date = parseText(formData.get("checklist_date"));
       const type = parseText(formData.get("cleanup_type"));
-      if (!date || !type) throw new Error("Cleanup date and cleanup type are required.");
+      if (!date || !type) throw new Error(ui("cleanupDateAndCleanupTypeAreRequired"));
       const notes = parseText(formData.get("notes"));
 
       const { data: newCleanup, error: cleanupError } = await supabase
@@ -514,10 +520,10 @@ export default function HealthPage() {
 
       setShowCleanupModal(false);
       form.reset();
-      setSuccess("Cleanup schedule created.");
+      setSuccess(rest("cleanupCreated"));
       await loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create cleanup schedule.");
+      setError(e instanceof Error ? e.message : ui("failedToCreateCleanupSchedule"));
     } finally {
       setSaving(false);
     }
@@ -537,12 +543,12 @@ export default function HealthPage() {
         scope.batchId ||
         filteredFlocks.find((flock) => flock.id === selectedFlockId)?.batch_id ||
         "";
-      if (!selectedFlockId || !selectedBatchId) throw new Error("Select flock and batch for weight schedule.");
+      if (!selectedFlockId || !selectedBatchId) throw new Error(ui("selectFlockAndBatchForWeightSchedule"));
 
       const dueDate = parseText(formData.get("due_date"));
       const dueWeekNumber = Number(formData.get("due_week_number"));
       if (!dueDate || !Number.isFinite(dueWeekNumber) || dueWeekNumber < 0) {
-        throw new Error("Due date and chick age week are required.");
+        throw new Error(ui("dueDateAndChickAgeWeekAreRequired"));
       }
 
       const supabase = createClient();
@@ -550,9 +556,9 @@ export default function HealthPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unable to verify your session.");
+      if (!user) throw new Error(ui("unableToVerifyYourSession"));
       const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-      if (!profile?.org_id) throw new Error("Organization context not found.");
+      if (!profile?.org_id) throw new Error(ui("organizationContextNotFound"));
 
       const { error: insertError } = await db.from("batch_weight_check_tasks").upsert({
         org_id: profile.org_id,
@@ -568,10 +574,10 @@ export default function HealthPage() {
 
       setShowWeightModal(false);
       form.reset();
-      setSuccess("Weight check scheduled.");
+      setSuccess(rest("weightScheduled"));
       await loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to schedule weight check.");
+      setError(e instanceof Error ? e.message : ui("failedToScheduleWeightCheck"));
     } finally {
       setSaving(false);
     }
@@ -591,12 +597,12 @@ export default function HealthPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unable to verify your session.");
+      if (!user) throw new Error(ui("unableToVerifyYourSession"));
       const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-      if (!profile?.org_id) throw new Error("Organization context not found.");
+      if (!profile?.org_id) throw new Error(ui("organizationContextNotFound"));
 
       const averageWeight = Number(formData.get("average_weight_g"));
-      if (!Number.isFinite(averageWeight) || averageWeight <= 0) throw new Error("Average weight is required.");
+      if (!Number.isFinite(averageWeight) || averageWeight <= 0) throw new Error(ui("averageWeightIsRequired"));
 
       const payload = {
         org_id: profile.org_id,
@@ -612,7 +618,7 @@ export default function HealthPage() {
       const { data: weightRow, error: weightError } = recordWeightModal.item.weightRecordId
         ? await supabase.from("weight_records").update(payload).eq("id", recordWeightModal.item.weightRecordId).select("id").single()
         : await supabase.from("weight_records").insert(payload).select("id").single();
-      if (weightError || !weightRow?.id) throw new Error(weightError?.message ?? "Failed to save weight record.");
+      if (weightError || !weightRow?.id) throw new Error(weightError?.message ?? ui("failedToSaveWeightRecord"));
 
       const { error: taskError } = await db
         .from("batch_weight_check_tasks")
@@ -622,10 +628,10 @@ export default function HealthPage() {
 
       setRecordWeightModal({ open: false, item: null });
       form.reset();
-      setSuccess("Weight sample recorded.");
+      setSuccess(rest("sampleSaved"));
       await loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to record weight sample.");
+      setError(e instanceof Error ? e.message : ui("failedToRecordWeightSample"));
     } finally {
       setSaving(false);
     }
@@ -644,13 +650,13 @@ export default function HealthPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unable to verify your session.");
+      if (!user) throw new Error(ui("unableToVerifyYourSession"));
       const { data: profile } = await supabase
         .from("profiles")
         .select("org_id")
         .eq("id", user.id)
         .single();
-      if (!profile?.org_id) throw new Error("Organization context not found.");
+      if (!profile?.org_id) throw new Error(ui("organizationContextNotFound"));
 
       if (item.type === "weight") {
         const db = supabase as any;
@@ -664,7 +670,7 @@ export default function HealthPage() {
           .update({ status: "missed" })
           .eq("id", item.id);
         if (taskError) throw new Error(taskError.message);
-        setSuccess("Weight check marked as missed.");
+        setSuccess(rest("weightMissed"));
         await loadSchedules();
         return;
       }
@@ -689,16 +695,16 @@ export default function HealthPage() {
         diagnosis: reason ?? null,
       });
 
-      setSuccess(status === "completed" ? "Marked as completed." : "Marked as missed.");
+      setSuccess(status === "completed" ? rest("completed") : rest("missed"));
       await loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update schedule status.");
+      setError(e instanceof Error ? e.message : ui("failedToUpdateScheduleStatus"));
     } finally {
       setSaving(false);
     }
   };
 
-  const completeVaccination=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();const schedule=vaccinationInventoryModal.item;if(!schedule)return;setSaving(true);setVaccinationCompletionError(null);const form=new FormData(event.currentTarget);try{const administeredOn=String(form.get("administered_on")??"");await saveHealthEvent({vaccination_schedule_id:schedule.id,inventory_item_id:form.get("inventory_item_id"),warehouse_id:form.get("warehouse_id"),quantity:Number(form.get("quantity")),administered_on:administeredOn});setVaccinationInventoryModal({open:false,item:null});setSuccess(`Vaccination administered on ${administeredOn} and vaccine stock deducted.`);await loadSchedules()}catch(cause){setVaccinationCompletionError(cause instanceof Error?cause.message:"Vaccination could not be completed.")}finally{setSaving(false)}};
+  const completeVaccination=async(event:React.FormEvent<HTMLFormElement>)=>{event.preventDefault();const schedule=vaccinationInventoryModal.item;if(!schedule)return;setSaving(true);setVaccinationCompletionError(null);const form=new FormData(event.currentTarget);try{const administeredOn=String(form.get("administered_on")??"");await saveHealthEvent({vaccination_schedule_id:schedule.id,inventory_item_id:form.get("inventory_item_id"),warehouse_id:form.get("warehouse_id"),quantity:Number(form.get("quantity")),administered_on:administeredOn});setVaccinationInventoryModal({open:false,item:null});setSuccess(feedback("vaccinated", {date: formatOperationDate(`${administeredOn}T12:00:00Z`, locale)}));await loadSchedules()}catch(cause){setVaccinationCompletionError(cause instanceof Error?cause.message:ui("vaccinationCouldNotBeCompleted"))}finally{setSaving(false)}};
 
   const openEditModal = (item: ScheduleItem) => {
     if (item.type === "weight") {
@@ -743,11 +749,11 @@ export default function HealthPage() {
     setSuccess(null);
     setSaving(true);
     try {
-      const reason=window.prompt("Enter the reason for voiding this schedule record:")?.trim();if(!reason)return;const table=item.type==="weight"?"batch_weight_check_tasks":item.type==="cleanup"?"biosecurity_checks":"vaccination_events";const response=await fetch("/api/governance/void",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({table,id:item.id,reason})});const payload=await response.json();if(response.status===423&&payload?.governance){window.location.assign(governanceGuidanceUrl(payload.governance as GovernanceGuidance));return}if(!response.ok)throw new Error(payload.error??"Unable to void schedule.");
-      setSuccess("Schedule voided; the original record remains auditable.");
+      const reason=window.prompt(rest("voidReason"))?.trim();if(!reason)return;const table=item.type==="weight"?"batch_weight_check_tasks":item.type==="cleanup"?"biosecurity_checks":"vaccination_events";const response=await fetch("/api/governance/void",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({table,id:item.id,reason})});const payload=await response.json();if(response.status===423&&payload?.governance){window.location.assign(governanceGuidanceUrl(payload.governance as GovernanceGuidance));return}if(!response.ok)throw new Error(payload.error??ui("unableToVoidSchedule"));
+      setSuccess(rest("voided"));
       await loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to remove schedule.");
+      setError(e instanceof Error ? e.message : ui("failedToRemoveSchedule"));
     } finally {
       setSaving(false);
     }
@@ -763,18 +769,18 @@ export default function HealthPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (!user) throw new Error("Unable to verify your session.");
+      if (!user) throw new Error(ui("unableToVerifyYourSession"));
       const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-      if (!profile?.org_id) throw new Error("Organization context not found.");
+      if (!profile?.org_id) throw new Error(ui("organizationContextNotFound"));
 
-      if (!editModal.date) throw new Error("Date is required.");
-      if (!editModal.farmId) throw new Error("Farm is required.");
+      if (!editModal.date) throw new Error(ui("dateIsRequired"));
+      if (!editModal.farmId) throw new Error(ui("farmIsRequired"));
       if (editModal.item.type === "vaccination" && (!editModal.houseId || !editModal.flockId)) {
-        throw new Error("House and flock are required for vaccination.");
+        throw new Error(ui("houseAndFlockAreRequiredForVaccination"));
       }
 
       if (editModal.item.type === "cleanup") {
-        if (!editModal.cleanupType.trim()) throw new Error("Cleanup type is required.");
+        if (!editModal.cleanupType.trim()) throw new Error(ui("cleanupTypeIsRequired"));
         const scheduleNotes = `SCHEDULE|${editModal.cleanupType.trim()}${editModal.notes.trim() ? ` | ${editModal.notes.trim()}` : ""}`;
         const { error: updateError } = await supabase
           .from("biosecurity_checks")
@@ -783,7 +789,7 @@ export default function HealthPage() {
         if (updateError) throw new Error(updateError.message);
       } else {
         if (!editModal.vaccineName.trim() || !editModal.dosage.trim()) {
-          throw new Error("Vaccine name and dosage are required.");
+          throw new Error(ui("vaccineNameAndDosageAreRequired"));
         }
         const { error: updateError } = await supabase
           .from("vaccination_events")
@@ -804,7 +810,7 @@ export default function HealthPage() {
         body: JSON.stringify({ schedule_id: editModal.item.id, event_date: editModal.date, farm_id: editModal.farmId, house_id: editModal.houseId, flock_id: editModal.flockId }),
       });
       const evidenceBody = await evidenceResponse.json().catch(() => ({}));
-      if (!evidenceResponse.ok) throw new Error(evidenceBody.error ?? "Schedule evidence could not be updated.");
+      if (!evidenceResponse.ok) throw new Error(evidenceBody.error ?? ui("scheduleEvidenceCouldNotBeUpdated"));
 
       setEditModal({
         open: false,
@@ -819,10 +825,10 @@ export default function HealthPage() {
         dosage: "",
         route: "water",
       });
-      setSuccess("Schedule updated.");
+      setSuccess(rest("updated"));
       await loadSchedules();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update schedule.");
+      setError(e instanceof Error ? e.message : ui("failedToUpdateSchedule"));
     } finally {
       setSaving(false);
     }
@@ -915,9 +921,9 @@ export default function HealthPage() {
   };
 
   const targetLabel = (item: ScheduleItem) => ({
-    farm: item.farmId ? farmNameById.get(item.farmId) ?? "Assigned farm" : "Farm-wide",
-    house: item.houseId ? houseNameById.get(item.houseId) ?? "Assigned house" : "All houses",
-    flock: item.flockId ? flockCodeById.get(item.flockId) ?? "Assigned flock" : "All flocks",
+    farm: item.farmId ? farmNameById.get(item.farmId) ?? rest("assignedFarm") : rest("farmWide"),
+    house: item.houseId ? houseNameById.get(item.houseId) ?? rest("assignedHouse") : rest("allHouses"),
+    flock: item.flockId ? flockCodeById.get(item.flockId) ?? rest("assignedFlock") : rest("allFlocks"),
   });
 
   const openActionMenu = (event: React.MouseEvent<HTMLButtonElement>, item: ScheduleItem) => {
@@ -926,14 +932,14 @@ export default function HealthPage() {
     setActionMenu(isSameItemOpen ? { open: false, item: null, top: 0, left: 0 } : { open: true, item, top: rect.bottom + 6, left: rect.right - 160 });
   };
 
-  const scheduleActions = (item: ScheduleItem) => !canOperate?<span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-forest-500"><ShieldCheck className="h-3.5 w-3.5"/>View only</span>:(
+  const scheduleActions = (item: ScheduleItem) => !canOperate?<span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-forest-500"><ShieldCheck className="h-3.5 w-3.5"/>{ui("viewOnly")}</span>:(
     <div className="flex items-center gap-2">
       <button type="button" className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-leaf-500/35 px-3 text-[11px] font-semibold text-forest-700 transition hover:bg-leaf-500/10 disabled:cursor-not-allowed disabled:opacity-40" disabled={saving || (item.status === "completed" && item.type !== "weight")} onClick={() => void markSchedule(item, "completed")}>
-        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />{item.type === "weight" ? "Record" : "Complete"}
+        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />{item.type === "weight" ? ui("record") : ui("complete")}
       </button>
       {item.status !== "completed" ? <>
-        <button type="button" aria-label={`Mark ${scheduleTypeLabel(item.type)} missed`} className="grid h-9 w-9 place-items-center rounded-lg border border-ember-500/30 text-ember-500 transition hover:bg-ember-500/10 disabled:opacity-40" disabled={saving || item.status === "missed"} onClick={() => setMissModal({ open: true, item })}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
-        <button type="button" aria-label={`More actions for ${scheduleTypeLabel(item.type)}`} className="grid h-9 w-9 place-items-center rounded-lg border border-sand-200 text-forest-700 transition hover:border-forest-400 hover:bg-sand-50" onClick={(event) => openActionMenu(event, item)}><Ellipsis className="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" aria-label={feedback("missSchedule", {type: scheduleTypeLabel(item.type)})} className="grid h-9 w-9 place-items-center rounded-lg border border-ember-500/30 text-ember-500 transition hover:bg-ember-500/10 disabled:opacity-40" disabled={saving || item.status === "missed"} onClick={() => setMissModal({ open: true, item })}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
+        <button type="button" aria-label={feedback("scheduleActions", {type: scheduleTypeLabel(item.type)})} className="grid h-9 w-9 place-items-center rounded-lg border border-sand-200 text-forest-700 transition hover:border-forest-400 hover:bg-sand-50" onClick={(event) => openActionMenu(event, item)}><Ellipsis className="h-4 w-4" aria-hidden="true" /></button>
       </> : null}
     </div>
   );
@@ -946,73 +952,73 @@ export default function HealthPage() {
       <header className="relative overflow-hidden rounded-3xl border border-forest-700 bg-forest-900 p-5 text-white shadow-sm sm:p-7">
         <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full border-[42px] border-leaf-500/10" aria-hidden="true" />
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.22em] text-amber-300"><HeartPulse className="h-4 w-4" aria-hidden="true" />Flock health protection desk</div><h1 className="mt-3 font-display text-3xl font-semibold leading-tight sm:text-4xl">Keep every preventive action on the runway</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100">Plan vaccination, biosecurity and weight checks in one clinical operations view. Overdue work rises first, upcoming work stays visible, and every completion leaves an auditable flock record.</p></div>
+          <div className="max-w-3xl"><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.22em] text-amber-300"><HeartPulse className="h-4 w-4" aria-hidden="true" />{ui("flockHealthProtectionDesk")}</div><h1 className="mt-3 font-display text-3xl font-semibold leading-tight sm:text-4xl">{ui("keepEveryPreventiveActionOnTheRunway")}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-sand-100">{ui("planVaccinationBiosecurityAndWeightChecksInOneClinicalOperations")}</p></div>
           {canOperate?<div className="grid gap-2 sm:grid-cols-2 xl:min-w-[600px] xl:grid-cols-4">
-            {todayEntryEnabled?<TodayEntryLink task="health_deaths" target={{farmId:healthFarmId||undefined,houseId:healthHouseId||undefined,flockId:healthFlockId||undefined}} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-semibold text-forest-950 transition hover:bg-amber-300"><Stethoscope className="h-4 w-4" aria-hidden="true" />Record today&apos;s health work</TodayEntryLink>:<><button type="button" onClick={() => setShowEvidenceModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-semibold text-forest-950 transition hover:bg-amber-300"><Stethoscope className="h-4 w-4" aria-hidden="true" />Health evidence</button><button type="button" onClick={()=>setShowTreatmentInventoryModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-xs font-semibold text-white transition hover:bg-white/15"><HeartPulse className="h-4 w-4" aria-hidden="true"/>Record treatment</button><button type="button" onClick={() => setShowVaccineModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sand-50 px-4 text-xs font-semibold text-forest-900 transition hover:bg-white"><Syringe className="h-4 w-4" aria-hidden="true" />Vaccination</button></>}
-            <button type="button" onClick={() => setShowCleanupModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Eraser className="h-4 w-4" aria-hidden="true" />Biosecurity</button>
-            <button type="button" onClick={() => setShowWeightModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Scale className="h-4 w-4" aria-hidden="true" />Weight check</button>
-          </div>:<div className="rounded-xl border border-white/20 bg-white/[.07] px-4 py-3 text-sm text-sand-100"><ShieldCheck className="mb-2 h-5 w-5 text-amber-300"/>Executive evidence view. Operational entry remains with assigned Farm Managers.</div>}
+            {todayEntryEnabled?<TodayEntryLink task="health_deaths" target={{farmId:healthFarmId||undefined,houseId:healthHouseId||undefined,flockId:healthFlockId||undefined}} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-semibold text-forest-950 transition hover:bg-amber-300"><Stethoscope className="h-4 w-4" aria-hidden="true" />{ui("recordTodaySHealthWork")}</TodayEntryLink>:<><button type="button" onClick={() => setShowEvidenceModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 text-xs font-semibold text-forest-950 transition hover:bg-amber-300"><Stethoscope className="h-4 w-4" aria-hidden="true" />{ui("healthEvidence")}</button><button type="button" onClick={()=>setShowTreatmentInventoryModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-xs font-semibold text-white transition hover:bg-white/15"><HeartPulse className="h-4 w-4" aria-hidden="true"/>{ui("recordTreatment")}</button><button type="button" onClick={() => setShowVaccineModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-sand-50 px-4 text-xs font-semibold text-forest-900 transition hover:bg-white"><Syringe className="h-4 w-4" aria-hidden="true" />{ui("vaccination")}</button></>}
+            <button type="button" onClick={() => setShowCleanupModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Eraser className="h-4 w-4" aria-hidden="true" />{ui("biosecurity")}</button>
+            <button type="button" onClick={() => setShowWeightModal(true)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[.07] px-4 text-xs font-semibold text-white transition hover:bg-white/15"><Scale className="h-4 w-4" aria-hidden="true" />{ui("weightCheck")}</button>
+          </div>:<div className="rounded-xl border border-white/20 bg-white/[.07] px-4 py-3 text-sm text-sand-100"><ShieldCheck className="mb-2 h-5 w-5 text-amber-300"/>{ui("executiveEvidenceViewOperationalEntryRemainsWithAssignedFarmManagers")}</div>}
         </div>
       </header>
 
-      {error ? <div role="alert" className="flex items-start gap-3 rounded-2xl border border-ember-500/30 bg-ember-500/10 p-4 text-sm text-ember-500"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><div><p className="font-semibold">Health schedule needs attention</p><p className="mt-1">{error}</p></div></div> : null}
+      {error ? <div role="alert" className="flex items-start gap-3 rounded-2xl border border-ember-500/30 bg-ember-500/10 p-4 text-sm text-ember-500"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><div><p className="font-semibold">{ui("healthScheduleNeedsAttention")}</p><p className="mt-1">{error}</p></div></div> : null}
       {success ? <div role="status" className="flex items-start gap-3 rounded-2xl border border-leaf-500/30 bg-leaf-500/10 p-4 text-sm text-forest-700"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-leaf-500" aria-hidden="true" /><p>{success}</p></div> : null}
 
       <section className="grid overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm sm:grid-cols-2 xl:grid-cols-6">
-        <article className="border-b border-sand-200 p-4 sm:border-r xl:border-b-0"><ClipboardCheck className="h-4 w-4 text-forest-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Schedules in scope</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.total}</p><p className="mt-1 text-[11px] text-forest-600">Across all loaded health work</p></article>
-        <article className="border-b border-sand-200 p-4 xl:border-b-0 xl:border-r"><AlertTriangle className="h-4 w-4 text-ember-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Overdue</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.overdue}</p><p className="mt-1 text-[11px] text-forest-600">Requires immediate disposition</p></article>
-        <article className="border-b border-sand-200 p-4 sm:border-r xl:border-b-0"><CalendarCheck2 className="h-4 w-4 text-forest-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Due next 7 days</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.dueSeven}</p><p className="mt-1 text-[11px] text-forest-600">Scheduled preventive work</p></article>
-        <article className="border-b border-sand-200 p-4 xl:border-b-0 xl:border-r"><CheckCircle2 className="h-4 w-4 text-leaf-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Completed</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.completed}</p><p className="mt-1 text-[11px] text-forest-600">Documented in loaded history</p></article>
-        <article className="border-b border-sand-200 p-4 sm:border-b-0 sm:border-r"><ShieldCheck className="h-4 w-4 text-forest-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Completion quality</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.completionPct === null ? "Unavailable" : `${healthSummary.completionPct.toFixed(0)}%`}</p><p className="mt-1 text-[11px] text-forest-600">Completed among resolved work</p></article>
-        <article className="p-4"><AlertTriangle className={`h-4 w-4 ${healthSummary.untargeted ? "text-amber-500" : "text-leaf-500"}`} aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">Target gaps</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.untargeted}</p><p className="mt-1 text-[11px] text-forest-600">Work missing required farm/flock context</p></article>
+        <article className="border-b border-sand-200 p-4 sm:border-r xl:border-b-0"><ClipboardCheck className="h-4 w-4 text-forest-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">{ui("schedulesInScope")}</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.total}</p><p className="mt-1 text-[11px] text-forest-600">{ui("acrossAllLoadedHealthWork")}</p></article>
+        <article className="border-b border-sand-200 p-4 xl:border-b-0 xl:border-r"><AlertTriangle className="h-4 w-4 text-ember-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">{ui("overdue")}</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.overdue}</p><p className="mt-1 text-[11px] text-forest-600">{ui("requiresImmediateDisposition")}</p></article>
+        <article className="border-b border-sand-200 p-4 sm:border-r xl:border-b-0"><CalendarCheck2 className="h-4 w-4 text-forest-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">{ui("dueNext7Days")}</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.dueSeven}</p><p className="mt-1 text-[11px] text-forest-600">{ui("scheduledPreventiveWork")}</p></article>
+        <article className="border-b border-sand-200 p-4 xl:border-b-0 xl:border-r"><CheckCircle2 className="h-4 w-4 text-leaf-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">{ui("completed")}</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.completed}</p><p className="mt-1 text-[11px] text-forest-600">{ui("documentedInLoadedHistory")}</p></article>
+        <article className="border-b border-sand-200 p-4 sm:border-b-0 sm:border-r"><ShieldCheck className="h-4 w-4 text-forest-500" aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">{ui("completionQuality")}</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.completionPct === null ? ui("unavailable") : `${healthSummary.completionPct.toFixed(0)}%`}</p><p className="mt-1 text-[11px] text-forest-600">{ui("completedAmongResolvedWork")}</p></article>
+        <article className="p-4"><AlertTriangle className={`h-4 w-4 ${healthSummary.untargeted ? "text-amber-500" : "text-leaf-500"}`} aria-hidden="true" /><p className="mt-4 text-[10px] font-semibold uppercase tracking-[.15em] text-forest-500">{ui("targetGaps")}</p><p className="mt-1 font-display text-2xl font-semibold text-forest-900">{healthSummary.untargeted}</p><p className="mt-1 text-[11px] text-forest-600">{ui("workMissingRequiredFarmFlockContext")}</p></article>
       </section>
 
       <section className="max-w-full min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Forward schedule</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">14-day health runway</h2><p className="mt-1 text-xs text-forest-600">Each lane is one Addis Ababa calendar day. Scroll inside this card to inspect the full runway.</p></div><div className="flex flex-wrap gap-3 text-[10px] text-forest-600"><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-leaf-500" />Vaccination</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />Biosecurity</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />Weight</span></div></div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">{ui("forwardSchedule")}</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">{ui("text14DayHealthRunway")}</h2><p className="mt-1 text-xs text-forest-600">{ui("eachLaneIsOneAddisAbabaCalendarDayScrollInside")}</p></div><div className="flex flex-wrap gap-3 text-[10px] text-forest-600"><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-leaf-500" />{ui("vaccination")}</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" />{ui("biosecurity")}</span><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" />{ui("weight")}</span></div></div>
         <div className="relative mt-5">
-          <div id="health-runway-track" ref={runwayRef} className="runway-scroll max-w-full overflow-x-auto overscroll-x-contain px-11 pb-1" role="region" aria-label="Fourteen-day health schedule" tabIndex={0}><div className="flex w-max snap-x snap-mandatory gap-3 pr-5">{runway.map((day, index) => <article key={day.date} className={`min-h-52 w-[220px] shrink-0 snap-start rounded-xl border p-4 sm:w-[230px] ${index === 0 ? "border-forest-700 bg-forest-900 text-white" : day.items.length ? "border-sand-300 bg-sand-50" : "border-sand-200 bg-white"}`}><p className={`text-[9px] font-semibold uppercase tracking-[.12em] ${index === 0 ? "text-amber-300" : "text-forest-500"}`}>{index === 0 ? "Today" : new Intl.DateTimeFormat("en", { weekday: "long", timeZone: "UTC" }).format(new Date(`${day.date}T00:00:00Z`))}</p><p className={`mt-2 font-display text-xl font-semibold ${index === 0 ? "text-white" : "text-forest-900"}`}>{formatDate(day.date)}</p><div className="mt-5 space-y-2.5">{day.items.slice(0, 3).map((item) => <div key={`${item.type}-${item.id}`} title={item.scheduleReason ?? scheduleTypeLabel(item.type)} className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] ${index === 0 ? "bg-white/10 text-sand-50" : "bg-white text-forest-700"}`}><span className={`h-2 w-2 shrink-0 rounded-full ${item.type === "vaccination" ? "bg-leaf-500" : item.type === "cleanup" ? "bg-amber-500" : "bg-sky-500"}`} /><span className="truncate">{item.flockId ? flockCodeById.get(item.flockId) ?? scheduleTypeLabel(item.type) : scheduleTypeLabel(item.type)}</span></div>)}{day.items.length === 0 ? <p className={`text-[11px] ${index === 0 ? "text-sand-300" : "text-forest-400"}`}>No work scheduled</p> : null}{day.items.length > 3 ? <p className={`text-[10px] font-semibold ${index === 0 ? "text-amber-300" : "text-forest-500"}`}>+{day.items.length - 3} more</p> : null}</div></article>)}</div></div>
-          <div className={`pointer-events-none absolute inset-y-0 left-0 flex w-14 items-center bg-gradient-to-r from-white via-white/90 to-transparent transition-opacity ${runwayCanScrollLeft ? "opacity-100" : "opacity-0"}`} aria-hidden={!runwayCanScrollLeft}><button type="button" onClick={() => moveRunway(-1)} disabled={!runwayCanScrollLeft} aria-label="Show earlier health schedule days" aria-controls="health-runway-track" className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-sand-300 bg-white text-forest-900 shadow-md transition hover:border-forest-600 hover:bg-forest-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-forest-500 disabled:pointer-events-none"><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button></div>
-          <div className={`pointer-events-none absolute inset-y-0 right-0 flex w-14 items-center justify-end bg-gradient-to-l from-white via-white/90 to-transparent transition-opacity ${runwayCanScrollRight ? "opacity-100" : "opacity-0"}`} aria-hidden={!runwayCanScrollRight}><button type="button" onClick={() => moveRunway(1)} disabled={!runwayCanScrollRight} aria-label="Show later health schedule days" aria-controls="health-runway-track" className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-sand-300 bg-white text-forest-900 shadow-md transition hover:border-forest-600 hover:bg-forest-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-forest-500 disabled:pointer-events-none"><ChevronRight className="h-5 w-5" aria-hidden="true" /></button></div>
+          <div id="health-runway-track" ref={runwayRef} className="runway-scroll max-w-full overflow-x-auto overscroll-x-contain px-11 pb-1" role="region" aria-label={ui("fourteenDayHealthSchedule")} tabIndex={0}><div className="flex w-max snap-x snap-mandatory gap-3 pr-5">{runway.map((day, index) => <article key={day.date} className={`min-h-52 w-[220px] shrink-0 snap-start rounded-xl border p-4 sm:w-[230px] ${index === 0 ? "border-forest-700 bg-forest-900 text-white" : day.items.length ? "border-sand-300 bg-sand-50" : "border-sand-200 bg-white"}`}><p className={`text-[9px] font-semibold uppercase tracking-[.12em] ${index === 0 ? "text-amber-300" : "text-forest-500"}`}>{index === 0 ? ui("today") : new Intl.DateTimeFormat(locale === "am" ? "am-ET" : "en-ET", { weekday: "long", timeZone: "Africa/Addis_Ababa" }).format(new Date(`${day.date}T00:00:00Z`))}</p><p className={`mt-2 font-display text-xl font-semibold ${index === 0 ? "text-white" : "text-forest-900"}`}>{formatDate(day.date)}</p><div className="mt-5 space-y-2.5">{day.items.slice(0, 3).map((item) => <div key={`${item.type}-${item.id}`} title={item.scheduleReason ?? scheduleTypeLabel(item.type)} className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-[11px] ${index === 0 ? "bg-white/10 text-sand-50" : "bg-white text-forest-700"}`}><span className={`h-2 w-2 shrink-0 rounded-full ${item.type === "vaccination" ? "bg-leaf-500" : item.type === "cleanup" ? "bg-amber-500" : "bg-sky-500"}`} /><span className="truncate">{item.flockId ? flockCodeById.get(item.flockId) ?? scheduleTypeLabel(item.type) : scheduleTypeLabel(item.type)}</span></div>)}{day.items.length === 0 ? <p className={`text-[11px] ${index === 0 ? "text-sand-300" : "text-forest-400"}`}>{ui("noWorkScheduled")}</p> : null}{day.items.length > 3 ? <p className={`text-[10px] font-semibold ${index === 0 ? "text-amber-300" : "text-forest-500"}`}>+{day.items.length - 3} {ui("more")}</p> : null}</div></article>)}</div></div>
+          <div className={`pointer-events-none absolute inset-y-0 left-0 flex w-14 items-center bg-gradient-to-r from-white via-white/90 to-transparent transition-opacity ${runwayCanScrollLeft ? "opacity-100" : "opacity-0"}`} aria-hidden={!runwayCanScrollLeft}><button type="button" onClick={() => moveRunway(-1)} disabled={!runwayCanScrollLeft} aria-label={ui("showEarlierHealthScheduleDays")} aria-controls="health-runway-track" className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-sand-300 bg-white text-forest-900 shadow-md transition hover:border-forest-600 hover:bg-forest-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-forest-500 disabled:pointer-events-none"><ChevronLeft className="h-5 w-5" aria-hidden="true" /></button></div>
+          <div className={`pointer-events-none absolute inset-y-0 right-0 flex w-14 items-center justify-end bg-gradient-to-l from-white via-white/90 to-transparent transition-opacity ${runwayCanScrollRight ? "opacity-100" : "opacity-0"}`} aria-hidden={!runwayCanScrollRight}><button type="button" onClick={() => moveRunway(1)} disabled={!runwayCanScrollRight} aria-label={ui("showLaterHealthScheduleDays")} aria-controls="health-runway-track" className="pointer-events-auto grid h-10 w-10 place-items-center rounded-full border border-sand-300 bg-white text-forest-900 shadow-md transition hover:border-forest-600 hover:bg-forest-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-forest-500 disabled:pointer-events-none"><ChevronRight className="h-5 w-5" aria-hidden="true" /></button></div>
         </div>
       </section>
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-[.9fr_1.1fr]">
-        <section className="rounded-2xl border border-sand-200 bg-sand-50 p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Clinical priority</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">Needs action</h2></div><span className="rounded-full bg-forest-900 px-2.5 py-1 text-xs font-semibold text-white">{priorityItems.length}</span></div><div className="mt-4 grid gap-3">{priorityItems.map((item) => { const target = targetLabel(item); return <article key={`priority-${item.type}-${item.id}`} className="rounded-xl border border-sand-200 bg-white p-4"><div className="flex items-start gap-3"><div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${item.status === "overdue" || item.status === "missed" ? "bg-ember-500/10 text-ember-500" : "bg-leaf-500/10 text-forest-700"}`}><ScheduleTypeIcon type={item.type} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-forest-900">{item.scheduleReason ?? scheduleTypeLabel(item.type)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${badgeClass(item.status)}`}>{item.status}</span></div><p className="mt-1 text-[11px] text-forest-500">{formatDate(item.date, true)} · {target.farm} · {target.flock}</p></div></div><div className="mt-3 border-t border-sand-100 pt-3">{scheduleActions(item)}</div></article>; })}{!loading && priorityItems.length === 0 ? <div className="rounded-xl border border-dashed border-sand-300 bg-white p-6 text-center"><CheckCircle2 className="mx-auto h-6 w-6 text-leaf-500" aria-hidden="true" /><p className="mt-3 text-sm font-semibold text-forest-900">No immediate health exceptions</p><p className="mt-1 text-xs text-forest-600">The next seven days are clear in this scope.</p></div> : null}</div></section>
+        <section className="rounded-2xl border border-sand-200 bg-sand-50 p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">{ui("clinicalPriority")}</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">{ui("needsAction")}</h2></div><span className="rounded-full bg-forest-900 px-2.5 py-1 text-xs font-semibold text-white">{priorityItems.length}</span></div><div className="mt-4 grid gap-3">{priorityItems.map((item) => { const target = targetLabel(item); return <article key={`priority-${item.type}-${item.id}`} className="rounded-xl border border-sand-200 bg-white p-4"><div className="flex items-start gap-3"><div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${item.status === "overdue" || item.status === "missed" ? "bg-ember-500/10 text-ember-500" : "bg-leaf-500/10 text-forest-700"}`}><ScheduleTypeIcon type={item.type} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-forest-900">{item.scheduleReason ?? scheduleTypeLabel(item.type)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${badgeClass(item.status)}`}>{ui((item.status) as Parameters<typeof ui>[0])}</span></div><p className="mt-1 text-[11px] text-forest-500">{formatDate(item.date, true)} · {target.farm} · {target.flock}</p></div></div><div className="mt-3 border-t border-sand-100 pt-3">{scheduleActions(item)}</div></article>; })}{!loading && priorityItems.length === 0 ? <div className="rounded-xl border border-dashed border-sand-300 bg-white p-6 text-center"><CheckCircle2 className="mx-auto h-6 w-6 text-leaf-500" aria-hidden="true" /><p className="mt-3 text-sm font-semibold text-forest-900">{ui("noImmediateHealthExceptions")}</p><p className="mt-1 text-xs text-forest-600">{ui("theNextSevenDaysAreClearInThisScope")}</p></div> : null}</div></section>
 
-        <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-4"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Protection mix</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">Workload by intervention</h2></div><ShieldCheck className="h-5 w-5 text-forest-500" aria-hidden="true" /></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{(["vaccination", "cleanup", "weight"] as const).map((type) => { const count = healthSummary.scoped.filter((item) => item.type === type).length; const openCount = healthSummary.scoped.filter((item) => item.type === type && (item.status === "scheduled" || item.status === "overdue")).length; return <button key={type} type="button" onClick={() => setTypeFilter(typeFilter === type ? "all" : type)} aria-pressed={typeFilter === type} className={`rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-forest-500 ${typeFilter === type ? "border-forest-700 bg-forest-900 text-white" : "border-sand-200 bg-sand-50 text-forest-900 hover:border-forest-400"}`}><ScheduleTypeIcon type={type} className={`h-5 w-5 ${typeFilter === type ? "text-amber-300" : "text-forest-500"}`} /><p className={`mt-4 text-[10px] font-semibold uppercase tracking-[.12em] ${typeFilter === type ? "text-sand-200" : "text-forest-500"}`}>{scheduleTypeLabel(type)}</p><p className="mt-1 font-display text-2xl font-semibold">{count}</p><p className={`mt-1 text-[11px] ${typeFilter === type ? "text-sand-200" : "text-forest-600"}`}>{openCount} open</p></button>; })}</div><div className="mt-5 rounded-xl border border-sand-200 p-4"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-forest-900">Resolved-work completion</span><span className="text-sm font-semibold text-forest-900">{healthSummary.completionPct === null ? "Unavailable" : `${healthSummary.completionPct.toFixed(0)}%`}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-sand-100"><div className="h-full rounded-full bg-leaf-500" style={{ width: `${Math.min(100, healthSummary.completionPct ?? 0)}%` }} /></div><p className="mt-2 text-[11px] leading-4 text-forest-600">Missed work remains visible so the rate reflects execution quality rather than only planned volume.</p></div></section>
+        <section className="rounded-2xl border border-sand-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-4"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">{ui("protectionMix")}</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">{ui("workloadByIntervention")}</h2></div><ShieldCheck className="h-5 w-5 text-forest-500" aria-hidden="true" /></div><div className="mt-5 grid gap-3 sm:grid-cols-3">{(["vaccination", "cleanup", "weight"] as const).map((type) => { const count = healthSummary.scoped.filter((item) => item.type === type).length; const openCount = healthSummary.scoped.filter((item) => item.type === type && (item.status === "scheduled" || item.status === "overdue")).length; return <button key={type} type="button" onClick={() => setTypeFilter(typeFilter === type ? "all" : type)} aria-pressed={typeFilter === type} className={`rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-forest-500 ${typeFilter === type ? "border-forest-700 bg-forest-900 text-white" : "border-sand-200 bg-sand-50 text-forest-900 hover:border-forest-400"}`}><ScheduleTypeIcon type={type} className={`h-5 w-5 ${typeFilter === type ? "text-amber-300" : "text-forest-500"}`} /><p className={`mt-4 text-[10px] font-semibold uppercase tracking-[.12em] ${typeFilter === type ? "text-sand-200" : "text-forest-500"}`}>{scheduleTypeLabel(type)}</p><p className="mt-1 font-display text-2xl font-semibold">{count}</p><p className={`mt-1 text-[11px] ${typeFilter === type ? "text-sand-200" : "text-forest-600"}`}>{openCount} {ui("open")}</p></button>; })}</div><div className="mt-5 rounded-xl border border-sand-200 p-4"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-forest-900">{ui("resolvedWorkCompletion")}</span><span className="text-sm font-semibold text-forest-900">{healthSummary.completionPct === null ? ui("unavailable") : `${healthSummary.completionPct.toFixed(0)}%`}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-sand-100"><div className="h-full rounded-full bg-leaf-500" style={{ width: `${Math.min(100, healthSummary.completionPct ?? 0)}%` }} /></div><p className="mt-2 text-[11px] leading-4 text-forest-600">{ui("missedWorkRemainsVisibleSoTheRateReflectsExecutionQuality")}</p></div></section>
       </div>
 
       <section className="max-w-full min-w-0 overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm">
-        <div className="border-b border-sand-200 p-5"><div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">Schedule register</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">Health work ledger</h2><p className="mt-1 text-xs text-forest-600">Filter by operating location, intervention, or execution status.</p></div><button type="button" onClick={() => void loadSchedules()} disabled={loading} className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-xl border border-sand-200 px-4 text-xs font-semibold text-forest-700 hover:border-forest-400 hover:bg-sand-50 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />Refresh</button></div>
+        <div className="border-b border-sand-200 p-5"><div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-forest-500">{ui("scheduleRegister")}</p><h2 className="mt-1 font-display text-xl font-semibold text-forest-900">{ui("healthWorkLedger")}</h2><p className="mt-1 text-xs text-forest-600">{ui("filterByOperatingLocationInterventionOrExecutionStatus")}</p></div><button type="button" onClick={() => void loadSchedules()} disabled={loading} className="inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-xl border border-sand-200 px-4 text-xs font-semibold text-forest-700 hover:border-forest-400 hover:bg-sand-50 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />{ui("refresh")}</button></div>
           <div className="mt-5 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">Farm<select className={filterClass} value={healthFarmId} onChange={(event) => { setHealthFarmId(event.target.value); setHealthHouseId(""); setHealthFlockId(""); }}><option value="">All farms</option>{filteredFarms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">House<select className={filterClass} value={healthHouseId} onChange={(event) => { setHealthHouseId(event.target.value); setHealthFlockId(""); }}><option value="">All houses</option>{filteredHouses.filter((item) => !healthFarmId || item.farm_id === healthFarmId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">Flock<select className={filterClass} value={healthFlockId} onChange={(event) => setHealthFlockId(event.target.value)}><option value="">All flocks</option>{filteredFlocks.filter((item) => (!healthFarmId || item.farm_id === healthFarmId) && (!healthHouseId || item.house_id === healthHouseId)).map((item) => <option key={item.id} value={item.id}>{item.flock_code}</option>)}</select></label>
-            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">Intervention<select className={filterClass} value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | ScheduleItem["type"])}><option value="all">All interventions</option><option value="vaccination">Vaccination</option><option value="cleanup">Biosecurity</option><option value="weight">Weight check</option></select></label>
-            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">Status<select className={filterClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | ScheduleItem["status"])}><option value="all">All statuses</option><option value="overdue">Overdue</option><option value="scheduled">Scheduled</option><option value="completed">Completed</option><option value="missed">Missed</option></select></label>
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">{ui("farm")}<select className={filterClass} value={healthFarmId} onChange={(event) => { setHealthFarmId(event.target.value); setHealthHouseId(""); setHealthFlockId(""); }}><option value="">{ui("allFarms")}</option>{filteredFarms.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">{ui("house")}<select className={filterClass} value={healthHouseId} onChange={(event) => { setHealthHouseId(event.target.value); setHealthFlockId(""); }}><option value="">{ui("allHouses")}</option>{filteredHouses.filter((item) => !healthFarmId || item.farm_id === healthFarmId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">{ui("flock")}<select className={filterClass} value={healthFlockId} onChange={(event) => setHealthFlockId(event.target.value)}><option value="">{ui("allFlocks")}</option>{filteredFlocks.filter((item) => (!healthFarmId || item.farm_id === healthFarmId) && (!healthHouseId || item.house_id === healthHouseId)).map((item) => <option key={item.id} value={item.id}>{item.flock_code}</option>)}</select></label>
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">{ui("intervention")}<select className={filterClass} value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | ScheduleItem["type"])}><option value="all">{ui("allInterventions")}</option><option value="vaccination">{ui("vaccination")}</option><option value="cleanup">{ui("biosecurity")}</option><option value="weight">{ui("weightCheck")}</option></select></label>
+            <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[.12em] text-forest-500">{ui("status")}<select className={filterClass} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | ScheduleItem["status"])}><option value="all">{ui("allStatuses")}</option><option value="overdue">{ui("overdue")}</option><option value="scheduled">{ui("scheduled")}</option><option value="completed">{ui("completed")}</option><option value="missed">{ui("missed")}</option></select></label>
           </div>
         </div>
 
-        <div className="grid gap-3 p-4 md:hidden">{loading ? <div className="h-36 animate-pulse rounded-xl bg-sand-100" /> : healthFilteredSchedules.map((item) => { const target = targetLabel(item); return <article key={`mobile-${item.type}-${item.id}`} className="rounded-2xl border border-sand-200 p-4"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sand-50 text-forest-600"><ScheduleTypeIcon type={item.type} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-forest-900">{item.scheduleReason ?? scheduleTypeLabel(item.type)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${badgeClass(item.status)}`}>{item.status}</span></div><p className="mt-1 text-xs text-forest-500">{formatDate(item.date, true)} · {target.farm}</p><p className="mt-1 text-[11px] text-forest-500">{target.house} · {target.flock}</p></div></div>{item.reason ? <p className="mt-3 rounded-xl bg-sand-50 p-3 text-xs leading-5 text-forest-600">{item.reason}</p> : null}<div className="mt-4 border-t border-sand-100 pt-3">{scheduleActions(item)}</div></article>; })}{!loading && healthFilteredSchedules.length === 0 ? <div className="rounded-2xl border border-dashed border-sand-300 bg-sand-50 p-8 text-center"><CalendarCheck2 className="mx-auto h-6 w-6 text-forest-400" aria-hidden="true" /><p className="mt-3 text-sm font-semibold text-forest-900">No health work matches these filters</p><p className="mt-1 text-xs text-forest-600">Broaden the scope or schedule the next intervention.</p></div> : null}</div>
+        <div className="grid gap-3 p-4 md:hidden">{loading ? <div className="h-36 animate-pulse rounded-xl bg-sand-100" /> : healthFilteredSchedules.map((item) => { const target = targetLabel(item); return <article key={`mobile-${item.type}-${item.id}`} className="rounded-2xl border border-sand-200 p-4"><div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sand-50 text-forest-600"><ScheduleTypeIcon type={item.type} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-forest-900">{item.scheduleReason ?? scheduleTypeLabel(item.type)}</p><span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${badgeClass(item.status)}`}>{ui((item.status) as Parameters<typeof ui>[0])}</span></div><p className="mt-1 text-xs text-forest-500">{formatDate(item.date, true)} · {target.farm}</p><p className="mt-1 text-[11px] text-forest-500">{target.house} · {target.flock}</p></div></div>{item.reason ? <p className="mt-3 rounded-xl bg-sand-50 p-3 text-xs leading-5 text-forest-600">{item.reason}</p> : null}<div className="mt-4 border-t border-sand-100 pt-3">{scheduleActions(item)}</div></article>; })}{!loading && healthFilteredSchedules.length === 0 ? <div className="rounded-2xl border border-dashed border-sand-300 bg-sand-50 p-8 text-center"><CalendarCheck2 className="mx-auto h-6 w-6 text-forest-400" aria-hidden="true" /><p className="mt-3 text-sm font-semibold text-forest-900">{ui("noHealthWorkMatchesTheseFilters")}</p><p className="mt-1 text-xs text-forest-600">{ui("broadenTheScopeOrScheduleTheNextIntervention")}</p></div> : null}</div>
 
-        <div className="hidden max-w-full overflow-x-auto md:block"><table className="min-w-[1120px] w-full text-left text-sm"><thead><tr className="border-b border-sand-200 bg-sand-50 text-[10px] uppercase tracking-[.12em] text-forest-500"><th className="px-5 py-3">Due date</th><th className="px-4 py-3">Intervention</th><th className="px-4 py-3">Farm / house</th><th className="px-4 py-3">Flock</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Clinical context</th><th className="px-5 py-3">Actions</th></tr></thead><tbody>{loading ? <tr><td colSpan={7} className="px-5 py-10 text-center text-forest-600">Loading the health work ledger…</td></tr> : healthFilteredSchedules.length === 0 ? <tr><td colSpan={7} className="px-5 py-12 text-center"><CalendarCheck2 className="mx-auto h-6 w-6 text-forest-400" aria-hidden="true" /><p className="mt-3 font-semibold text-forest-900">No health work matches these filters</p><p className="mt-1 text-xs text-forest-600">Broaden the scope or schedule the next intervention.</p></td></tr> : healthFilteredSchedules.map((item) => { const target = targetLabel(item); return <tr key={`${item.type}-${item.id}`} className="border-b border-sand-100 align-top last:border-0 hover:bg-sand-50/50"><td className="px-5 py-4"><p className="font-semibold text-forest-900">{formatDate(item.date, true)}</p><p className="mt-1 text-[11px] text-forest-500">{item.date === addisToday() ? "Due today" : item.date < addisToday() && item.status !== "completed" ? "Past due" : "Scheduled date"}</p></td><td className="px-4 py-4"><div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-sand-50 text-forest-600"><ScheduleTypeIcon type={item.type} /></span><span className="font-medium text-forest-900">{scheduleTypeLabel(item.type)}</span></div></td><td className="px-4 py-4"><p className="text-forest-900">{target.farm}</p><p className="mt-1 text-[11px] text-forest-500">{target.house}</p></td><td className="px-4 py-4 font-medium text-forest-900">{target.flock}</td><td className="px-4 py-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.06em] ${badgeClass(item.status)}`}>{item.status}</span></td><td className="max-w-[330px] px-4 py-4"><p className="text-xs leading-5 text-forest-800">{item.scheduleReason ?? "No schedule description"}</p>{item.reason ? <p className="mt-1 text-[11px] leading-4 text-forest-500">Outcome: {item.reason}</p> : null}</td><td className="px-5 py-4">{scheduleActions(item)}</td></tr>; })}</tbody></table></div>
+        <div className="hidden max-w-full overflow-x-auto md:block"><table className="min-w-[1120px] w-full text-left text-sm"><thead><tr className="border-b border-sand-200 bg-sand-50 text-[10px] uppercase tracking-[.12em] text-forest-500"><th className="px-5 py-3">{ui("dueDate")}</th><th className="px-4 py-3">{ui("intervention")}</th><th className="px-4 py-3">{ui("farmHouse")}</th><th className="px-4 py-3">{ui("flock")}</th><th className="px-4 py-3">{ui("status")}</th><th className="px-4 py-3">{ui("clinicalContext")}</th><th className="px-5 py-3">{ui("actions")}</th></tr></thead><tbody>{loading ? <tr><td colSpan={7} className="px-5 py-10 text-center text-forest-600">{ui("loadingTheHealthWorkLedger")}</td></tr> : healthFilteredSchedules.length === 0 ? <tr><td colSpan={7} className="px-5 py-12 text-center"><CalendarCheck2 className="mx-auto h-6 w-6 text-forest-400" aria-hidden="true" /><p className="mt-3 font-semibold text-forest-900">{ui("noHealthWorkMatchesTheseFilters")}</p><p className="mt-1 text-xs text-forest-600">{ui("broadenTheScopeOrScheduleTheNextIntervention")}</p></td></tr> : healthFilteredSchedules.map((item) => { const target = targetLabel(item); return <tr key={`${item.type}-${item.id}`} className="border-b border-sand-100 align-top last:border-0 hover:bg-sand-50/50"><td className="px-5 py-4"><p className="font-semibold text-forest-900">{formatDate(item.date, true)}</p><p className="mt-1 text-[11px] text-forest-500">{item.date === addisToday() ? ui("dueToday") : item.date < addisToday() && item.status !== "completed" ? ui("pastDue") : ui("scheduledDate")}</p></td><td className="px-4 py-4"><div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-sand-50 text-forest-600"><ScheduleTypeIcon type={item.type} /></span><span className="font-medium text-forest-900">{scheduleTypeLabel(item.type)}</span></div></td><td className="px-4 py-4"><p className="text-forest-900">{target.farm}</p><p className="mt-1 text-[11px] text-forest-500">{target.house}</p></td><td className="px-4 py-4 font-medium text-forest-900">{target.flock}</td><td className="px-4 py-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.06em] ${badgeClass(item.status)}`}>{ui((item.status) as Parameters<typeof ui>[0])}</span></td><td className="max-w-[330px] px-4 py-4"><p className="text-xs leading-5 text-forest-800">{item.scheduleReason ?? rest("noDescription")}</p>{item.reason ? <p className="mt-1 text-[11px] leading-4 text-forest-500">{ui("outcome")} {item.reason}</p> : null}</td><td className="px-5 py-4">{scheduleActions(item)}</td></tr>; })}</tbody></table></div>
       </section>
 
-      {showTreatmentInventoryModal?<div className="fixed inset-0 z-[90] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" aria-labelledby="treatment-stock-title" className="mx-auto my-8 w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex items-start justify-between bg-forest-900 p-5 text-white"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-300">Treatment and stock</p><h2 id="treatment-stock-title" className="mt-1 font-display text-2xl font-semibold">Record illness treatment</h2><p className="mt-1 text-xs text-sand-200">If medicine stock is insufficient, neither the treatment nor the deduction is saved.</p></div><button type="button" aria-label="Close" onClick={()=>setShowTreatmentInventoryModal(false)} className="grid h-10 w-10 place-items-center rounded-xl border border-white/15"><X className="h-4 w-4"/></button></div><form onSubmit={submitTreatmentInventory} className="grid gap-4 p-5 md:grid-cols-2"><label className="grid gap-1 text-sm text-forest-700">Flock<select name="flock_id" required defaultValue={scope.flockId} className="h-11 rounded-xl border border-sand-200 px-3"><option value="">Select flock</option>{filteredFlocks.map(flock=><option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">Treatment date<OperationDateInput name="event_date" required defaultValue={addisToday()} max={addisToday()} className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700">Diagnosis<input name="diagnosis" required className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700">Medicine<select name="inventory_item_id" required className="h-11 rounded-xl border border-sand-200 px-3"><option value="">Select medicine</option>{healthInventoryItems.filter(item=>item.category==="medicine").map(item=><option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">Warehouse<select name="warehouse_id" required className="h-11 rounded-xl border border-sand-200 px-3"><option value="">Select assigned warehouse</option>{healthWarehouses.map(warehouse=><option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">Quantity administered<input name="quantity" required type="number" min="0.001" step="0.001" className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">Observed condition<textarea name="description" required className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">Treatment action<textarea name="treatment" required className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><button disabled={saving} className="h-11 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50 md:col-span-2">{saving?"Saving treatment…":"Save treatment and deduct medicine"}</button></form></div></div>:null}
+      {showTreatmentInventoryModal?<div className="fixed inset-0 z-[90] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" aria-labelledby="treatment-stock-title" className="mx-auto my-8 w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex items-start justify-between bg-forest-900 p-5 text-white"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-300">{ui("treatmentAndStock")}</p><h2 id="treatment-stock-title" className="mt-1 font-display text-2xl font-semibold">{ui("recordIllnessTreatment")}</h2><p className="mt-1 text-xs text-sand-200">{ui("ifMedicineStockIsInsufficientNeitherTheTreatmentNorThe")}</p></div><button type="button" aria-label={ui("close")} onClick={()=>setShowTreatmentInventoryModal(false)} className="grid h-10 w-10 place-items-center rounded-xl border border-white/15"><X className="h-4 w-4"/></button></div><form onSubmit={submitTreatmentInventory} className="grid gap-4 p-5 md:grid-cols-2"><label className="grid gap-1 text-sm text-forest-700">{ui("flock")}<select name="flock_id" required defaultValue={scope.flockId} className="h-11 rounded-xl border border-sand-200 px-3"><option value="">{ui("selectFlock")}</option>{filteredFlocks.map(flock=><option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">{ui("treatmentDate")}<OperationDateInput name="event_date" required defaultValue={addisToday()} max={addisToday()} className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700">{ui("diagnosis")}<input name="diagnosis" required className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700">{ui("medicine")}<select name="inventory_item_id" required className="h-11 rounded-xl border border-sand-200 px-3"><option value="">{ui("selectMedicine")}</option>{healthInventoryItems.filter(item=>item.category==="medicine").map(item=><option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">{ui("warehouse")}<select name="warehouse_id" required className="h-11 rounded-xl border border-sand-200 px-3"><option value="">{ui("selectAssignedWarehouse")}</option>{healthWarehouses.map(warehouse=><option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">{ui("quantityAdministered")}<input name="quantity" required type="number" min="0.001" step="0.001" className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">{ui("observedCondition")}<textarea name="description" required className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">{ui("treatmentAction")}<textarea name="treatment" required className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><button disabled={saving} className="h-11 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50 md:col-span-2">{saving?ui("savingTreatment"):ui("saveTreatmentAndDeductMedicine")}</button></form></div></div>:null}
 
-      {vaccinationInventoryModal.open&&vaccinationInventoryModal.item?<div className="fixed inset-0 z-[90] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" aria-labelledby="complete-vaccination-title" className="mx-auto my-12 w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex items-start justify-between bg-forest-900 p-5 text-white"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-300">Vaccination completion</p><h2 id="complete-vaccination-title" className="mt-1 font-display text-2xl font-semibold">Complete vaccination</h2><p className="mt-1 text-xs text-sand-200">Record when it was actually administered. Completion and vaccine deduction save together.</p></div><button type="button" aria-label="Close" onClick={()=>{setVaccinationCompletionError(null);setVaccinationInventoryModal({open:false,item:null})}} className="grid h-10 w-10 place-items-center rounded-xl border border-white/15"><X className="h-4 w-4"/></button></div><form onSubmit={completeVaccination} className="grid gap-4 p-5"><div className="rounded-xl bg-sand-50 p-4 text-sm text-forest-700"><strong className="block text-forest-900">{vaccinationInventoryModal.item.scheduleReason}</strong><span className="mt-1 block">Scheduled for {vaccinationInventoryModal.item.date}. The planned date remains unchanged for schedule reporting.</span></div><label className="grid gap-1 text-sm text-forest-700">Actual administration date<OperationDateInput name="administered_on" required defaultValue={addisToday()} max={addisToday()} className="h-11 rounded-xl border border-sand-200 px-3"/><span className="text-xs text-forest-500">Use today when an overdue task was performed today. Dates outside the seven-day entry window require a governed correction.</span></label><label className="grid gap-1 text-sm text-forest-700">Vaccine item<select name="inventory_item_id" required className="h-11 rounded-xl border border-sand-200 px-3"><option value="">Select vaccine</option>{healthInventoryItems.filter(item=>item.category==="vaccine").map(item=><option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">Warehouse<select name="warehouse_id" required className="h-11 rounded-xl border border-sand-200 px-3"><option value="">Select assigned warehouse</option>{healthWarehouses.map(warehouse=><option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">Quantity administered<input name="quantity" required type="number" min="0.001" step="0.001" className="h-11 rounded-xl border border-sand-200 px-3"/></label>{vaccinationCompletionError?<div role="alert" className="rounded-xl border border-ember-300 bg-ember-50 p-3 text-sm leading-6 text-ember-800"><strong className="block">Completion was not saved</strong>{vaccinationCompletionError}</div>:null}<button disabled={saving} className="h-11 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50">{saving?"Saving completion…":"Complete and deduct vaccine"}</button></form></div></div>:null}
+      {vaccinationInventoryModal.open&&vaccinationInventoryModal.item?<div className="fixed inset-0 z-[90] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" aria-labelledby="complete-vaccination-title" className="mx-auto my-12 w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex items-start justify-between bg-forest-900 p-5 text-white"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-300">{ui("vaccinationCompletion")}</p><h2 id="complete-vaccination-title" className="mt-1 font-display text-2xl font-semibold">{ui("completeVaccination")}</h2><p className="mt-1 text-xs text-sand-200">{ui("recordWhenItWasActuallyAdministeredCompletionAndVaccineDeduction")}</p></div><button type="button" aria-label={ui("close")} onClick={()=>{setVaccinationCompletionError(null);setVaccinationInventoryModal({open:false,item:null})}} className="grid h-10 w-10 place-items-center rounded-xl border border-white/15"><X className="h-4 w-4"/></button></div><form onSubmit={completeVaccination} className="grid gap-4 p-5"><div className="rounded-xl bg-sand-50 p-4 text-sm text-forest-700"><strong className="block text-forest-900">{vaccinationInventoryModal.item.scheduleReason}</strong><span className="mt-1 block">{ui("scheduledFor")} {vaccinationInventoryModal.item.date}{ui("thePlannedDateRemainsUnchangedForScheduleReporting")}</span></div><label className="grid gap-1 text-sm text-forest-700">{ui("actualAdministrationDate")}<OperationDateInput name="administered_on" required defaultValue={addisToday()} max={addisToday()} className="h-11 rounded-xl border border-sand-200 px-3"/><span className="text-xs text-forest-500">{ui("useTodayWhenAnOverdueTaskWasPerformedTodayDates")}</span></label><label className="grid gap-1 text-sm text-forest-700">{ui("vaccineItem")}<select name="inventory_item_id" required className="h-11 rounded-xl border border-sand-200 px-3"><option value="">{ui("selectVaccine")}</option>{healthInventoryItems.filter(item=>item.category==="vaccine").map(item=><option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">{ui("warehouse")}<select name="warehouse_id" required className="h-11 rounded-xl border border-sand-200 px-3"><option value="">{ui("selectAssignedWarehouse")}</option>{healthWarehouses.map(warehouse=><option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">{ui("quantityAdministered")}<input name="quantity" required type="number" min="0.001" step="0.001" className="h-11 rounded-xl border border-sand-200 px-3"/></label>{vaccinationCompletionError?<div role="alert" className="rounded-xl border border-ember-300 bg-ember-50 p-3 text-sm leading-6 text-ember-800"><strong className="block">{ui("completionWasNotSaved")}</strong>{vaccinationCompletionError}</div>:null}<button disabled={saving} className="h-11 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50">{saving?ui("savingCompletion"):ui("completeAndDeductVaccine")}</button></form></div></div>:null}
 
-      {showEvidenceModal ? <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" aria-labelledby="health-evidence-title" className="mx-auto my-4 w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-300">Clinical evidence chain</p><h2 id="health-evidence-title" className="mt-1 font-display text-2xl font-semibold">Record health event and external guidance</h2><p className="mt-1 text-xs text-sand-200">The Farm Manager records the event; the consultant remains an external evidence source.</p></div><button type="button" aria-label="Close health evidence form" onClick={()=>setShowEvidenceModal(false)} className="grid h-10 w-10 place-items-center rounded-xl border border-white/15"><X className="h-4 w-4"/></button></div><form onSubmit={submitHealthEvidence} className="grid gap-4 p-5 md:grid-cols-2"><label className="grid gap-1 text-sm text-forest-700">Flock<select name="flock_id" required defaultValue={scope.flockId} className="h-11 rounded-xl border border-sand-200 px-3"><option value="">Select flock</option>{filteredFlocks.map(flock=><option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">Event date<OperationDateInput name="event_date" required defaultValue={addisToday()} max={addisToday()} className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700">Event type<select name="event_type" className="h-11 rounded-xl border border-sand-200 px-3"><option value="observation">Observation</option><option value="disease">Disease</option><option value="treatment">Treatment</option></select></label><label className="grid gap-1 text-sm text-forest-700">Diagnosis<input name="diagnosis" className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">Observed condition<textarea name="description" required className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">Action taken or decline reason<textarea name="treatment" className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><fieldset className="grid gap-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 md:col-span-2 md:grid-cols-2"><legend className="px-2 text-sm font-semibold text-forest-900">External veterinary guidance · optional</legend><label className="grid gap-1 text-sm text-forest-700">Veterinarian name<input name="external_veterinarian_name" className="h-11 rounded-xl border border-sand-200 bg-white px-3"/></label><label className="grid gap-1 text-sm text-forest-700">Implementation status<select name="recommendation_status" className="h-11 rounded-xl border border-sand-200 bg-white px-3"><option value="">No external guidance</option><option value="received">Received</option><option value="planned">Planned</option><option value="implemented">Implemented</option><option value="declined">Declined</option></select></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">Recommendation<textarea name="veterinarian_recommendation" className="min-h-20 rounded-xl border border-sand-200 bg-white p-3"/></label><label className="grid gap-1 text-sm text-forest-700">Reference<input name="veterinarian_reference" placeholder="Letter, case, or consultation reference" className="h-11 rounded-xl border border-sand-200 bg-white px-3"/></label><label className="grid gap-1 text-sm text-forest-700">Supporting document URL<input name="attachment_url" type="url" placeholder="https://…" className="h-11 rounded-xl border border-sand-200 bg-white px-3"/></label></fieldset><button type="submit" disabled={saving} className="min-h-11 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50 md:col-span-2">{saving?"Recording…":"Record health evidence"}</button></form></div></div>:null}
+      {showEvidenceModal ? <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" aria-labelledby="health-evidence-title" className="mx-auto my-4 w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl"><div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div><p className="text-[10px] font-semibold uppercase tracking-[.18em] text-amber-300">{ui("clinicalEvidenceChain")}</p><h2 id="health-evidence-title" className="mt-1 font-display text-2xl font-semibold">{ui("recordHealthEventAndExternalGuidance")}</h2><p className="mt-1 text-xs text-sand-200">{ui("theFarmManagerRecordsTheEventTheConsultantRemainsAn")}</p></div><button type="button" aria-label={ui("closeHealthEvidenceForm")} onClick={()=>setShowEvidenceModal(false)} className="grid h-10 w-10 place-items-center rounded-xl border border-white/15"><X className="h-4 w-4"/></button></div><form onSubmit={submitHealthEvidence} className="grid gap-4 p-5 md:grid-cols-2"><label className="grid gap-1 text-sm text-forest-700">{ui("flock")}<select name="flock_id" required defaultValue={scope.flockId} className="h-11 rounded-xl border border-sand-200 px-3"><option value="">{ui("selectFlock")}</option>{filteredFlocks.map(flock=><option key={flock.id} value={flock.id}>{flock.flock_code}</option>)}</select></label><label className="grid gap-1 text-sm text-forest-700">{ui("eventDate")}<OperationDateInput name="event_date" required defaultValue={addisToday()} max={addisToday()} className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700">{ui("eventType")}<select name="event_type" className="h-11 rounded-xl border border-sand-200 px-3"><option value="observation">{ui("observation")}</option><option value="disease">{ui("disease")}</option><option value="treatment">{ui("treatment")}</option></select></label><label className="grid gap-1 text-sm text-forest-700">{ui("diagnosis")}<input name="diagnosis" className="h-11 rounded-xl border border-sand-200 px-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">{ui("observedCondition")}<textarea name="description" required className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">{ui("actionTakenOrDeclineReason")}<textarea name="treatment" className="min-h-20 rounded-xl border border-sand-200 p-3"/></label><fieldset className="grid gap-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 md:col-span-2 md:grid-cols-2"><legend className="px-2 text-sm font-semibold text-forest-900">{ui("externalVeterinaryGuidanceOptional")}</legend><label className="grid gap-1 text-sm text-forest-700">{ui("veterinarianName")}<input name="external_veterinarian_name" className="h-11 rounded-xl border border-sand-200 bg-white px-3"/></label><label className="grid gap-1 text-sm text-forest-700">{ui("implementationStatus")}<select name="recommendation_status" className="h-11 rounded-xl border border-sand-200 bg-white px-3"><option value="">{ui("noExternalGuidance")}</option><option value="received">{ui("received")}</option><option value="planned">{ui("planned")}</option><option value="implemented">{ui("implemented")}</option><option value="declined">{ui("declined")}</option></select></label><label className="grid gap-1 text-sm text-forest-700 md:col-span-2">{ui("recommendation")}<textarea name="veterinarian_recommendation" className="min-h-20 rounded-xl border border-sand-200 bg-white p-3"/></label><label className="grid gap-1 text-sm text-forest-700">{ui("reference")}<input name="veterinarian_reference" placeholder={ui("letterCaseOrConsultationReference")} className="h-11 rounded-xl border border-sand-200 bg-white px-3"/></label><label className="grid gap-1 text-sm text-forest-700">{ui("supportingDocumentURL")}<input name="attachment_url" type="url" placeholder={ui("https")} className="h-11 rounded-xl border border-sand-200 bg-white px-3"/></label></fieldset><button type="submit" disabled={saving} className="min-h-11 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:opacity-50 md:col-span-2">{saving?ui("recording"):ui("recordHealthEvidence")}</button></form></div></div>:null}
 
       {showWeightModal ? (
         <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm">
           <div role="dialog" aria-modal="true" aria-labelledby="weight-schedule-title" className="mx-auto my-4 w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Scale className="h-5 w-5" aria-hidden="true" /></span><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-amber-300">Growth surveillance</p><h4 id="weight-schedule-title" className="mt-1 font-display text-xl font-semibold">Schedule weight check</h4><p className="mt-1 text-xs text-sand-200">Assign one batch and flock to a defined age week.</p></div></div>
-              <button type="button" aria-label="Close weight schedule" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 hover:bg-white/10" onClick={() => setShowWeightModal(false)}><X className="h-4 w-4" aria-hidden="true" /></button>
+            <div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Scale className="h-5 w-5" aria-hidden="true" /></span><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-amber-300">{ui("growthSurveillance")}</p><h4 id="weight-schedule-title" className="mt-1 font-display text-xl font-semibold">{ui("scheduleWeightCheck")}</h4><p className="mt-1 text-xs text-sand-200">{ui("assignOneBatchAndFlockToADefinedAgeWeek")}</p></div></div>
+              <button type="button" aria-label={ui("closeWeightSchedule")} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 hover:bg-white/10" onClick={() => setShowWeightModal(false)}><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
             <form className="grid gap-3 p-5" onSubmit={submitWeightSchedule}>
               <select
-                aria-label="Farm"
+                aria-label={ui("farm")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={weightFarmId}
                 onChange={(e) => {
@@ -1023,13 +1029,13 @@ export default function HealthPage() {
                 }}
                 required
               >
-                <option value="">Select farm</option>
+                <option value="">{ui("selectFarm")}</option>
                 {filteredFarms.map((f) => (
                   <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
               </select>
               <select
-                aria-label="House"
+                aria-label={ui("house")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={weightHouseId}
                 onChange={(e) => {
@@ -1039,7 +1045,7 @@ export default function HealthPage() {
                 }}
                 required
               >
-                <option value="">Select house</option>
+                <option value="">{ui("selectHouse")}</option>
                 {filteredHouses
                   .filter((h) => !weightFarmId || h.farm_id === weightFarmId)
                   .map((h) => (
@@ -1047,7 +1053,7 @@ export default function HealthPage() {
                   ))}
               </select>
               <select
-                aria-label="Flock"
+                aria-label={ui("flock")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={weightFlockId}
                 onChange={(e) => {
@@ -1057,7 +1063,7 @@ export default function HealthPage() {
                 }}
                 required
               >
-                <option value="">Select flock</option>
+                <option value="">{ui("selectFlock")}</option>
                 {filteredFlocks
                   .filter((f) => (!weightFarmId || f.farm_id === weightFarmId) && (!weightHouseId || f.house_id === weightHouseId))
                   .map((f) => (
@@ -1065,23 +1071,23 @@ export default function HealthPage() {
                   ))}
               </select>
               <select
-                aria-label="Batch"
+                aria-label={ui("batch")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={weightBatchId}
                 onChange={(e) => setWeightBatchId(e.target.value)}
                 required
               >
-                <option value="">Select batch</option>
+                <option value="">{ui("selectBatch")}</option>
                 {batches
                   .filter((batch) => !weightFlockId || filteredFlocks.some((flock) => flock.id === weightFlockId && flock.batch_id === batch.id))
                   .map((batch) => (
                     <option key={batch.id} value={batch.id}>{batch.batch_code}</option>
                   ))}
               </select>
-              <label className="grid gap-1 text-xs font-medium text-forest-600">Due date<OperationDateInput name="due_date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
-              <label className="grid gap-1 text-xs font-medium text-forest-600">Age week<input name="due_week_number" type="number" min={0} required placeholder="Chick age week" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">{ui("dueDate")}<OperationDateInput name="due_date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">{ui("ageWeek")}<input name="due_week_number" type="number" min={0} required placeholder={ui("chickAgeWeek")} className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
               <button type="submit" disabled={saving} className="mt-2 min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 disabled:opacity-60">
-                {saving ? "Saving..." : "Schedule Weight Check"}
+                {saving ? ui("saving2") : ui("scheduleWeightCheck2")}
               </button>
             </form>
           </div>
@@ -1091,12 +1097,12 @@ export default function HealthPage() {
       {showVaccineModal ? (
         <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm">
           <div role="dialog" aria-modal="true" aria-labelledby="vaccine-schedule-title" className="mx-auto my-4 w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Syringe className="h-5 w-5" aria-hidden="true" /></span><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-amber-300">Preventive medicine</p><h4 id="vaccine-schedule-title" className="mt-1 font-display text-xl font-semibold">Schedule vaccination</h4><p className="mt-1 text-xs text-sand-200">Define the flock, product, dosage and administration route.</p></div></div>
-              <button type="button" aria-label="Close vaccination schedule" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 hover:bg-white/10" onClick={() => setShowVaccineModal(false)}><X className="h-4 w-4" aria-hidden="true" /></button>
+            <div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Syringe className="h-5 w-5" aria-hidden="true" /></span><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-amber-300">{ui("preventiveMedicine")}</p><h4 id="vaccine-schedule-title" className="mt-1 font-display text-xl font-semibold">{ui("scheduleVaccination")}</h4><p className="mt-1 text-xs text-sand-200">{ui("defineTheFlockProductDosageAndAdministrationRoute")}</p></div></div>
+              <button type="button" aria-label={ui("closeVaccinationSchedule")} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 hover:bg-white/10" onClick={() => setShowVaccineModal(false)}><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
             <form className="grid gap-3 p-5" onSubmit={submitVaccinationSchedule}>
               <select
-                aria-label="Farm"
+                aria-label={ui("farm")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={vaccFarmId}
                 onChange={(e) => {
@@ -1106,13 +1112,13 @@ export default function HealthPage() {
                 }}
                 required
               >
-                <option value="">Select farm</option>
+                <option value="">{ui("selectFarm")}</option>
                 {filteredFarms.map((f) => (
                   <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
               </select>
               <select
-                aria-label="House"
+                aria-label={ui("house")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={vaccHouseId}
                 onChange={(e) => {
@@ -1121,7 +1127,7 @@ export default function HealthPage() {
                 }}
                 required
               >
-                <option value="">Select house</option>
+                <option value="">{ui("selectHouse")}</option>
                 {filteredHouses
                   .filter((h) => !vaccFarmId || h.farm_id === vaccFarmId)
                   .map((h) => (
@@ -1129,37 +1135,37 @@ export default function HealthPage() {
                   ))}
               </select>
               <select
-                aria-label="Flock"
+                aria-label={ui("flock")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={vaccFlockId}
                 onChange={(e) => setVaccFlockId(e.target.value)}
                 required
               >
-                <option value="">Select flock</option>
+                <option value="">{ui("selectFlock")}</option>
                 {filteredFlocks
                   .filter((f) => (!vaccFarmId || f.farm_id === vaccFarmId) && (!vaccHouseId || f.house_id === vaccHouseId))
                   .map((f) => (
                     <option key={f.id} value={f.id}>{f.flock_code}</option>
                   ))}
               </select>
-              <label className="grid gap-1 text-xs font-medium text-forest-600">Planned date<OperationDateInput name="planned_date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
-              <label className="grid gap-1 text-xs font-medium text-forest-600">Vaccine<input name="vaccine_name" placeholder="Vaccine name" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
-              <label className="grid gap-1 text-xs font-medium text-forest-600">Dosage<input name="dosage" placeholder="Dosage" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">{ui("plannedDate")}<OperationDateInput name="planned_date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">{ui("vaccine")}<input name="vaccine_name" placeholder={ui("vaccineName")} required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">{ui("dosage")}<input name="dosage" placeholder={ui("dosage")} required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
               <select
-                aria-label="Administration route"
+                aria-label={ui("administrationRoute")}
                 name="route"
                 required
                 defaultValue=""
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
               >
-                <option value="" disabled>Select route</option>
-                <option value="water">Water</option>
-                <option value="injection">Injection</option>
-                <option value="spray">Spray</option>
-                <option value="eye_drop">Eye Drop</option>
+                <option value="" disabled>{ui("selectRoute")}</option>
+                <option value="water">{ui("water")}</option>
+                <option value="injection">{ui("injection")}</option>
+                <option value="spray">{ui("spray")}</option>
+                <option value="eye_drop">{ui("eyeDrop")}</option>
               </select>
               <button type="submit" disabled={saving} className="mt-2 min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 disabled:opacity-60">
-                {saving ? "Saving..." : "Create Schedule"}
+                {saving ? ui("saving2") : ui("createSchedule")}
               </button>
             </form>
           </div>
@@ -1169,12 +1175,12 @@ export default function HealthPage() {
       {showCleanupModal ? (
         <div className="fixed inset-0 z-[80] overflow-y-auto bg-forest-900/70 p-4 backdrop-blur-sm">
           <div role="dialog" aria-modal="true" aria-labelledby="cleanup-schedule-title" className="mx-auto my-4 w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Eraser className="h-5 w-5" aria-hidden="true" /></span><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-amber-300">Biosecurity control</p><h4 id="cleanup-schedule-title" className="mt-1 font-display text-xl font-semibold">Schedule farm cleanup</h4><p className="mt-1 text-xs text-sand-200">Assign the cleaning work at farm, house or flock level.</p></div></div>
-              <button type="button" aria-label="Close cleanup schedule" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 hover:bg-white/10" onClick={() => setShowCleanupModal(false)}><X className="h-4 w-4" aria-hidden="true" /></button>
+            <div className="flex items-start justify-between gap-4 bg-forest-900 p-5 text-white"><div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-amber-300"><Eraser className="h-5 w-5" aria-hidden="true" /></span><div><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-amber-300">{ui("biosecurityControl")}</p><h4 id="cleanup-schedule-title" className="mt-1 font-display text-xl font-semibold">{ui("scheduleFarmCleanup")}</h4><p className="mt-1 text-xs text-sand-200">{ui("assignTheCleaningWorkAtFarmHouseOrFlockLevel")}</p></div></div>
+              <button type="button" aria-label={ui("closeCleanupSchedule")} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 hover:bg-white/10" onClick={() => setShowCleanupModal(false)}><X className="h-4 w-4" aria-hidden="true" /></button>
             </div>
             <form className="grid gap-3 p-5" onSubmit={submitCleanupSchedule}>
               <select
-                aria-label="Farm"
+                aria-label={ui("farm")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={cleanFarmId}
                 onChange={(e) => {
@@ -1184,13 +1190,13 @@ export default function HealthPage() {
                 }}
                 required
               >
-                <option value="">Select farm</option>
+                <option value="">{ui("selectFarm")}</option>
                 {filteredFarms.map((f) => (
                   <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
               </select>
               <select
-                aria-label="House"
+                aria-label={ui("house")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={cleanHouseId}
                 onChange={(e) => {
@@ -1198,7 +1204,7 @@ export default function HealthPage() {
                   setCleanFlockId("");
                 }}
               >
-                <option value="">Select house (optional)</option>
+                <option value="">{ui("selectHouseOptional")}</option>
                 {filteredHouses
                   .filter((h) => !cleanFarmId || h.farm_id === cleanFarmId)
                   .map((h) => (
@@ -1206,23 +1212,23 @@ export default function HealthPage() {
                   ))}
               </select>
               <select
-                aria-label="Flock"
+                aria-label={ui("flock")}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                 value={cleanFlockId}
                 onChange={(e) => setCleanFlockId(e.target.value)}
               >
-                <option value="">Select flock (optional)</option>
+                <option value="">{ui("selectFlockOptional")}</option>
                 {filteredFlocks
                   .filter((f) => (!cleanFarmId || f.farm_id === cleanFarmId) && (!cleanHouseId || f.house_id === cleanHouseId))
                   .map((f) => (
                     <option key={f.id} value={f.id}>{f.flock_code}</option>
                   ))}
               </select>
-              <label className="grid gap-1 text-xs font-medium text-forest-600">Checklist date<OperationDateInput name="checklist_date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
-              <label className="grid gap-1 text-xs font-medium text-forest-600">Cleanup type<input name="cleanup_type" placeholder="Disinfection, litter removal…" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
-              <label className="grid gap-1 text-xs font-medium text-forest-600">Notes<textarea name="notes" placeholder="Optional execution notes" className="min-h-[90px] rounded-xl border border-sand-200 px-3 py-2 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">{ui("checklistDate")}<OperationDateInput name="checklist_date" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">{ui("cleanupType")}<input name="cleanup_type" placeholder={ui("disinfectionLitterRemoval")} required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" /></label>
+              <label className="grid gap-1 text-xs font-medium text-forest-600">{ui("notes")}<textarea name="notes" placeholder={ui("optionalExecutionNotes")} className="min-h-[90px] rounded-xl border border-sand-200 px-3 py-2 text-sm" /></label>
               <button type="submit" disabled={saving} className="mt-2 min-h-11 rounded-xl bg-forest-900 px-4 text-sm font-semibold text-sand-50 disabled:opacity-60">
-                {saving ? "Saving..." : "Create Schedule"}
+                {saving ? ui("saving2") : ui("createSchedule")}
               </button>
             </form>
           </div>
@@ -1233,7 +1239,7 @@ export default function HealthPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6">
             <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-forest-900">Reason For Missed Schedule</h4>
+              <h4 className="text-lg font-semibold text-forest-900">{ui("reasonForMissedSchedule")}</h4>
               <button
                 type="button"
                 className="text-sm text-forest-600"
@@ -1242,13 +1248,13 @@ export default function HealthPage() {
                   setMissReason("");
                 }}
               >
-                Close
+                {ui("close")}
               </button>
             </div>
             <textarea
               value={missReason}
               onChange={(e) => setMissReason(e.target.value)}
-              placeholder="Why was this schedule missed?"
+              placeholder={ui("whyWasThisScheduleMissed")}
               className="mt-4 min-h-[120px] w-full rounded-xl border border-sand-200 px-3 py-2 text-sm"
             />
             <div className="mt-4 flex justify-end gap-2">
@@ -1260,7 +1266,7 @@ export default function HealthPage() {
                   setMissReason("");
                 }}
               >
-                Cancel
+                {ui("cancel")}
               </button>
               <button
                 type="button"
@@ -1273,7 +1279,7 @@ export default function HealthPage() {
                   setMissReason("");
                 }}
               >
-                Mark Missed
+                {ui("markMissed")}
               </button>
             </div>
           </div>
@@ -1296,7 +1302,7 @@ export default function HealthPage() {
                 if (selected) openEditModal(selected);
               }}
             >
-              Edit
+              {ui("edit")}
             </button>
           ) : null}
           <button
@@ -1308,7 +1314,7 @@ export default function HealthPage() {
               setRemoveModal({ open: true, item: selected });
             }}
           >
-            Remove
+            {ui("remove")}
           </button>
         </div>
       ) : null}
@@ -1318,7 +1324,7 @@ export default function HealthPage() {
           <div className="w-full max-w-xl rounded-2xl bg-white p-6">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-lg font-semibold text-forest-900">Record Sample Weight</h4>
+                <h4 className="text-lg font-semibold text-forest-900">{ui("recordSampleWeight")}</h4>
                 <p className="text-sm text-forest-600">
                   {recordWeightModal.item.scheduleReason} / {recordWeightModal.item.date}
                 </p>
@@ -1328,36 +1334,36 @@ export default function HealthPage() {
                 className="text-sm text-forest-600"
                 onClick={() => setRecordWeightModal({ open: false, item: null })}
               >
-                Close
+                {ui("close")}
               </button>
             </div>
             <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={saveWeightRecord}>
               <label className="grid gap-1 text-sm text-forest-700">
-                Record date
+                {ui("recordDate")}
                 <OperationDateInput name="record_date" defaultValue={recordWeightModal.item.date} required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
               </label>
               <label className="grid gap-1 text-sm text-forest-700">
-                Sample count
-                <input name="sample_count" type="number" min={1} placeholder="Birds sampled" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
+                {ui("sampleCount")}
+                <input name="sample_count" type="number" min={1} placeholder={ui("birdsSampled")} className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
               </label>
               <label className="grid gap-1 text-sm text-forest-700">
-                Average weight (g)
+                {ui("averageWeightG")}
                 <input name="average_weight_g" type="number" min={0.01} step="0.01" required className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
               </label>
               <label className="grid gap-1 text-sm text-forest-700">
-                Min weight (g)
+                {ui("minWeightG")}
                 <input name="min_weight_g" type="number" min={0} step="0.01" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
               </label>
               <label className="grid gap-1 text-sm text-forest-700">
-                Max weight (g)
+                {ui("maxWeightG")}
                 <input name="max_weight_g" type="number" min={0} step="0.01" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
               </label>
               <label className="grid gap-1 text-sm text-forest-700">
-                Uniformity %
+                {ui("uniformity")}
                 <input name="uniformity_pct" type="number" min={0} max={100} step="0.01" className="h-11 rounded-xl border border-sand-200 px-3 text-sm" />
               </label>
               <button type="submit" disabled={saving} className="rounded-full bg-forest-900 px-4 py-2 text-sm text-sand-50 disabled:opacity-60 md:col-span-2">
-                {saving ? "Saving..." : "Save Weight Sample"}
+                {saving ? ui("saving2") : ui("saveWeightSample")}
               </button>
             </form>
           </div>
@@ -1367,9 +1373,9 @@ export default function HealthPage() {
       {removeModal.open && removeModal.item ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-forest-900/40 px-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6">
-            <h4 className="text-lg font-semibold text-forest-900">Remove Schedule</h4>
+            <h4 className="text-lg font-semibold text-forest-900">{ui("removeSchedule")}</h4>
             <p className="mt-2 text-sm text-forest-700">
-              Are you sure you want to remove this {removeModal.item.type} schedule? This action cannot be undone.
+              {ui("areYouSureYouWantToRemoveThis")} {removeModal.item.type} {ui("scheduleThisActionCannotBeUndone")}
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -1377,7 +1383,7 @@ export default function HealthPage() {
                 className="rounded-full border border-forest-900/20 px-4 py-2 text-sm text-forest-700"
                 onClick={() => setRemoveModal({ open: false, item: null })}
               >
-                Cancel
+                {ui("cancel")}
               </button>
               <button
                 type="button"
@@ -1390,7 +1396,7 @@ export default function HealthPage() {
                   await deleteSchedule(target);
                 }}
               >
-                {saving ? "Removing..." : "Remove"}
+                {saving ? ui("removing") : ui("remove")}
               </button>
             </div>
           </div>
@@ -1401,7 +1407,7 @@ export default function HealthPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 px-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6">
             <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-forest-900">Edit Schedule</h4>
+              <h4 className="text-lg font-semibold text-forest-900">{ui("editSchedule")}</h4>
               <button
                 type="button"
                 className="text-sm text-forest-600"
@@ -1421,7 +1427,7 @@ export default function HealthPage() {
                   })
                 }
               >
-                Close
+                {ui("close")}
               </button>
             </div>
             <div className="mt-4 grid gap-3">
@@ -1432,7 +1438,7 @@ export default function HealthPage() {
                 }
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
               >
-                <option value="">Select farm</option>
+                <option value="">{ui("selectFarm")}</option>
                 {filteredFarms.map((f) => (
                   <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
@@ -1442,7 +1448,7 @@ export default function HealthPage() {
                 onChange={(e) => setEditModal((prev) => ({ ...prev, houseId: e.target.value, flockId: "" }))}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
               >
-                <option value="">Select house {editModal.item.type === "cleanup" ? "(optional)" : ""}</option>
+                <option value="">{ui("selectHouse")} {editModal.item.type === "cleanup" ? ui("optional") : ""}</option>
                 {filteredHouses
                   .filter((h) => !editModal.farmId || h.farm_id === editModal.farmId)
                   .map((h) => (
@@ -1454,7 +1460,7 @@ export default function HealthPage() {
                 onChange={(e) => setEditModal((prev) => ({ ...prev, flockId: e.target.value }))}
                 className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
               >
-                <option value="">Select flock {editModal.item.type === "cleanup" ? "(optional)" : ""}</option>
+                <option value="">{ui("selectFlock")} {editModal.item.type === "cleanup" ? ui("optional") : ""}</option>
                 {filteredFlocks
                   .filter((f) => (!editModal.farmId || f.farm_id === editModal.farmId) && (!editModal.houseId || f.house_id === editModal.houseId))
                   .map((f) => (
@@ -1471,13 +1477,13 @@ export default function HealthPage() {
                   <input
                     value={editModal.cleanupType}
                     onChange={(e) => setEditModal((prev) => ({ ...prev, cleanupType: e.target.value }))}
-                    placeholder="Cleanup type"
+                    placeholder={ui("cleanupType")}
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                   />
                   <textarea
                     value={editModal.notes}
                     onChange={(e) => setEditModal((prev) => ({ ...prev, notes: e.target.value }))}
-                    placeholder="Notes"
+                    placeholder={ui("notes")}
                     className="min-h-[90px] rounded-xl border border-sand-200 px-3 py-2 text-sm"
                   />
                 </>
@@ -1486,13 +1492,13 @@ export default function HealthPage() {
                   <input
                     value={editModal.vaccineName}
                     onChange={(e) => setEditModal((prev) => ({ ...prev, vaccineName: e.target.value }))}
-                    placeholder="Vaccine name"
+                    placeholder={ui("vaccineName")}
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                   />
                   <input
                     value={editModal.dosage}
                     onChange={(e) => setEditModal((prev) => ({ ...prev, dosage: e.target.value }))}
-                    placeholder="Dosage"
+                    placeholder={ui("dosage")}
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                   />
                   <select
@@ -1500,10 +1506,10 @@ export default function HealthPage() {
                     onChange={(e) => setEditModal((prev) => ({ ...prev, route: e.target.value as EditScheduleState["route"] }))}
                     className="h-11 rounded-xl border border-sand-200 px-3 text-sm"
                   >
-                    <option value="water">Water</option>
-                    <option value="injection">Injection</option>
-                    <option value="spray">Spray</option>
-                    <option value="eye_drop">Eye Drop</option>
+                    <option value="water">{ui("water")}</option>
+                    <option value="injection">{ui("injection")}</option>
+                    <option value="spray">{ui("spray")}</option>
+                    <option value="eye_drop">{ui("eyeDrop")}</option>
                   </select>
                 </>
               )}
@@ -1528,7 +1534,7 @@ export default function HealthPage() {
                   })
                 }
               >
-                Cancel
+                {ui("cancel")}
               </button>
               <button
                 type="button"
@@ -1536,7 +1542,7 @@ export default function HealthPage() {
                 disabled={saving}
                 onClick={saveScheduleEdit}
               >
-                {saving ? "Saving..." : "Save Changes"}
+                {saving ? ui("saving2") : ui("saveChanges")}
               </button>
             </div>
           </div>

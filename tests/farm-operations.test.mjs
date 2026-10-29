@@ -6,6 +6,15 @@ const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 const operations = await read("../src/lib/farm-operations.ts");
 const inventory = await read("../src/lib/inventory-operations.ts");
 const actions = await read("../src/lib/accountable-actions.ts");
+test("localized operation errors retain original diagnostics, status and correction guidance", () => {
+  assert.match(operations, /readonly status = 400/);
+  assert.match(operations, /readonly guidance\?: Record<string, unknown>/);
+  assert.match(operations, /readonly messageKey\?: string/);
+  assert.match(operations, /super\(message\)/);
+  const runtime = operations.replace(/\(error\.messageKey\) as Parameters<typeof t>\[0\]/g, "error.messageKey");
+  assert.match(runtime, /error\.messageKey && t\.has\(error\.messageKey\) \? t\(error\.messageKey\) : error\.message/);
+  assert.match(operations, /\.\.\.\(error\.guidance \?\? \{\}\)/);
+});
 const mortality = await read("../src/lib/mortality-dashboard.ts");
 const routes = {
   daily: await read("../src/app/api/inventory/daily-usage/route.ts"),

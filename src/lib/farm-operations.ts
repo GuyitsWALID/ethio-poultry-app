@@ -3,6 +3,7 @@ import "server-only";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import {z} from "zod";
+import {getTranslations} from "next-intl/server";
 
 import {canAccessFarm, canAccessWarehouse, governanceAdmin, type AccessContext} from "@/lib/access-context";
 import {recordAuditEvent} from "@/lib/audit-ledger";
@@ -16,9 +17,15 @@ export class FarmOperationError extends Error {
     message: string,
     readonly status = 400,
     readonly guidance?: Record<string, unknown>,
+    readonly messageKey?: string,
   ) {
     super(message);
   }
+}
+
+export async function farmOperationErrorBody(error: FarmOperationError) {
+  const t = await getTranslations("OperationValidation");
+  return {error: error.messageKey && t.has((error.messageKey) as Parameters<typeof t>[0]) ? t((error.messageKey) as Parameters<typeof t>[0]) : error.message, ...(error.guidance ?? {})};
 }
 
 const optionalText = z.preprocess(
@@ -108,17 +115,17 @@ function legacyNumber(value: unknown, fallback = 0) {
 
 export async function saveDailyRecordWithUsage(context: SalesContext, input: unknown) {
   if (!context.canMutate) {
-    throw new FarmOperationError("Only farm managers can save daily records and inventory usage.", 403);
+    throw new FarmOperationError("Only farm managers can save daily records and inventory usage.", 403, undefined, "onlyFarmManagersCanSaveDailyRecordsAnd");
   }
   const raw = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
-  if (typeof raw.flock_id !== "string" || !raw.flock_id.trim()) throw new FarmOperationError("Flock is required.");
-  if (!raw.record || typeof raw.record !== "object" || Array.isArray(raw.record)) throw new FarmOperationError("Daily record payload is required.");
-  if (raw.usages !== undefined && raw.usages !== null && !Array.isArray(raw.usages)) throw new FarmOperationError("Inventory usages must be an array or null.");
+  if (typeof raw.flock_id !== "string" || !raw.flock_id.trim()) throw new FarmOperationError("Flock is required.", undefined, undefined, "flockIsRequired");
+  if (!raw.record || typeof raw.record !== "object" || Array.isArray(raw.record)) throw new FarmOperationError("Daily record payload is required.", undefined, undefined, "dailyRecordPayloadIsRequired");
+  if (raw.usages !== undefined && raw.usages !== null && !Array.isArray(raw.usages)) throw new FarmOperationError("Inventory usages must be an array or null.", undefined, undefined, "inventoryUsagesMustBeAnArrayOrNull");
   const parsed = dailyRecordInput.safeParse(raw);
   if (!parsed.success) throw new FarmOperationError(parsed.error.issues[0]?.message ?? "Daily record input is invalid.");
   const value = parsed.data;
   if (hasManualFeedInput(value.record)) {
-    throw new FarmOperationError("Record feed intake and feed type in Today’s Feeding, then close the feeding day.");
+    throw new FarmOperationError("Record feed intake and feed type in Today’s Feeding, then close the feeding day.", undefined, undefined, "recordFeedIntakeAndFeedTypeInToday");
   }
   const {data, error} = await supabaseAdmin.rpc("save_daily_record_with_usage", {
     p_actor_id: context.userId,
@@ -142,20 +149,20 @@ export async function saveDailyRecordWithUsage(context: SalesContext, input: unk
         destination: `${flock?.flock_code ?? "Flock"} Daily Record · ${String(value.record.record_date ?? "selected date")}`,
         correction_route: `/app/daily-records${value.daily_record_id ? `?record=${value.daily_record_id}` : ""}`,
       },
-    });
+    }, "thisDailyRecordIsLockedRequestApprovalFor");
   }
   throw new FarmOperationError(error.message, databaseStatus(error.code));
 }
 
 export async function recordSale(context: SalesContext, input: unknown) {
-  if (!context.canView) throw new FarmOperationError("You do not have access to sales records.", 403);
-  if (!context.canMutate) throw new FarmOperationError("You do not have permission to create sales records.", 403);
+  if (!context.canView) throw new FarmOperationError("You do not have access to sales records.", 403, undefined, "youDoNotHaveAccessToSalesRecords");
+  if (!context.canMutate) throw new FarmOperationError("You do not have permission to create sales records.", 403, undefined, "youDoNotHavePermissionToCreateSales");
   const raw = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
   const parsed = saleInput.safeParse({...raw, quantity: legacyNumber(raw.quantity), unit_price: legacyNumber(raw.unit_price), paid_amount: legacyNumber(raw.paid_amount)});
   if (!parsed.success) throw new FarmOperationError(issueMessage(parsed.error));
   const value = parsed.data;
   const grossAmount = Math.round(value.quantity * value.unit_price * 100) / 100;
-  if (value.paid_amount < 0 || value.paid_amount > grossAmount) throw new FarmOperationError("Paid amount must be between zero and gross amount.");
+  if (value.paid_amount < 0 || value.paid_amount > grossAmount) throw new FarmOperationError("Paid amount must be between zero and gross amount.", undefined, undefined, "paidAmountMustBeBetweenZeroAndGross");
   const scope = await resolveSaleScope(context, {...value, require_farm: true});
   if ("error" in scope) throw new FarmOperationError(scope.error ?? "The selected sales scope is unavailable.");
   const {data, error} = await supabaseAdmin.from("daily_sales_records").insert({
@@ -174,7 +181,7 @@ export async function recordSale(context: SalesContext, input: unknown) {
 }
 
 export async function recordExpense(context: SalesContext, input: unknown) {
-  if (!context.canMutate) throw new FarmOperationError("Only farm managers can create operational cost entries.", 403);
+  if (!context.canMutate) throw new FarmOperationError("Only farm managers can create operational cost entries.", 403, undefined, "onlyFarmManagersCanCreateOperationalCostEntries");
   const raw = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
   const parsed = costInput.safeParse({
     ...raw,
@@ -190,10 +197,10 @@ export async function recordExpense(context: SalesContext, input: unknown) {
   let farmId = value.farm_id ?? null;
   if (value.warehouse_id) {
     if (!context.supportSessionId) {
-      if (!await canAccessWarehouse(context, value.warehouse_id)) throw new FarmOperationError("Farm access or explicit shared-store permission is required.", 403);
+      if (!await canAccessWarehouse(context, value.warehouse_id)) throw new FarmOperationError("Farm access or explicit shared-store permission is required.", 403, undefined, "farmAccessOrExplicitSharedStorePermissionIs");
     }
     const {data: warehouse} = await governanceAdmin.from("warehouses").select("branch_id,farm_id").eq("id", value.warehouse_id).eq("org_id", context.orgId).eq("status", "active").maybeSingle();
-    if (!warehouse) throw new FarmOperationError("Select an active warehouse in this organization.");
+    if (!warehouse) throw new FarmOperationError("Select an active warehouse in this organization.", undefined, undefined, "selectAnActiveWarehouseInThisOrganization");
     branchId = String(warehouse.branch_id);
     farmId = warehouse.farm_id ? String(warehouse.farm_id) : null;
   }
@@ -226,48 +233,48 @@ const FEED_TYPES = new Set(["starter_feed", "grower_pullet_feed", "layer_feed", 
 
 function objectInput(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new FarmOperationError("Invalid request body.");
+    throw new FarmOperationError("Invalid request body.", undefined, undefined, "invalidRequestBody");
   }
   return input as Record<string, unknown>;
 }
 
 export async function saveFeedSession(context: FeedContext, input: unknown) {
-  if (!context.canManage) throw new FarmOperationError("Only an operations manager can record feeding sessions.", 403);
+  if (!context.canManage) throw new FarmOperationError("Only an operations manager can record feeding sessions.", 403, undefined, "onlyAnOperationsManagerCanRecordFeedingSessions");
   const body = objectInput(input);
   const batchId = String(body.batchId ?? "");
   const flockId = String(body.flockId ?? "");
   const resolved = await resolveFeedBatch(context, batchId);
   if (!resolved.batch) throw new FarmOperationError(resolved.error ?? "Batch is unavailable.", 403);
   const {data: flock} = await feedAdmin.from("flocks").select("id").eq("id", flockId).eq("batch_id", batchId).eq("org_id", context.orgId).maybeSingle();
-  if (!flock) throw new FarmOperationError("Flock is not part of the selected batch.");
+  if (!flock) throw new FarmOperationError("Flock is not part of the selected batch.", undefined, undefined, "flockIsNotPartOfTheSelectedBatch");
   const sessionName = String(body.sessionName ?? "").trim();
   const recordDate = String(body.recordDate ?? "");
   const {data: closure} = await feedAdmin.from("feed_day_closures").select("id").eq("org_id", context.orgId).eq("flock_id", flockId).eq("record_date", recordDate).eq("status", "closed").maybeSingle();
-  if (closure) throw new FarmOperationError("Reopen the feeding day before changing its sessions.", 409);
+  if (closure) throw new FarmOperationError("Reopen the feeding day before changing its sessions.", 409, undefined, "reopenTheFeedingDayBeforeChangingItsSessions");
   const planned = Number(body.plannedFeedKg);
   const actual = body.actualFeedKg === null || body.actualFeedKg === "" ? null : Number(body.actualFeedKg);
   const feeders = Number(body.feedersCount);
   const status = String(body.status ?? "planned");
   const feedType = String(body.feedType ?? "");
   if (!sessionName || !/^\d{4}-\d{2}-\d{2}$/.test(recordDate) || !Number.isFinite(planned) || planned <= 0 || !Number.isInteger(feeders) || feeders <= 0) {
-    throw new FarmOperationError("Session name, date, positive plan, and feeder count are required.");
+    throw new FarmOperationError("Session name, date, positive plan, and feeder count are required.", undefined, undefined, "sessionNameDatePositivePlanAndFeederCount");
   }
-  if (actual !== null && (!Number.isFinite(actual) || actual < 0)) throw new FarmOperationError("Actual feed cannot be negative.");
+  if (actual !== null && (!Number.isFinite(actual) || actual < 0)) throw new FarmOperationError("Actual feed cannot be negative.", undefined, undefined, "actualFeedCannotBeNegative");
   if (!["planned", "completed", "missed"].includes(status) || (status === "completed" && actual === null)) {
-    throw new FarmOperationError("Completed sessions require actual feed.");
+    throw new FarmOperationError("Completed sessions require actual feed.", undefined, undefined, "completedSessionsRequireActualFeed");
   }
-  if (!FEED_TYPES.has(feedType)) throw new FarmOperationError("Select a valid feed type.");
+  if (!FEED_TYPES.has(feedType)) throw new FarmOperationError("Select a valid feed type.", undefined, undefined, "selectAValidFeedType");
   const feedItemId = String(body.feedItemId ?? "");
   const warehouseId = String(body.warehouseId ?? "");
-  if (status === "completed" && (!feedItemId || !warehouseId)) throw new FarmOperationError("Completed sessions require a feed item and warehouse.");
+  if (status === "completed" && (!feedItemId || !warehouseId)) throw new FarmOperationError("Completed sessions require a feed item and warehouse.", undefined, undefined, "completedSessionsRequireAFeedItemAndWarehouse");
   if (feedItemId || warehouseId) {
-    if (!await canAccessWarehouse(context, warehouseId)) throw new FarmOperationError("Farm access or explicit shared-store permission is required.", 403);
+    if (!await canAccessWarehouse(context, warehouseId)) throw new FarmOperationError("Farm access or explicit shared-store permission is required.", 403, undefined, "farmAccessOrExplicitSharedStorePermissionIs");
     const [{data: item}, {data: warehouse}] = await Promise.all([
       feedAdmin.from("inventory_items").select("id,unit").eq("id", feedItemId).eq("org_id", context.orgId).eq("category", "feed").maybeSingle(),
       feedAdmin.from("warehouses").select("id,branch_id").eq("id", warehouseId).eq("org_id", context.orgId).eq("branch_id", resolved.batch.branch_id).maybeSingle(),
     ]);
-    if (!item || !["kg", "kilogram", "kilograms"].includes(String(item.unit).toLowerCase())) throw new FarmOperationError("Select a feed inventory item measured in kilograms.");
-    if (!warehouse) throw new FarmOperationError("Select a warehouse in the batch branch.");
+    if (!item || !["kg", "kilogram", "kilograms"].includes(String(item.unit).toLowerCase())) throw new FarmOperationError("Select a feed inventory item measured in kilograms.", undefined, undefined, "selectAFeedInventoryItemMeasuredInKilograms");
+    if (!warehouse) throw new FarmOperationError("Select a warehouse in the batch branch.", undefined, undefined, "selectAWarehouseInTheBatchBranch");
   }
   const now = new Date().toISOString();
   const payload = {org_id: context.orgId, batch_id: batchId, flock_id: flockId, record_date: recordDate, session_name: sessionName, session_time: String(body.sessionTime ?? "") || null, feeders_count: feeders, planned_feed_kg: planned, actual_feed_kg: actual, notes: String(body.notes ?? "").trim() || null, feed_item_id: feedItemId || null, warehouse_id: warehouseId || null, feed_type: feedType as "starter_feed" | "grower_pullet_feed" | "layer_feed" | "broiler_feed" | "medicated_feed", status, completed_at: status === "completed" ? now : null, completed_by: status === "completed" ? context.userId : null, recorded_by: context.userId, updated_at: now};
@@ -277,25 +284,25 @@ export async function saveFeedSession(context: FeedContext, input: unknown) {
 }
 
 export async function voidFeedSession(context: FeedContext, input: unknown) {
-  if (!context.canManage) throw new FarmOperationError("Only an operations manager can remove feeding sessions.", 403);
+  if (!context.canManage) throw new FarmOperationError("Only an operations manager can remove feeding sessions.", 403, undefined, "onlyAnOperationsManagerCanRemoveFeedingSessions");
   const body = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
   const id = String(body.id ?? "");
   const batchId = String(body.batchId ?? "");
   const reason = String(body.reason ?? "").trim();
-  if (!id || !batchId || reason.length < 8) throw new FarmOperationError("Session, batch, and a void reason of at least eight characters are required.");
+  if (!id || !batchId || reason.length < 8) throw new FarmOperationError("Session, batch, and a void reason of at least eight characters are required.", undefined, undefined, "sessionBatchAndAVoidReasonOfAt");
   const resolved = await resolveFeedBatch(context, batchId);
   if (!resolved.batch) throw new FarmOperationError(resolved.error ?? "Batch is unavailable.", 403);
   const {data: session} = await feedAdmin.from("feeding_session_records").select("id,flock_id,record_date").eq("id", id).eq("batch_id", batchId).eq("org_id", context.orgId).maybeSingle();
-  if (!session) throw new FarmOperationError("Feeding session was not found.", 404);
+  if (!session) throw new FarmOperationError("Feeding session was not found.", 404, undefined, "feedingSessionWasNotFound");
   const {data: closure} = await feedAdmin.from("feed_day_closures").select("id").eq("org_id", context.orgId).eq("flock_id", session.flock_id).eq("record_date", session.record_date).eq("status", "closed").maybeSingle();
-  if (closure) throw new FarmOperationError("Reopen the feeding day before removing a session.", 409);
+  if (closure) throw new FarmOperationError("Reopen the feeding day before removing a session.", 409, undefined, "reopenTheFeedingDayBeforeRemovingASession");
   const {error} = await feedAdmin.from("feeding_session_records").update({voided_at: new Date().toISOString(), voided_by: context.userId, void_reason: reason} as never).eq("id", id).eq("org_id", context.orgId);
   if (error) throw new FarmOperationError(error.message);
   await recordAuditEvent(context, {eventType: "business_record.voided", operation: "update", entityTable: "feeding_session_records", entityId: id, reason, before: session, after: {voided: true}, farmId: String(resolved.batch.farm_id), flockId: String(session.flock_id), batchId});
 }
 
 export async function closeFeedDay(context: FeedContext, input: unknown) {
-  if (!context.canManage) throw new FarmOperationError("Only an operations manager can close a feeding day.", 403);
+  if (!context.canManage) throw new FarmOperationError("Only an operations manager can close a feeding day.", 403, undefined, "onlyAnOperationsManagerCanCloseAFeeding");
   const body = objectInput(input);
   const resolved = await resolveFeedBatch(context, String(body.batchId ?? ""));
   if (!resolved.batch) throw new FarmOperationError(resolved.error ?? "Batch is unavailable.", 403);
@@ -305,10 +312,10 @@ export async function closeFeedDay(context: FeedContext, input: unknown) {
 }
 
 export async function reopenFeedDay(context: FeedContext, input: unknown) {
-  if (!context.canManage) throw new FarmOperationError("Only an operations manager can reopen a feeding day.", 403);
+  if (!context.canManage) throw new FarmOperationError("Only an operations manager can reopen a feeding day.", 403, undefined, "onlyAnOperationsManagerCanReopenAFeeding");
   const body = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
   const reason = String(body.reason ?? "").trim();
-  if (!reason) throw new FarmOperationError("A reopen reason is required.");
+  if (!reason) throw new FarmOperationError("A reopen reason is required.", undefined, undefined, "aReopenReasonIsRequired");
   const resolved = await resolveFeedBatch(context, String(body.batchId ?? ""));
   if (!resolved.batch) throw new FarmOperationError(resolved.error ?? "Batch is unavailable.", 403);
   const {data, error} = await feedAdmin.rpc("reopen_feed_day", {p_actor_id: context.userId, p_flock_id: String(body.flockId ?? ""), p_record_date: String(body.recordDate ?? ""), p_reason: reason});
@@ -324,7 +331,7 @@ export type HealthOperationResult =
 
 export async function recordHealthEvidence(context: AccessContext, input: unknown): Promise<HealthOperationResult> {
   if (context.role !== "farm_manager" && !context.supportSessionId) {
-    throw new FarmOperationError("Only an assigned farm manager can record health evidence.", 403);
+    throw new FarmOperationError("Only an assigned farm manager can record health evidence.", 403, undefined, "onlyAnAssignedFarmManagerCanRecordHealth");
   }
   const body = input && typeof input === "object" && !Array.isArray(input) ? input as Record<string, unknown> : {};
   const vaccinationScheduleId = String(body.vaccination_schedule_id ?? "").trim();
@@ -334,10 +341,10 @@ export async function recordHealthEvidence(context: AccessContext, input: unknow
     const quantity = Number(body.quantity);
     const administeredOn = String(body.administered_on ?? "").trim();
     if (!itemId || !warehouseId || !Number.isFinite(quantity) || quantity <= 0 || !DATE.test(administeredOn)) {
-      throw new FarmOperationError("Vaccine item, warehouse, administered quantity, and actual administration date are required.");
+      throw new FarmOperationError("Vaccine item, warehouse, administered quantity, and actual administration date are required.", undefined, undefined, "vaccineItemWarehouseAdministeredQuantityAndActualAdministration");
     }
     const today = new Intl.DateTimeFormat("en-CA", {timeZone: "Africa/Addis_Ababa", year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
-    if (administeredOn > today) throw new FarmOperationError("The administration date cannot be in the future.");
+    if (administeredOn > today) throw new FarmOperationError("The administration date cannot be in the future.", undefined, undefined, "theAdministrationDateCannotBeInTheFuture");
     const {data, error} = await (governanceAdmin as any).rpc("complete_vaccination_with_inventory", {p_actor_id: context.userId, p_schedule_id: vaccinationScheduleId, p_item_id: itemId, p_warehouse_id: warehouseId, p_quantity: quantity, p_administered_on: administeredOn});
     if (error) throw new FarmOperationError(error.message, error.code === "42501" ? 403 : error.code === "55000" ? 423 : 400);
     await recordAuditEvent(context, {eventType: "vaccination.completed_with_inventory", operation: "insert", entityTable: "vaccination_events", entityId: vaccinationScheduleId, reason: "Completed vaccination and issued vaccine stock atomically.", after: data, warehouseId});
@@ -348,15 +355,15 @@ export async function recordHealthEvidence(context: AccessContext, input: unknow
   const eventDate = String(body.event_date ?? "");
   const eventType = String(body.event_type ?? "observation");
   if (!flockId || !DATE.test(eventDate) || !["disease", "treatment", "observation"].includes(eventType)) {
-    throw new FarmOperationError("Flock, date, and a valid event type are required.");
+    throw new FarmOperationError("Flock, date, and a valid event type are required.", undefined, undefined, "flockDateAndAValidEventTypeAre");
   }
   const {data: flock} = await governanceAdmin.from("flocks").select("farm_id").eq("id", flockId).eq("org_id", context.orgId).maybeSingle();
-  if (!flock || !(await canAccessFarm(context, String(flock.farm_id)))) throw new FarmOperationError("Active farm assignment is required.", 403);
+  if (!flock || !(await canAccessFarm(context, String(flock.farm_id)))) throw new FarmOperationError("Active farm assignment is required.", 403, undefined, "activeFarmAssignmentIsRequired");
   if (!context.supportSessionId) {
     const {data: operatingDay} = await governanceAdmin.from("farm_operating_days").select("status").eq("farm_id", flock.farm_id).eq("operating_date", eventDate).maybeSingle();
     if (operatingDay?.status === "locked") {
       const proposed = {flock_id: flockId, event_date: eventDate, event_type: eventType, description: String(body.description ?? "").trim() || null, diagnosis: String(body.diagnosis ?? "").trim() || null, treatment: String(body.treatment ?? "").trim() || null};
-      throw new FarmOperationError("This operating day is locked. Request a governed health correction instead.", 423, {governance: {request_type: "health_schedule", farm_id: String(flock.farm_id), reason: `Record the ${eventType} health evidence for ${eventDate} after the operating window closed.`, proposed_values: proposed, changed_fields: Object.keys(proposed), destination: `Health event on ${eventDate}`, correction_route: "/app/health"}});
+      throw new FarmOperationError("This operating day is locked. Request a governed health correction instead.", 423, {governance: {request_type: "health_schedule", farm_id: String(flock.farm_id), reason: `Record the ${eventType} health evidence for ${eventDate} after the operating window closed.`, proposed_values: proposed, changed_fields: Object.keys(proposed), destination: `Health event on ${eventDate}`, correction_route: "/app/health"}}, "thisOperatingDayIsLockedRequestAGoverned");
     }
   }
   const vetName = String(body.external_veterinarian_name ?? "").trim();
@@ -365,14 +372,14 @@ export async function recordHealthEvidence(context: AccessContext, input: unknow
   const attachment = String(body.attachment_url ?? "").trim();
   const recommendationStatus = String(body.recommendation_status ?? "").trim();
   const hasVetEvidence = Boolean(vetName || recommendation || reference || attachment || recommendationStatus);
-  if (hasVetEvidence && (!vetName || !recommendation)) throw new FarmOperationError("Veterinarian name and recommendation are required when external guidance is recorded.");
-  if (recommendationStatus && !["received", "planned", "implemented", "declined"].includes(recommendationStatus)) throw new FarmOperationError("Invalid recommendation status.");
-  if (recommendationStatus === "declined" && String(body.treatment ?? "").trim().length < 8) throw new FarmOperationError("Declined guidance requires an explanation in the action taken field.");
+  if (hasVetEvidence && (!vetName || !recommendation)) throw new FarmOperationError("Veterinarian name and recommendation are required when external guidance is recorded.", undefined, undefined, "veterinarianNameAndRecommendationAreRequiredWhenExternal");
+  if (recommendationStatus && !["received", "planned", "implemented", "declined"].includes(recommendationStatus)) throw new FarmOperationError("Invalid recommendation status.", undefined, undefined, "invalidRecommendationStatus");
+  if (recommendationStatus === "declined" && String(body.treatment ?? "").trim().length < 8) throw new FarmOperationError("Declined guidance requires an explanation in the action taken field.", undefined, undefined, "declinedGuidanceRequiresAnExplanationInTheAction");
   const inventoryItemId = String(body.inventory_item_id ?? "").trim() || null;
   const warehouseId = String(body.warehouse_id ?? "").trim() || null;
   const quantity = body.quantity == null || body.quantity === "" ? null : Number(body.quantity);
   if ((inventoryItemId || warehouseId || quantity !== null) && (!inventoryItemId || !warehouseId || quantity === null || !Number.isFinite(quantity) || quantity <= 0)) {
-    throw new FarmOperationError("Medicine item, warehouse, and administered quantity must be supplied together.");
+    throw new FarmOperationError("Medicine item, warehouse, and administered quantity must be supplied together.", undefined, undefined, "medicineItemWarehouseAndAdministeredQuantityMustBe");
   }
   const row = {org_id: context.orgId, flock_id: flockId, event_date: eventDate, event_type: eventType, description: String(body.description ?? "").trim() || null, diagnosis: String(body.diagnosis ?? "").trim() || null, treatment: String(body.treatment ?? "").trim() || null, attachment_url: attachment || null, vet_id: context.userId, external_veterinarian_name: vetName || null, veterinarian_recommendation: recommendation || null, veterinarian_reference: reference || null, veterinarian_attachment: attachment ? {url: attachment} : null, recommendation_status: recommendationStatus || null};
   if (inventoryItemId) {

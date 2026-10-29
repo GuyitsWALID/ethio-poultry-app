@@ -720,6 +720,7 @@ function visible(
 export async function getReconciliationDashboard(
   ctx: AccessContext,
   force = false,
+  display: {locale?: string; translate?: (key: string, values?: Record<string, string | number>) => string | undefined} = {},
 ) {
   const run = await ensureFreshReconciliation(ctx, force);
   const ids = await scopeIds(ctx);
@@ -803,6 +804,7 @@ export async function getReconciliationDashboard(
       warehouse_name: warehouseName,
       assigned_name: label(profilesRes.data, row.assigned_to, "full_name"),
       evidence_display: userFacingReconciliationEvidence(row.evidence, {
+        ...display,
         farmName: text(farmName),
         houseName: text(houseName),
         flockCode: text(flockCode),
