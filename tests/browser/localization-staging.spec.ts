@@ -73,7 +73,14 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
         for (const [url, heading] of routes) {
           await page.goto(url);
           await expect(page.getByRole("heading", {name: heading, exact: true}).first()).toBeVisible();
-          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+          const layout = await page.evaluate(() => ({
+            viewport: window.innerWidth,
+            width: document.documentElement.scrollWidth,
+            overflowing: Array.from(document.querySelectorAll("main *"))
+              .filter(element => element.getBoundingClientRect().right > window.innerWidth + 1)
+              .slice(0, 8).map(element => `${element.tagName}.${element.className}`),
+          }));
+          expect(layout.width, `${role} ${locale} ${url}: ${JSON.stringify(layout)}`).toBeLessThanOrEqual(layout.viewport + 1);
           await expect(page.locator("body")).not.toContainText(/(?:OperationUI|OperationCharts|RecordCheckGuidance|LegacyReports)\.[A-Za-z]/);
         }
       }
