@@ -58,3 +58,19 @@ Manager localization exposed a profile-read race that could revert an explicit
 language selection. Profile synchronization now runs once on mount and ignores
 late responses after a local selection. Fifteen focused tests and changed-file
 lint passed; the final signed-in rerun is still required.
+
+## Final automated staging result — 2026-10-30
+
+Release `64541f4` passed GitHub Quality gate and Cloudflare staging build.
+[Signed-in acceptance 41049975777](https://github.com/GuyitsWALID/ethio-poultry-app/actions/runs/41049975777)
+passed all six tests with no skips: two populated Reports comparisons, two
+History checks, and two bilingual operational-screen/tablet tests.
+Both roles passed English/Amharic switching, reload persistence, Ethiopian date
+controls, reporting tabs, keyboard/touch assertions and the sampled retained
+Approvals, Record Checks, Health and Sales screens. Test-account language
+preferences were restored. No business records or access grants were changed.
+
+Automated verification is complete for this localization release scope.
+This is not the full Task 8 release gate or a physical-device/screen-reader
+review. New terminology still needs partner acceptance; a dedicated bilingual
+Today recording journey was not part of this read-only staging run.
