@@ -37,7 +37,16 @@ Ethiopian date inputs, reload persistence and retained operational screens.
 Only the account language preference is changed and restored; the test does not
 record operations, grant access, alter rollout or generate paid AI analyses.
 
-Staging results are pending. Tasks 4.5–4.6 retain their final verification
+Release `e7933a6` passed GitHub Quality gate and Cloudflare staging deployment.
+Signed-in run [40880000027](https://github.com/GuyitsWALID/ethio-poultry-app/actions/runs/40880000027)
+passed populated Reports and History checks for both roles and CEO localization.
+Manager tablet acceptance caught stock-count form overflow in Record Checks.
+Diagnostic run 40881171696 confirmed 1503px content at a 1024px viewport;
+its CEO Amharic Approvals heading check also failed and remains subject to rerun.
+The follow-up uses tablet columns and shrinkable controls and translates the
+remaining Approvals queue/step captions. Eighteen focused tests passed.
+
+Final staging results are pending. Tasks 4.5–4.6 retain their final verification
 checkboxes until that evidence is available. New terminology is not represented
 as partner-reviewed; physical-device usability and Task 8 pilot evidence remain
 separate acceptance requirements.

@@ -4,6 +4,20 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
+test("governance steps and manager queues use translated labels", async () => {
+  const source = await read("../src/components/governance-desk.tsx");
+  for (const key of ["readyToFix", "returnedForChanges", "awaitingCEO", "differenceFoundStep", "managerProposesStep", "ceoAuthorizesStep", "managerFixesOnceStep"]) {
+    assert.ok(source.includes('ui("' + key + '")'), key);
+  }
+});
+
+test("physical stock count uses shrinkable controls and tablet columns", async () => {
+  const source = await read("../src/app/app/reconciliation/page.tsx");
+  assert.ok(source.includes("sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)"));
+  assert.ok(source.includes("[&>input]:min-w-0 [&>select]:min-w-0"));
+  assert.ok(!source.includes("lg:grid-cols-[1fr_1fr_.7fr_1.5fr_auto]"));
+});
+
 test("Alerts and notification settings use bilingual catalogs", async () => {
   const [alerts, settings] = await Promise.all([
     read("../src/app/app/alerts/page.tsx"),

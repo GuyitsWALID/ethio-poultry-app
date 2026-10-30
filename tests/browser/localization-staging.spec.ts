@@ -71,7 +71,8 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
           ["/app/sales", copy.OperationUI.turnEverySaleIntoCollectedCashAndProtectedMargin],
         ];
         for (const [url, heading] of routes) {
-          await page.goto(url);
+          const response = await page.goto(url);
+          expect(response?.status(), `${role} ${locale} ${url} document response`).toBe(200);
           await expect(page.getByRole("heading", {name: heading, exact: true}).first()).toBeVisible();
           const layout = await page.evaluate(() => ({
             viewport: window.innerWidth,
