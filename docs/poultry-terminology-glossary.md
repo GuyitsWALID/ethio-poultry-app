@@ -2,8 +2,15 @@
 
 Status: **Approved following poultry-partner review**
 Scope: Farm Manager Today workflow and its direct validation messages
-Glossary version: **2026-09-23-approved-1**
-Last updated: 2026-09-23
+Glossary version: **2026-10-30-approved-2**
+Last updated: 2026-10-30
+
+Full-review closure: on 2026-10-30 the product owner confirmed that the partner
+had reviewed and approved the complete localization, including the later
+operational and reporting additions. Previously pending terminology is now
+approved; future feedback will be handled as a new change. The older dated
+review records below are retained as history. This closes language review,
+not the separate bilingual Today recording or physical-device acceptance.
 
 This glossary favors short instructions that a Farm Manager can act on immediately. It deliberately avoids audit, accounting, and software terminology in the primary workflow. Technical terms remain available in advanced history views.
 

@@ -74,3 +74,25 @@ Automated verification is complete for this localization release scope.
 This is not the full Task 8 release gate or a physical-device/screen-reader
 review. New terminology still needs partner acceptance; a dedicated bilingual
 Today recording journey was not part of this read-only staging run.
+
+## Owner-confirmed review closure and responsive follow-up — 2026-10-30
+
+The product owner subsequently confirmed complete partner review and approval.
+Language/terminology review is closed, version `2026-10-30-approved-2`; future
+feedback will be new work. The earlier pending-review notes above are historical.
+
+Amharic date fields now use their own container width: day/month/year stack
+when narrow and align in one row only when at least 20rem is available.
+History and Farm performance allocate wider Amharic filter columns; English
+native dates and Gregorian values are unchanged. The real component with the
+compiled application CSS passed browser assertions at 375/768/1024/1440px
+and in a 180px embedded container (48px minimum controls, no page overflow).
+Ten catalog/calendar/approval tests also passed.
+
+The remaining bilingual Today acceptance is an authorized recording journey
+in English and Amharic, covering contextual inputs, conditional validation,
+successful saves and next-card progression, reload/read-back, saved summaries
+and Finish day blockers/closure. It must use disposable test records or a local
+fixture, not modify a real operating day merely for acceptance. Offline recovery
+and synchronization language states should be included when the offline path
+is exercised. This is separate from partner review and read-only report checks.

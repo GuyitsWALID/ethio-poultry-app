@@ -1,12 +1,13 @@
 # Tasks
 
-## Current completion boundary — 2026-10-24
+## Current completion boundary — 2026-10-30
 
 Implementation is not the same as pilot certification. Today, offline recovery,
 shared warehouse access, Flocks, History and Farm performance are implemented.
 The owner confirmed the deployed Feed/Sales repair and the offline staging flow.
-Task 4.6's legacy/configuration/correction localization implementation is complete;
-its integrated verification is deferred. Release acceptance and the real
+Task 4.6's localization implementation, automated staging verification and partner
+review are complete. The owner confirmed full partner approval on 2026-10-30.
+The bilingual Today recording journey remains open under 4.5. Release acceptance and the real
 seven-day pilot remain Task 8.
 See `completion-checkpoint.md` for current evidence and remaining work. Older
 dated notes below are retained as history, not renewed implementation blockers.
@@ -49,7 +50,8 @@ dated notes below are retained as history, not renewed implementation blockers.
   - [x] Core Today/navigation/notification catalog migration and stable message mappings implemented. On 2026-10-24, bird, health and embedded saves were aligned with the full shared error map; assigned-fix status badges now reuse translated notification statuses.
   - [x] Add a CI-enforced AST regression for visible Today text, accessible labels and static translation keys; preserve the existing English/Amharic key-parity and Ethiopian-calendar tests.
   - [ ] Final rebuilt signed-in translated browser acceptance for the current integrated release. Earlier scoped tablet/browser evidence remains valid history but is not a new full-release sign-off.
-- [ ] 4.6 Migrate the remaining CEO/Farm Manager Feed, Health, Inventory, Sales, Alerts, Governance, Record Checks, and Reports interface text before broad bilingual release; verify missing-key checks and Amharic expansion layouts.
+- [x] 4.6 Migrate the remaining CEO/Farm Manager Feed, Health, Inventory, Sales, Alerts, Governance, Record Checks, and Reports interface text before broad bilingual release; verify missing-key checks and Amharic expansion layouts.
+  - 2026-10-30 closure: the product owner confirmed complete partner review and approval. Automated staging acceptance is recorded in run `41049975777`. Future language feedback is new follow-up work; earlier deferred-review notes below are historical.
   - 2026-10-29 implementation phase: migrated operational controls, dynamic states, auxiliary panels and compatibility Reports; added explicit catalogs for generated analytics/mortality explanations, all 22 Record Check rules, exact-source correction guidance, authoritative operation validation, Feed configuration validation and AI error codes. Amharic dates reuse the Ethiopian calendar; wire dates, status codes, calculations and access checks remain unchanged. New AI analyses are language-scoped in their evidence hash; frozen analyses and original names/notes/evidence are not rewritten. Implementation checkboxes below do not certify the release: new tests, type/lint/build checks, signed-in browser acceptance and partner terminology review remain deferred at the user's request. No staging deployment or production approval is implied.
   - [x] Alerts, Action Desk, and notification preferences.
     - [x] Inventory and warehouse workflows.

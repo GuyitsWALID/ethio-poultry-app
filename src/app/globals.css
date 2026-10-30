@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Ethiopian dates need room for the month name, not three squeezed selects.
+   Query the field's actual width: forms can be narrow even on a wide screen. */
+.operation-date-input { container-type: inline-size; width: 100%; align-self: start; }
+.operation-date-parts { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; }
+.operation-date-control { box-sizing: border-box; width: 100%; min-width: 0; min-height: 48px; }
+@container (min-width: 20rem) {
+  .operation-date-parts { grid-template-columns: minmax(4.5rem, .75fr) minmax(7rem, 1.4fr) minmax(6rem, 1fr); }
+}
+html[lang="am"] .performance-filter-grid,
+html[lang="am"] .history-filter-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+}
+.performance-filter-grid > label,
+.history-filter-grid > label { min-width: 0; align-self: start; }
+html[lang="am"] .history-filter-grid > div { grid-column: 1 / -1; }
+
 @layer components {
   .admin-input {
     @apply h-11 w-full rounded-xl border bg-white px-3 text-sm outline-none transition;

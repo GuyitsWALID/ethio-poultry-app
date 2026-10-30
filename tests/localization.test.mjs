@@ -87,9 +87,10 @@ test("the terminology review manifest covers every manager-facing Today message"
 
 test("partner approval is recorded explicitly with its reviewed version", () => {
   assert.equal(terminologyReview.status, "approved");
-  assert.equal(terminologyReview.version, "2026-09-23-approved-1");
+  assert.equal(terminologyReview.version, "2026-10-30-approved-2");
   assert.equal(terminologyReview.reviewer, "product_owner_poultry_partner");
-  assert.equal(terminologyReview.reviewedAt, "2026-09-23");
+  assert.equal(terminologyReview.reviewedAt, "2026-10-30");
+  assert.equal(pendingTerminologyReviewKeys.length, 0);
   assert.deepEqual(terminologyReview.pendingReviewMessageKeys, pendingTerminologyReviewKeys);
   assert(pendingTerminologyReviewKeys.every((key) => managerTodayMessageKeys.includes(key)));
   assert(pendingTerminologyReviewKeys.every((key) => !terminologyReview.messageKeys.includes(key)));

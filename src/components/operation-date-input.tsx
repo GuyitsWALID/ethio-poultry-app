@@ -48,11 +48,11 @@ export function OperationDateInput({value, defaultValue, onChange, className, mi
       if (canonicalInput.current) {canonicalInput.current.value = ""; onChange?.({...event, target: canonicalInput.current, currentTarget: canonicalInput.current} as unknown as ChangeEvent<HTMLInputElement>);}
     }
   };
-  const controlClass = `${className ?? "rounded-xl border border-sand-300 px-2"} min-h-11 min-w-0 w-full`;
+  const controlClass = `${className ?? "rounded-xl border border-sand-300 px-2"} operation-date-control min-h-12 min-w-0 w-full`;
   const locked = disabled || readOnly;
-  return <span role="group" aria-label={props["aria-label"] ?? t("ethiopian")} className="grid min-w-0 gap-1">
+  return <span role="group" aria-label={props["aria-label"] ?? t("ethiopian")} className="operation-date-input grid min-w-0 gap-1">
     <input ref={canonicalInput} type="hidden" name={name} value={error ? "" : iso ?? ""} disabled={disabled}/>
-    <span className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)] gap-1">
+    <span className="operation-date-parts">
       <select id={id} aria-label={t("day")} aria-invalid={Boolean(error)} required={required} disabled={locked} value={active.day} onChange={(event) => update("day", event)} className={controlClass}><option value="">{t("day")}</option>{Array.from({length: Math.max(days, Number(active.day) || 0)}, (_, index) => <option key={index + 1} value={index + 1} disabled={index + 1 > days}>{index + 1}</option>)}</select>
       <select aria-label={t("month")} required={required} disabled={locked} value={active.month} onChange={(event) => update("month", event)} className={controlClass}><option value="">{t("month")}</option>{months.map((month, index) => <option key={index + 1} value={index + 1}>{month}</option>)}</select>
       <select ref={yearInput} aria-label={t("year")} aria-invalid={Boolean(error)} required={required} disabled={locked} value={active.year} onChange={(event) => update("year", event)} className={controlClass}><option value="">{t("year")}</option>{Array.from({length: Math.max(0, maxYear - minYear + 1)}, (_, index) => <option key={minYear + index} value={minYear + index}>{minYear + index}</option>)}</select>

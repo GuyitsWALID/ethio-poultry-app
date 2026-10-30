@@ -1,4 +1,4 @@
-export const TERMINOLOGY_GLOSSARY_VERSION = "2026-09-23-approved-1" as const;
+export const TERMINOLOGY_GLOSSARY_VERSION = "2026-10-30-approved-2" as const;
 
 export const managerTodayMessageKeys = [
   "Common.language",
@@ -318,58 +318,14 @@ export const managerTodayMessageKeys = [
   "Errors.sharedStorePermission",
 ] as const;
 
-export const pendingTerminologyReviewKeys = [
-  "Navigation.performance",
-  "Navigation.history",
-  "Navigation.reports",
-  "Navigation.more",
-  "Navigation.approvals",
-  "Navigation.templates",
-  "Navigation.recordChecks",
-  "Today.offline.loadingDraft",
-  "Today.offline.recovered",
-  "Today.offline.expired",
-  "Today.offline.conflict",
-  "Today.offline.discardConfirm",
-  "Today.offline.reviewServer",
-  "Today.offline.needsAttention",
-  "Today.offline.waiting",
-  "Today.offline.resourcePending",
-  "Today.offline.birdHelp",
-  "Today.offline.blocked",
-  "Today.offline.retry",
-  "Today.closedFlockReadOnly",
-  "Errors.farmAccess",
-  "Errors.sharedStorePermission",
-  "Today.embedded.addFeeding",
-  "Today.embedded.editFeeding",
-  "Today.embedded.cancelFeeding",
-  "Today.embedded.feedingNumber",
-  "Today.embedded.feedingResult",
-  "Today.embedded.fedHelp",
-  "Today.embedded.missedHelp",
-  "Today.birdCheck.help",
-  "Today.birdCheck.healthEntry",
-  "Today.birdCheck.legacyMovements",
-  "Today.embedded.healthModes.none",
-  "Today.embedded.healthModes.cull",
-  "Today.embedded.healthChoicesHelp",
-  "Today.embedded.recordedLosses",
-  "Today.embedded.cullCount",
-  "Today.embedded.cullReason",
-  "Today.embedded.saveLoss",
-  "Today.embedded.lossSaved",
-  "Today.embedded.startBirdCheckFirst",
-  "Today.embedded.deathCauses.natural",
-  "Today.embedded.deathCauses.illness",
-  "Today.embedded.deathCauses.unknown",
-] as const;
+// Product owner confirmed full partner review in chat on 2026-10-30.
+export const pendingTerminologyReviewKeys: readonly string[] = [];
 
 export const terminologyReview = {
   version: TERMINOLOGY_GLOSSARY_VERSION,
   status: "approved",
   reviewer: "product_owner_poultry_partner",
-  reviewedAt: "2026-09-23",
+  reviewedAt: "2026-10-30",
   sourceDocument: "docs/poultry-terminology-glossary.md",
   messageKeys: managerTodayMessageKeys.filter((key) => !(pendingTerminologyReviewKeys as readonly string[]).includes(key)),
   pendingReviewMessageKeys: pendingTerminologyReviewKeys,
