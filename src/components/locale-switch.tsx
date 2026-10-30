@@ -2,7 +2,7 @@
 
 import { Languages } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { setDeviceLocale } from "@/i18n/locale-provider";
 import { isAppLocale, type AppLocale } from "@/i18n/locale";
@@ -14,6 +14,7 @@ export function LocaleSwitch({ viewerRole }: { viewerRole: ActiveRole | null }) 
   const activeLocale = useLocale() as AppLocale;
   const t = useTranslations("Common");
   const [role, setRole] = useState<string | null>(viewerRole);
+  const selectedLocally = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -22,18 +23,20 @@ export function LocaleSwitch({ viewerRole }: { viewerRole: ActiveRole | null }) 
       .then((context) => {
         if (!context) return;
         if (context.role) setRole(context.role);
-        if (isAppLocale(context.preferredLocale) && context.preferredLocale !== activeLocale) {
+        // A delayed profile read must never undo the user's newer selection.
+        if (!selectedLocally.current && isAppLocale(context.preferredLocale)) {
           setDeviceLocale(context.preferredLocale);
         }
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [activeLocale]);
+  }, []);
 
   if (role !== "ceo" && role !== "farm_manager") return null;
 
   const selectLocale = (locale: AppLocale) => {
     if (locale === activeLocale) return;
+    selectedLocally.current = true;
     setDeviceLocale(locale);
     void fetch("/api/me/locale", {
       method: "PATCH",

@@ -50,3 +50,11 @@ Final staging results are pending. Tasks 4.5–4.6 retain their final verificati
 checkboxes until that evidence is available. New terminology is not represented
 as partner-reviewed; physical-device usability and Task 8 pilot evidence remain
 separate acceptance requirements.
+
+Follow-up `f393aa7` passed Quality gate and Cloudflare deployment. Signed-in
+run [41047037582](https://github.com/GuyitsWALID/ethio-poultry-app/actions/runs/41047037582)
+again passed Reports and History for both roles, plus CEO localization.
+Manager localization exposed a profile-read race that could revert an explicit
+language selection. Profile synchronization now runs once on mount and ignores
+late responses after a local selection. Fifteen focused tests and changed-file
+lint passed; the final signed-in rerun is still required.

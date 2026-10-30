@@ -4,6 +4,13 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
+test("delayed profile locale cannot overwrite a newer explicit language choice", async () => {
+  const source = await read("../src/components/locale-switch.tsx");
+  assert.match(source, /!selectedLocally\.current && isAppLocale/);
+  assert.ok(source.indexOf("selectedLocally.current = true") < source.indexOf("setDeviceLocale(locale)"));
+  assert.doesNotMatch(source, /}, \[activeLocale\]\)/);
+});
+
 test("governance steps and manager queues use translated labels", async () => {
   const source = await read("../src/components/governance-desk.tsx");
   for (const key of ["readyToFix", "returnedForChanges", "awaitingCEO", "differenceFoundStep", "managerProposesStep", "ceoAuthorizesStep", "managerFixesOnceStep"]) {
