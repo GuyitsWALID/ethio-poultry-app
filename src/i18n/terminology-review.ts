@@ -1,6 +1,8 @@
 export const TERMINOLOGY_GLOSSARY_VERSION = "2026-10-30-approved-2" as const;
 
 export const managerTodayMessageKeys = [
+  "Today.birdCheck.sources.placement",
+  "Today.birdCheck.sources.baseline",
   "Common.language",
   "Common.english",
   "Common.amharic",

@@ -31,6 +31,7 @@ type Draft = { requestType: string; farmId: string; warehouseId: string; sourceT
 
 const emptyDraft: Draft = { requestType: "locked_correction", farmId: "", warehouseId: "", sourceTable: "", sourceId: "", sourceVersion: "", destination: "", correctionRoute: "", findingId: "", sourceChoice: "", reason: "", referenceLabel: "", referenceUrl: "", values: [] };
 const requestLabels: Record<string, string> = {
+  recording_start: "recordingStartingPoint",
   batch_create: "createBatchCycle", batch_archive: "archiveBatchCycle", flock_place: "placeFlock", flock_transfer: "transferFlock",
   flock_close: "closeFlock", flock_archive: "archiveFlock", feed_template: "feedTemplate", breed_target: "breedTarget",
   health_schedule: "healthSchedule", warning_threshold: "warningThresholds", locked_correction: "lockedRecordCorrection", void_record: "voidARecord",

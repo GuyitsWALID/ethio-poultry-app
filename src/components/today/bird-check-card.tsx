@@ -12,6 +12,7 @@ import type {AppLocale} from "@/i18n/locale";
 import type {TodayFlockContext, TodayTask} from "@/lib/today-workspace/contracts";
 import {assessBirdCheck} from "@/lib/today-workspace/bird-check";
 import {TaskDraftScope, useDraftSubmit,useTodayOffline} from "@/components/today/offline-context";
+import {RecordingStartForm} from "@/components/today/recording-start-form";
 
 type BirdCheckProps = {
   flock: TodayFlockContext; task: TodayTask; farmId: string; workDate: string;
@@ -48,6 +49,7 @@ function BirdCheckContent({flock, task, farmId, workDate, online, expanded, onTo
         farm_id: farmId, flock_id: flock.id, work_date: workDate,
         payload: {daily_record_id: null, record: {
           record_date: workDate, opening_birds: initial.openingBirds, closing_birds: initial.openingBirds,
+          _today_opening: {source: initial.openingSource, count: initial.openingBirds},
           deaths: 0, culls: 0, transfers_in: 0, transfers_out: 0, other_removals: 0,
         }, usages: null},
       });
@@ -67,6 +69,7 @@ function BirdCheckContent({flock, task, farmId, workDate, online, expanded, onTo
       {flock.canRecord === false ? <p className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">{t("closedFlockReadOnly")}</p> : null}
       <div className="rounded-xl bg-forest-900 p-4 text-white"><span className="text-xs text-sand-100/70">{t("birdCheck.opening")}</span><div className="mt-1 flex flex-wrap items-baseline justify-between gap-2"><strong className="text-2xl tabular-nums">{initial.openingBirds === null ? "—" : formatNumber(initial.openingBirds, locale)}</strong><span className="text-xs text-sand-100/75">{t(`birdCheck.sources.${initial.openingSource}`)}</span></div></div>
       {!openingReady ? <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{t("birdCheck.missingOpening")} <Link href={correctionHref} className="font-semibold underline">{t("birdCheck.openRecord")}</Link></p> : null}
+      {!openingReady && !initial.dailyRecordId && flock.canRecord !== false ? <RecordingStartForm farmId={farmId} flockId={flock.id} workDate={workDate} eggProducing={flock.type === "layer" || flock.type === "parent_stock"} online={online}/> : null}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-sand-200 p-3"><span className="text-xs text-forest-600">{t("birdCheck.deaths")}</span><strong className="mt-1 block text-xl">{formatNumber(initial.deaths, locale)}</strong></div>
         <div className="rounded-xl border border-sand-200 p-3"><span className="text-xs text-forest-600">{t("birdCheck.culls")}</span><strong className="mt-1 block text-xl">{formatNumber(initial.culls, locale)}</strong></div>

@@ -1,4 +1,29 @@
 {
+  "RecordingStart": {
+    "title": "Establish the recording starting point",
+    "help": "For a farm already operating before these records began. Count the birds and any existing eggs. The CEO must approve these exact counts; earlier history and placement dates are not changed.",
+    "date": "Start of recording day",
+    "birds": "Live birds physically counted",
+    "eggs": "Unsold eggs already held at the start of this day",
+    "eggsHelp": "Enter a confirmed zero if none were held. Do not include eggs produced later today.",
+    "reference": "Supporting count sheet or reference",
+    "reason": "Why earlier reliable records are unavailable",
+    "send": "Send starting counts for CEO approval",
+    "sending": "Sending request…",
+    "submitted": "Request submitted. After CEO approval, apply it from Approvals, then refresh Today.",
+    "openApproval": "Open this approval request",
+    "onlineRequired": "Reconnect to request CEO approval. Existing daily drafts are preserved.",
+    "errors": {
+      "START_DATE_INVALID": "Choose a date from placement through today.",
+      "START_ALREADY_ESTABLISHED": "Starting evidence already exists. Review the exact records in History instead.",
+      "START_HAS_RECORDS": "This day or a later day already has records. Request the exact correction instead.",
+      "START_PREVIOUS_CLOSE_AVAILABLE": "The preceding closing count is available. Refresh Today or correct that exact record.",
+      "START_EGGS_REQUIRED": "Confirm the existing egg count, including zero when none were held.",
+      "START_EGGS_NOT_APPLICABLE": "Opening egg stock does not apply to this flock type.",
+      "START_SCOPE_CHANGED": "The flock assignment changed. Refresh before requesting approval.",
+      "FAILED": "The request could not be confirmed. Check Approvals before retrying; your daily records were not changed."
+    }
+  },
   "OperationRemainder": {
     "cleanup": "Farm cleanup",
     "weightRecorded": "Weight sample recorded",
@@ -1262,6 +1287,7 @@
     "awaitingCEO": "Awaiting CEO",
     "returnedForChanges": "Returned for changes",
     "readyToFix": "Ready to fix",
+    "recordingStartingPoint": "Recording starting point",
     "differenceFoundStep": "Difference found",
     "managerProposesStep": "Manager proposes",
     "ceoAuthorizesStep": "CEO authorizes",
@@ -2032,6 +2058,11 @@
       "transfers_out": "Birds moved out",
       "other_removals": "Other departures",
       "normal_eggs": "Good eggs",
+      "effective_date": "Recording start date",
+      "live_birds": "Physically counted live birds",
+      "opening_eggs": "Unsold eggs at the start of the day",
+      "previous_live_birds": "Previously recorded live birds",
+      "supporting_reference": "Supporting count reference",
       "broken_eggs": "Broken eggs",
       "dirty_eggs": "Dirty eggs",
       "total_eggs": "Total eggs",
@@ -2920,6 +2951,8 @@
       "sources": {
         "daily_record": "Saved on today’s record",
         "previous_close": "From the previous closing count",
+        "placement": "From the verified placement count",
+        "baseline": "From the CEO-approved recording starting count",
         "flock_current_count": "From the flock’s current count",
         "missing": "No reliable opening count"
       },

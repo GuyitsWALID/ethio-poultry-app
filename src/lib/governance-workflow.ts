@@ -9,8 +9,9 @@ import { recordAuditEvent } from "@/lib/audit-ledger";
 import {loadCycleContext, prepareCycleProposal, cycleSubmissionHash, recoverCycleSubmission} from "@/lib/flock-lifecycle/cycles";
 import {addisOperatingDate} from "@/lib/flock-lifecycle/server";
 import {loadArchivedCorrectionContext, prepareArchivedCorrection} from "@/lib/flock-lifecycle/archived-corrections";
+import {prepareRecordingStart} from "@/lib/recording-start";
 
-const requestTypes = ["batch_create","batch_archive","flock_place","flock_transfer","flock_close","flock_archive","feed_template","breed_target","health_schedule","warning_threshold","locked_correction","void_record","egg_opening_balance","sales_unit_conversion","batch_cycle_create","batch_cycle_close","archived_cycle_correction"] as const;
+const requestTypes = ["batch_create","batch_archive","flock_place","flock_transfer","flock_close","flock_archive","feed_template","breed_target","health_schedule","warning_threshold","locked_correction","void_record","egg_opening_balance","sales_unit_conversion","batch_cycle_create","batch_cycle_close","archived_cycle_correction","recording_start"] as const;
 const sourceTables = new Set(["flocks","batches","batch_cycles","feed_control_settings","daily_farm_records","daily_sales_records","health_events","vaccination_events","feeding_session_records","biosecurity_checks","batch_weight_check_tasks"]);
 const db = governanceAdmin as any;
 
@@ -109,6 +110,7 @@ function readableSourceLabel(table:string|null,record:Row|null,maps:Map<string,s
 }
 
 export async function submitGovernanceRequest(ctx:AccessContext,input:GovernanceInput){
+  if(input.request_type==="recording_start") input=await prepareRecordingStart(ctx,input);
   const cycleRequest=input.request_type==="batch_cycle_create"||input.request_type==="batch_cycle_close"||input.request_type==="flock_transfer"||input.request_type==="archived_cycle_correction";
   const cycleHash=cycleRequest?await cycleSubmissionHash(input):null;
   if(cycleHash){const existing=await recoverCycleSubmission(ctx,input,cycleHash);if(existing)return existing;input=input.request_type==="archived_cycle_correction"?await prepareArchivedCorrection(ctx,input):await prepareCycleProposal(ctx,input);}

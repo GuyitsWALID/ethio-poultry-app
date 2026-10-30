@@ -24,6 +24,24 @@ const batch = { id:"batch-1", farmId:"farm-1", houseId:"house-1", totalCount:100
 const flock = { id:"flock-1", code:"F-1", status:"active", farmId:"farm-1", houseId:"house-1", batchId:"batch-1", placementDate:"2026-08-01", initialCount:100, currentCount:99 };
 const daily = { id:"daily-1", flockId:"flock-1", recordDate:"2026-08-09", openingBirds:100, closingBirds:99, deaths:2, culls:0, transfersIn:0, transfersOut:0, otherRemovals:0, totalEggs:100, normalEggs:90, brokenEggs:5, dirtyEggs:4, feedKg:8, updatedAt:"2026-08-09T15:00:00Z", recordedBy:"manager-1" };
 
+test("approved opening eggs replace pre-start custody, not add to all earlier production", () => {
+  const sources = input({farms:[farm],houses:[house],batches:[batch],flocks:[{...flock,currentCount:98}],
+    daily:[{...daily,id:"old",recordDate:"2026-08-04",normalEggs:1000},{...daily,closingBirds:98,normalEggs:10}],
+    recordingStarts:[{flockId:flock.id,effectiveDate:"2026-08-09",liveBirds:98}],
+    eggOpeningBalances:[{flockId:flock.id,effectiveDate:"2026-08-09",quantity:5}],
+    conversions:[{category:"egg",unit:"egg",multiplier:1}],
+    sales:[{id:"before",flockId:flock.id,farmId:farm.id,saleDate:"2026-08-05",category:"egg",label:"Earlier sale",quantity:1000,unit:"egg",grossAmount:1000},
+      {id:"after",flockId:flock.id,farmId:farm.id,saleDate:"2026-08-09",category:"egg",label:"Current sale",quantity:20,unit:"egg",grossAmount:20}]});
+  const finding = engine.evaluateOperationalReconciliation(sources).find(row=>row.ruleCode==="EGG_SALES_EXCEED_PRODUCTION");
+  assert.equal(finding.expectedValue,15);
+  assert.equal(finding.recordedValue,20);
+  const before = engine.evaluateOperationalReconciliation({...sources,asOfDate:"2026-08-08",daily:[sources.daily[0]],sales:[sources.sales[0]]});
+  assert(before.some(row=>row.ruleCode==="EGG_OPENING_BALANCE_UNAVAILABLE"));
+  assert(before.some(row=>row.ruleCode==="FLOCK_CURRENT_COUNT_MISMATCH"));
+  const after = engine.evaluateOperationalReconciliation({...sources,daily:[sources.daily[0]]});
+  assert(!after.some(row=>row.ruleCode==="FLOCK_CURRENT_COUNT_MISMATCH"));
+});
+
 test("approved movement chain preserves original batch without hiding invalid destination ownership",()=>{
   const movedHouse={...house,id:'empty-destination'};
   const sources={farms:[farm],houses:[house,movedHouse],batches:[batch],flocks:[{...flock,houseId:movedHouse.id,verifiedMovementChain:true}]};

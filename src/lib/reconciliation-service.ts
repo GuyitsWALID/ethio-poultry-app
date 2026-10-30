@@ -186,6 +186,7 @@ export async function ensureFreshReconciliation(
       operatingDayRows,
       correctionRows,
       openingBalanceRows,
+      recordingStartRows,
     ] = await Promise.all([
       allRows<Row>((a, b) =>
         governanceAdmin
@@ -290,6 +291,7 @@ export async function ensureFreshReconciliation(
           .eq("org_id", ctx.orgId)
           .range(a, b),
       ),
+      allRows<Row>((a,b)=>governanceAdmin.from("flock_recording_starts").select("flock_id,effective_date,live_birds").eq("org_id",ctx.orgId).lte("effective_date",asOf).order("flock_id").range(a,b)),
     ]);
     const flocks: FlockInput[] = flockRows.map((row) => ({
       id: String(row.id),
@@ -415,6 +417,7 @@ export async function ensureFreshReconciliation(
     for (const flock of flocks) flock.verifiedMovementChain = verified.has(flock.id);
     const drafts = evaluateOperationalReconciliation({
       asOfDate: asOf,
+      recordingStarts: recordingStartRows.map(row=>({flockId:String(row.flock_id),effectiveDate:String(row.effective_date),liveBirds:Number(row.live_birds)})),
       daily,
       flocks,
       farms: farmRows.map(

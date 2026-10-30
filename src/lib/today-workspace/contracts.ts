@@ -343,7 +343,7 @@ export type TodayFlockContext = {
   birdCheck: {
     dailyRecordId: string | null;
     openingBirds: number | null;
-    openingSource: "daily_record" | "previous_close" | "flock_current_count" | "missing";
+    openingSource: "daily_record" | "previous_close" | "baseline" | "placement" | "flock_current_count" | "missing";
     closingBirds: number | null;
     deaths: number;
     culls: number;

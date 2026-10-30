@@ -9,6 +9,7 @@ import {
 } from "./contracts.ts";
 import {assessBirdCheck} from "./bird-check.ts";
 import {hasTaskEvidence} from "./task-evidence.ts";
+import {resolveBirdOpening} from "./opening-source.ts";
 
 type Row = Record<string, unknown>;
 
@@ -43,6 +44,9 @@ export type TodayWorkspaceData = {
     placementDate: string;
     ageAtPlacementDays: number | null;
     currentCount: number;
+    initialCount?: number | null;
+    previousRecordDate?: string | null;
+    recordingStart?: {effectiveDate: string; liveBirds: number} | null;
     completedAt?: string | null;
     dailyRecord: null | {
       id: string;
@@ -87,12 +91,7 @@ export function deriveTodayWorkspace(
   const flocks: TodayFlockContext[] = data.flocks.map((flock) => {
     const layer = flock.type === "layer" || flock.type === "parent_stock";
     const daily = flock.dailyRecord;
-    const openingBirds = daily?.openingBirds ?? flock.previousClosingBirds ?? null;
-    const openingSource = daily?.openingBirds !== null && daily?.openingBirds !== undefined
-      ? "daily_record" as const
-      : flock.previousClosingBirds !== null
-        ? "previous_close" as const
-        : "missing" as const;
+    const {openingBirds, source: openingSource} = resolveBirdOpening({...flock, workDate: selection.workDate});
     const birdAssessment = assessBirdCheck({
       openingBirds,
       closingBirds: daily?.closingBirds ?? null,
@@ -262,7 +261,7 @@ export async function loadTodayWorkspace(
   }
 
   const flocksResult = await governanceAdmin.from("flocks")
-    .select("id,flock_code,flock_type,batch_id,house_id,placement_date,age_at_placement_days,current_count,completed_at")
+    .select("id,flock_code,flock_type,batch_id,house_id,placement_date,age_at_placement_days,initial_count,current_count,completed_at")
     .eq("org_id", context.orgId)
     .eq("farm_id", selection.farmId)
     // Match flock_operates_on at atomic server close: an archived identity still
@@ -284,7 +283,7 @@ export async function loadTodayWorkspace(
   const warehouseIds = (warehouseScopeResult.data ?? []).map((row: Row) => String(row.id));
 
   const empty = Promise.resolve({data: [] as Row[], error: null});
-  const [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, operatingRevision] = await Promise.all([
+  const [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, operatingRevision, starts] = await Promise.all([
     houseIds.length ? governanceAdmin.from("houses").select("id,name").eq("org_id", context.orgId).in("id", houseIds) : empty,
     batchIds.length ? governanceAdmin.from("batches").select("id,batch_code").eq("org_id", context.orgId).in("id", batchIds) : empty,
     flockIds.length ? governanceAdmin.from("daily_farm_records").select("id,flock_id,opening_birds,closing_birds,deaths,culls,transfers_in,transfers_out,other_removals,normal_eggs,broken_eggs,dirty_eggs,total_eggs,water_consumed_liters,updated_at").eq("org_id", context.orgId).in("flock_id", flockIds).eq("record_date", selection.workDate).is("voided_at", null) : empty,
@@ -301,12 +300,14 @@ export async function loadTodayWorkspace(
     governanceAdmin.from("cost_entries").select("id").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("entry_date", selection.workDate),
     governanceAdmin.from("farm_operating_days").select("status").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("operating_date", selection.workDate).maybeSingle(),
     governanceAdmin.rpc("today_resource_revision", {p_resource_type: "operating_day", p_resource_id: selection.farmId, p_work_date: selection.workDate}),
+    flockIds.length ? governanceAdmin.from("flock_recording_starts").select("flock_id,effective_date,live_birds").eq("org_id",context.orgId).eq("farm_id",selection.farmId).in("flock_id",flockIds).eq("effective_date",selection.workDate) : empty,
   ]);
-  const firstError = [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, operatingRevision]
+  const firstError = [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, operatingRevision, starts]
     .map((result) => result.error).find(Boolean);
   if (firstError) throw new TodayWorkspaceError("INTERNAL_ERROR", firstError.message, 500);
 
   const houseById = new Map((houses.data ?? []).map((row: Row) => [String(row.id), String(row.name)]));
+  const startByFlock = new Map((starts.data ?? []).map((row: Row) => [String(row.flock_id), {effectiveDate: String(row.effective_date), liveBirds: Number(row.live_birds)}]));
   const batchById = new Map((batches.data ?? []).map((row: Row) => [String(row.id), String(row.batch_code)]));
   const dailyByFlock = new Map((daily.data ?? []).map((row: Row) => [String(row.flock_id), row]));
   const previousByFlock = new Map<string, Row>();
@@ -373,6 +374,9 @@ export async function loadTodayWorkspace(
         placementDate: String(row.placement_date),
         ageAtPlacementDays: asNumber(row.age_at_placement_days),
         currentCount: Number(row.current_count ?? 0),
+        initialCount: asNumber(row.initial_count),
+        recordingStart: startByFlock.get(id) ?? null,
+        previousRecordDate: typeof previousByFlock.get(id)?.record_date === "string" ? String(previousByFlock.get(id)!.record_date) : null,
         completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
         dailyRecord: record ? {
           id: String(record.id),

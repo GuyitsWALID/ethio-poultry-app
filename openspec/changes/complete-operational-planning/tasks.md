@@ -5,11 +5,14 @@
 - [x] 1.2 Strictly validate OpenSpec and preserve independent work. Strict validation passed before implementation; working tree was clean.
 
 ## 2. Trustworthy recording starts
-- [ ] 2.1 Resolve verified actual-placement opening birds consistently, without current-count fallback.
-- [ ] 2.2 Add governed bird/egg recording-start proposals, CEO review and atomic manager application.
+- [x] 2.1 Resolve verified actual-placement opening birds consistently, without current-count fallback. Actual placement and dated preceding-close reads are implemented; new Today starts revalidate the source under a flock lock. Undated old cached evidence requires refresh. Governed baselines follow in 2.2.
+- [x] 2.2 Add governed bird/egg recording-start proposals, CEO review and atomic manager application. Explicit counts/reference/date are bound to source revisions; application and audit evidence are atomic and replay-safe.
 - [ ] 2.3 Integrate exact starting-point actions in Today and Record Checks.
+  - Today has a bilingual inline proposal form for missing opening evidence. Existing Daily Record corrections and standalone egg-opening Record Check routes remain intact; final Record Checks integration remains open.
 - [ ] 2.4 Update baseline-aware reconciliation, coverage, reporting and lifecycle checks.
+  - Reconciliation honors dated opening-egg custody and approved population cutovers. Pre-start loss corrections do not rededuct birds from the physical baseline. Reporting/lifecycle integrated acceptance remains open.
 - [ ] 2.5 Verify missing days, stale approvals, retries, tenant isolation and offline opening-source conflicts.
+  - Unit regressions cover missing dates/gaps and placement/baseline precedence. Docker integration covers stale-source rejection, duplicate application, revoked reads/replay, preserved placement, no manufactured mortality and safe pre-start loss correction. Concurrent-session and full offline/browser acceptance remain open.
 
 ## 3. Traceable egg sales
 - [ ] 3.1 Add explicit one/multi-flock source rows within one authorized farm.
