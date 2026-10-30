@@ -26,6 +26,10 @@
 This is not completion of the full proposed plan. Record Check starting-point
 presentation, reporting/lifecycle acceptance, concurrent-session/offline/browser
 acceptance and the remaining sales, Scheduler and Expenses work remain in tasks.
-No staging migration, push/deployment, production change or pilot sign-off has
-been performed for this feature. New manager labels have bilingual catalogs and
+Both starting-count migrations are now applied to staging project
+uzmhpecehmlwojdmitgj. The rollback-only preflight and post-deployment check passed:
+permissions and operational source preservation verified; no pending migrations.
+Release commits are prepared for notmain. Application deployment and authenticated
+feature acceptance are not asserted here. No production change or pilot sign-off
+has been performed. New manager labels have bilingual catalogs and
 automated validation, not a new claim of independent partner review.
