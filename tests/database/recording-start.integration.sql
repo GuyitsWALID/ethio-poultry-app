@@ -92,6 +92,45 @@ do $$ begin
  if (select current_count from public.flocks where id='19000000-0000-4000-8000-000000000007')<>98 then
   raise exception 'Pre-baseline loss correction was deducted again from the physical starting count'; end if;
 end $$;
+-- A physical baseline must remain usable through the normal governed closure;
+-- original placement is not the remaining population and is never balanced away.
+savepoint before_cycle_acceptance;
+insert into public.batch_cycles(id,org_id,farm_id,cycle_code,production_purpose,status,placement_date,placed_at)
+values('19000000-0000-4000-8000-000000000300','19000000-0000-4000-8000-000000000001','19000000-0000-4000-8000-000000000004','START-CLOSE','layer','active',current_date-30,now()-interval '30 days');
+update public.batches set batch_cycle_id='19000000-0000-4000-8000-000000000300' where id='19000000-0000-4000-8000-000000000006';
+update public.daily_farm_records set water_consumed_liters=10,normal_eggs=0,broken_eggs=0,dirty_eggs=0,total_eggs=0
+where flock_id='19000000-0000-4000-8000-000000000007' and record_date=(now() at time zone 'Africa/Addis_Ababa')::date;
+insert into public.feed_day_closures(org_id,batch_id,flock_id,record_date,status,actual_feed_kg,closed_at,closed_by)
+select org_id,batch_id,id,(now() at time zone 'Africa/Addis_Ababa')::date,'closed',0,now(),'19000000-0000-4000-8000-000000000002' from public.flocks where id='19000000-0000-4000-8000-000000000007';
+insert into public.daily_task_attestations(org_id,farm_id,flock_id,work_date,task_code,source_fingerprint,confirmed_by)
+select org_id,farm_id,id,(now() at time zone 'Africa/Addis_Ababa')::date,task,
+public.today_source_fingerprint(farm_id,id,(now() at time zone 'Africa/Addis_Ababa')::date,task),'19000000-0000-4000-8000-000000000002'
+from public.flocks cross join (values('health_deaths'),('routine_supplies')) t(task) where id='19000000-0000-4000-8000-000000000007';
+insert into public.governance_requests(id,org_id,request_type,farm_id,changed_fields,proposed_values,reason,requested_by,intent,requester_name_snapshot,requester_role_snapshot,latest_submitted_at)
+select '19000000-0000-4000-8000-000000000301',org_id,'batch_cycle_close',farm_id,array['dispositions'],
+jsonb_build_object('cycle_id',id,'mode','close','completed_at',now(),'expected_revision',public.lifecycle_cycle_revision(org_id,id,(now() at time zone 'Africa/Addis_Ababa')::date),
+'dispositions',jsonb_build_array(jsonb_build_object('flock_id','19000000-0000-4000-8000-000000000007','kind','other','quantity',98,'reason','Final documented departure','supporting_reference','Signed head-count departure sheet'))),
+'Close the physically counted remaining birds.','19000000-0000-4000-8000-000000000002','batch_cycle_close','Opening manager','farm_manager',now()
+from public.batch_cycles where id='19000000-0000-4000-8000-000000000300';
+select set_config('request.jwt.claim.sub','19000000-0000-4000-8000-000000000008',true);
+select public.decide_governance_request('19000000-0000-4000-8000-000000000301','approved','Physical remaining birds and departure reviewed.');
+select set_config('request.jwt.claim.sub','19000000-0000-4000-8000-000000000002',true);
+select public.apply_governance_request('19000000-0000-4000-8000-000000000301');
+do $$ begin
+ if (select current_count from public.flocks where id='19000000-0000-4000-8000-000000000007')<>0 then raise exception 'Baseline cycle did not clear'; end if;
+ if (select initial_count from public.flocks where id='19000000-0000-4000-8000-000000000007')<>100 then raise exception 'Closure rewrote placement'; end if;
+ if (select sum(quantity) from public.effective_cycle_dispositions where flock_id='19000000-0000-4000-8000-000000000007')<>98 then raise exception 'Closure used original placement rather than physical remaining birds'; end if;
+ if (select deaths+culls from public.daily_farm_records where flock_id='19000000-0000-4000-8000-000000000007' and record_date=(now() at time zone 'Africa/Addis_Ababa')::date)<>0 then raise exception 'Closure manufactured mortality'; end if;
+end $$;
+rollback to before_cycle_acceptance;
+
+-- Another tenant cannot inspect or apply this flock's baseline.
+insert into public.organizations(id,name) values('19000000-0000-4000-8000-000000000400','Other starting tenant');
+insert into public.profiles(id,org_id,full_name,role,is_active) values('19000000-0000-4000-8000-000000000401','19000000-0000-4000-8000-000000000400','Other CEO','ceo',true);
+do $$ begin
+ begin perform public.recording_start_context('19000000-0000-4000-8000-000000000401','19000000-0000-4000-8000-000000000007');
+ raise exception 'Cross-tenant starting context leaked'; exception when insufficient_privilege then null; end;
+end $$;
 update public.user_farm_access set revoked_at=now() where profile_id='19000000-0000-4000-8000-000000000002';
 set local role authenticated;
 select set_config('request.jwt.claim.sub','19000000-0000-4000-8000-000000000002',true);

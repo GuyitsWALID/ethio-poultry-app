@@ -11,6 +11,7 @@ export type ProfileFlock = {
   batchId: string | null; batchLabel: string | null; breedName: string | null; type: FlockType; status: string;
   placementDate: string; ageAtPlacementDays: number; startingBirds: number; currentBirds: number;
   completionDate: string | null; beforeClearanceBirds: number | null;
+  recordingStart?: {date: string; birds: number} | null;
 };
 export type ProfileStepCode = "production_shortfall" | "growth_variance" | "mortality_high" | "feed_variance" | "stale_weight" | "missing_targets" | "missing_records" | "unfinished_feed" | "completion_unverified";
 export type ProfileStep = {code: ProfileStepCode; severity: "critical" | "watch" | "pending"; date: string | null; href: string; count?: number};

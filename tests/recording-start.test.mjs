@@ -1,9 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {validateRecordingStart} from "../src/lib/recording-start-contract.ts";
+import {recordingStartBlocker, validateRecordingStart} from "../src/lib/recording-start-contract.ts";
 
 const ctx = {placement_date: "2026-09-01", flock_type: "layer", last_record_date: null, existing_start: false, existing_egg_balance: false};
 const input = {flock_id: "18000000-0000-4000-8000-000000000007", effective_date: "2026-10-30", live_birds: 980, opening_eggs: 0, supporting_reference: "Physical count sheet"};
+
+test("Record Check starting-point eligibility agrees with authoritative proposal validation", () => {
+  const today = "2026-10-30";
+  assert.equal(recordingStartBlocker(ctx, today, today), null);
+  for (const [patch, code] of [
+    [{existing_start: true}, "START_ALREADY_ESTABLISHED"],
+    [{existing_egg_balance: true}, "START_ALREADY_ESTABLISHED"],
+    [{last_record_date: today}, "START_HAS_RECORDS"],
+    [{last_record_date: "2026-10-31"}, "START_HAS_RECORDS"],
+    [{last_record_date: "2026-10-29", last_record_closing_birds: 0}, "START_PREVIOUS_CLOSE_AVAILABLE"],
+    [{placement_date: "2026-11-01"}, "START_DATE_INVALID"],
+  ]) {
+    assert.equal(recordingStartBlocker({...ctx, ...patch}, today, today), code);
+    assert.throws(() => validateRecordingStart(input, {...ctx, ...patch}, today), new RegExp(code));
+  }
+  assert.equal(recordingStartBlocker(ctx, "2026-02-30", today), "START_DATE_INVALID");
+  assert.equal(recordingStartBlocker({...ctx, last_record_date: "2026-10-27", last_record_closing_birds: 1000}, today, today), null);
+});
 test("legacy physical start keeps an explicit zero egg balance and original placement date", () => {
   assert.deepEqual(validateRecordingStart(input, ctx, "2026-10-30"), input);
   assert.equal(ctx.placement_date, "2026-09-01");

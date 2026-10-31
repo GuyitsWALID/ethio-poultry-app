@@ -4,6 +4,18 @@ import type {OfflineIdentity} from "./offline-store.ts";
 export type StoredOfflineGrant = {grant: OfflineAccessGrant; receivedAt: number; lastSeenAt: number};
 export type OfflineEditDecision = "allowed" | "expired" | "clock_changed" | "not_authorized";
 
+// navigator.onLine is only a hint (especially during a service-worker reload).
+// A transport failure cannot prove sign-out. Cached editing still needs its
+// unexpired grant; foreground synchronization independently reauthorizes online.
+export async function verifyRecoveryIdentity(identity: OfflineIdentity, read: () => Promise<Response>): Promise<"verified" | "offline"> {
+  const response = await read().catch(() => null);
+  if (!response) return "offline";
+  if (!response.ok) throw Error("AUTH_REQUIRED");
+  const current = await response.json();
+  if (current?.role !== "farm_manager" || current.userId !== identity.userId || current.orgId !== identity.tenantId) throw Error("AUTH_REQUIRED");
+  return "verified";
+}
+
 export function offlineEditDecision(stored: StoredOfflineGrant | undefined, identity: OfflineIdentity, selection: {farmId: string; flockId?: string | null; workDate: string}, now = Date.now()): OfflineEditDecision {
   if (!stored) return "not_authorized";
   const {grant, receivedAt, lastSeenAt} = stored;

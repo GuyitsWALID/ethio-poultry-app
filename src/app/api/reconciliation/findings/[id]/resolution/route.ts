@@ -6,9 +6,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const context = await getAccessContext({ tenant: true });
     if (isAccessResponse(context)) return context;
     const { id } = await params;
-    return Response.json(await loadFindingResolution(context, id));
+    return Response.json(await loadFindingResolution(context, id), {headers: {"Cache-Control": "private, no-store"}});
   } catch (error: unknown) {
     const status = typeof error === "object" && error && "status" in error ? Number((error as { status: unknown }).status) : 500;
-    return Response.json({ error: error instanceof Error ? error.message : "Resolution guidance could not be loaded." }, { status });
+    return Response.json({ error: error instanceof Error ? error.message : "Resolution guidance could not be loaded." }, { status, headers: {"Cache-Control": "private, no-store"} });
   }
 }

@@ -12,7 +12,9 @@ const dbContainer='supabase_db_ethio-poultry-app';
 const template='ethio_flock_lifecycle_dryrun_20261007';
 const created=[];
 const reuseBuild=process.argv.includes('--reuse-local-build');
-const testArgs=process.argv.slice(2).filter(arg=>arg!=='--reuse-local-build');
+const recordingStartOnly=process.argv.includes('--recording-start-only');
+const specs=recordingStartOnly?['tests/browser/recording-start.spec.ts']:['tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts'];
+const testArgs=process.argv.slice(2).filter(arg=>!['--reuse-local-build','--recording-start-only'].includes(arg));
 let cloned=false, app, proxy;
 assert.match(database,/^flock_browser_[a-f0-9]{32}$/);
 function docker(args,input){
@@ -38,7 +40,7 @@ function runNode(args,env){
 }
 try{
   // Fail bad test filters before creating containers or compiling the app.
-  await runNode(['node_modules/@playwright/test/cli.js','test','tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts','--list',...testArgs],process.env);
+  await runNode(['node_modules/@playwright/test/cli.js','test',...specs,'--list',...testArgs],process.env);
   docker(['exec',dbContainer,'createdb','-U','postgres','--template',template,database]);cloned=true;
   // The SQL-only template has Auth's current schema but no migration-history
   // rows. Copy that metadata, not real users, so GoTrue does not replay older
@@ -134,6 +136,14 @@ try{
       commit;`);
   }
   // Test the production bundle once; cold development compiles mask UI failures.
+  if(recordingStartOnly){
+    query(`begin;
+      insert into public.houses(id,org_id,branch_id,farm_id,name,house_type) values('12000000-0000-4000-8000-000000000904','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','12000000-0000-4000-8000-000000000003','Recording start house','layer');
+      insert into public.batch_cycles(id,org_id,farm_id,cycle_code,production_purpose,status,placement_date,placed_at) values('12000000-0000-4000-8000-000000000902','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000003','START-CYCLE','layer','active',current_date-40,now()-interval '40 days');
+      insert into public.batches(id,org_id,branch_id,farm_id,house_id,batch_cycle_id,batch_code,source,placement_date,age_at_placement_days,total_count,status) values('12000000-0000-4000-8000-000000000903','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','12000000-0000-4000-8000-000000000003','12000000-0000-4000-8000-000000000904','12000000-0000-4000-8000-000000000902','START-BATCH','external_purchase',current_date-40,120,100,'active');
+      insert into public.flocks(id,org_id,farm_id,house_id,batch_id,flock_code,flock_type,source,placement_date,placed_at,age_at_placement_days,initial_count,current_count,status) values('12000000-0000-4000-8000-000000000905','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000003','12000000-0000-4000-8000-000000000904','12000000-0000-4000-8000-000000000903','START-LAYER','layer','external_purchase',current_date-40,now()-interval '40 days',120,100,100,'active');
+      commit;`);
+  }
   if(reuseBuild)console.log('Reusing the previously verified LOCAL bundle for test-only retries; never deploy this bundle.');
   else await runNode(['node_modules/next/dist/bin/next','build','--webpack'],env);
   app=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3100'],{env,stdio:'inherit'});
@@ -146,7 +156,7 @@ try{
     await response.arrayBuffer();
   }
   console.log('Isolated migrated local API and application ready. Remote databases untouched.');
-  await runNode(['node_modules/@playwright/test/cli.js','test','tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts','--workers=1','--max-failures=1','--timeout=240000',...testArgs],env);
+  await runNode(['node_modules/@playwright/test/cli.js','test',...specs,'--workers=1','--max-failures=1','--timeout=240000',...testArgs],env);
 }finally{
   if(app?.pid){
     if(process.platform==='win32')spawnSync('taskkill',['/PID',String(app.pid),'/T','/F'],{stdio:'ignore'});

@@ -5,14 +5,14 @@
 - [x] 1.2 Strictly validate OpenSpec and preserve independent work. Strict validation passed before implementation; working tree was clean.
 
 ## 2. Trustworthy recording starts
-- [x] 2.1 Resolve verified actual-placement opening birds consistently, without current-count fallback. Actual placement and dated preceding-close reads are implemented; new Today starts revalidate the source under a flock lock. Undated old cached evidence requires refresh. Governed baselines follow in 2.2.
+- [x] 2.1 Resolve verified actual-placement opening birds consistently, without current-count fallback. Actual placement, dated preceding-close and exact-day approved baseline reads are implemented; new Today starts revalidate the source under a flock lock. Undated old cached evidence requires refresh.
 - [x] 2.2 Add governed bird/egg recording-start proposals, CEO review and atomic manager application. Explicit counts/reference/date are bound to source revisions; application and audit evidence are atomic and replay-safe.
-- [ ] 2.3 Integrate exact starting-point actions in Today and Record Checks.
-  - Today has a bilingual inline proposal form for missing opening evidence. Existing Daily Record corrections and standalone egg-opening Record Check routes remain intact; final Record Checks integration remains open.
-- [ ] 2.4 Update baseline-aware reconciliation, coverage, reporting and lifecycle checks.
-  - Reconciliation honors dated opening-egg custody and approved population cutovers. Pre-start loss corrections do not rededuct birds from the physical baseline. Reporting/lifecycle integrated acceptance remains open.
-- [ ] 2.5 Verify missing days, stale approvals, retries, tenant isolation and offline opening-source conflicts.
-  - Unit regressions cover missing dates/gaps and placement/baseline precedence. Docker integration covers stale-source rejection, duplicate application, revoked reads/replay, preserved placement, no manufactured mortality and safe pre-start loss correction. Concurrent-session and full offline/browser acceptance remain open.
+- [x] 2.3 Integrate exact starting-point actions in Today and Record Checks.
+  - Both reuse the bilingual inline proposal form. Record Checks offers today's physical baseline only for an eligible active assigned flock, preserving historical correction choices. Submission rechecks the exact finding/tenant/farm/flock; approval return links retain its finding context. Exact flock links resolve the authorized house even when a farm has multiple houses. Existing baselines, reliable preceding closes, completed flocks and resolved findings never receive a new-start action.
+- [x] 2.4 Update baseline-aware reconciliation, coverage, reporting and lifecycle checks.
+  - Dated opening-egg custody and approved population cutovers are respected. Pre-start loss corrections do not rededuct birds. Profiles label approved counts separately, preserving placement/age and missing coverage; report explanations distinguish balances from activity. A real governed closure accounts for the physical remaining birds without manufactured mortality or placement changes.
+- [x] 2.5 Verify missing days, stale approvals, retries, tenant isolation and offline opening-source conflicts.
+  - Full suite: 572 passed. Docker checks cover stale source/approval, replay, revoked access, cross-tenant isolation, source preservation and lifecycle closure. Real two-session races produce one baseline and one daily record. Signed-in Chromium acceptance passes manager proposal, CEO approval, replay, English/Amharic tablet layouts, missing report evidence, offline reload, preserved queue and safe stale-command conflict after reconnect/Refresh today. Physical-device, cross-browser and whole-release staging acceptance remain explicit release gates in section 6, not unfinished Task 2 implementation.
 
 ## 3. Traceable egg sales
 - [ ] 3.1 Add explicit one/multi-flock source rows within one authorized farm.

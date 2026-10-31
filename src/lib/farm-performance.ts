@@ -6,7 +6,7 @@ import {buildHistoryHref, type HistoryCategory} from "./history/contracts.ts";
 
 export type PerformanceUnit = "eggs" | "birds" | "kg" | "g/bird/day" | "%" | "kg/kg" | "deaths/1000-bird-days" | "events" | "ETB" | "items" | "sessions" | "flock-days";
 export type PerformanceState = "available" | "partial" | "missing" | "empty" | "failed";
-export type PerformanceCode = "RECORDED_TOTAL" | "WEIGHTED_RATE" | "PARTIAL_DAILY_RECORDS" | "MISSING_EVIDENCE" | "NO_APPLICABLE_RECORDS" | "FEED_NOT_A_HEALTH_DIAGNOSIS" | "LAYER_FCR_ONLY" | "RECORDED_HEALTH_EVENTS_ONLY" | "DAILY_LOSSES_NOT_SUPPORTING_EVENTS" | "REPORT_LOAD_FAILED" | "WAREHOUSE_LEVEL_BALANCES" | "CURRENT_PRICE_ESTIMATE" | "COLLECTIONS_AGAINST_SELECTED_SALES" | "ESTIMATED_MARGIN" | "RECONCILED_MARGIN" | "RECORDED_SESSION_PLAN_ONLY" | "INCOMPLETE_FEED_DAYS" | "GROWTH_FCR_ONLY" | "AMBIGUOUS_MOVEMENT_DAY_EXCLUDED";
+export type PerformanceCode = "RECORDED_TOTAL" | "WEIGHTED_RATE" | "PARTIAL_DAILY_RECORDS" | "MISSING_EVIDENCE" | "NO_APPLICABLE_RECORDS" | "FEED_NOT_A_HEALTH_DIAGNOSIS" | "LAYER_FCR_ONLY" | "RECORDED_HEALTH_EVENTS_ONLY" | "DAILY_LOSSES_NOT_SUPPORTING_EVENTS" | "REPORT_LOAD_FAILED" | "WAREHOUSE_LEVEL_BALANCES" | "CURRENT_PRICE_ESTIMATE" | "COLLECTIONS_AGAINST_SELECTED_SALES" | "ESTIMATED_MARGIN" | "RECONCILED_MARGIN" | "RECORDED_SESSION_PLAN_ONLY" | "INCOMPLETE_FEED_DAYS" | "GROWTH_FCR_ONLY" | "AMBIGUOUS_MOVEMENT_DAY_EXCLUDED" | "RECORDING_START_NOT_ACTIVITY";
 export type PerformanceMetric = {
   key: string; unit: PerformanceUnit; value: number | null; previous: number | null;
   delta: number | null; deltaPct: number | null; state: PerformanceState; explanation: PerformanceCode;
@@ -141,6 +141,7 @@ export async function readPerformance(input: ReportInput, readers: PerformanceRe
     }
   }));
   for (const section of Object.values(result.sections)) {
+    section.explanations.push("RECORDING_START_NOT_ACTIVITY");
     if (!section.rows) continue;
     section.rowCount = section.rows.length;
     section.rowsLimited = section.rows.length > 200;

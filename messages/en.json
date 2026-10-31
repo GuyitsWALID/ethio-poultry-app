@@ -1,5 +1,6 @@
 {
   "RecordingStart": {
+    "recordCheckHelp": "These physical counts establish a new recording starting point today. They do not correct or clear earlier discrepancies. Keep using the exact historical correction where a past record is wrong; after approval and application, run Record Checks again.",
     "title": "Establish the recording starting point",
     "help": "For a farm already operating before these records began. Count the birds and any existing eggs. The CEO must approve these exact counts; earlier history and placement dates are not changed.",
     "date": "Start of recording day",
@@ -2268,6 +2269,7 @@
     "wholeCount":"All {count} birds will move. No partial transfers or additions.", "farm":"Destination farm", "house":"Empty destination house", "choose":"Choose", "date":"Actual move date", "time":"Actual move time (Addis Ababa)", "reason":"Why is this move needed?", "submit":"Ask CEO to approve", "saving":"Submitting…", "loading":"Loading current flock…", "unavailable":"This flock cannot move until its cycle membership and location evidence are verified.", "error":"Check the date, time, count and destination. If anything changed, close and reopen this form for fresh values. Your entries are preserved.", "submitted":"Move submitted for CEO review.", "review":"Review request"
   },
   "FlockProfile": {
+    "recordingStartNote": "Verified recording start: {birds} live birds on {date}. Original placement and age are unchanged. This physical count is not a death, cull or production record; earlier missing days remain missing.",
     "lineage": {"title":"Check this flock's placement and moves", "verified":"Original batch placement is preserved. The approved whole-flock movement chain verifies the current location.", "review":"Location evidence needs review. Do not move birds merely to clear an alert. Review the original placement and approved movements, then check again.", "agrees":"Verified", "disagrees":"Needs review", "return":"Return to this Record Check", "houseFarm":"Current house and farm", "batchFarm":"Original farm and approved moves", "batchHouse":"Original house and approved moves"},
     "view": "View flock", "show": "Show flock details", "hide": "Hide flock details", "selected": "Selected",
     "title": "Flock details", "periods": "Profile period", "days": "{days} days", "loading": "Loading flock details…",
@@ -3534,6 +3536,7 @@
       "LAYER_FCR_ONLY": "Egg feed conversion applies only to laying flocks with feed and egg-weight evidence.",
       "RECORDED_HEALTH_EVENTS_ONLY": "Zero recorded events does not confirm that no health problems occurred.",
       "DAILY_LOSSES_NOT_SUPPORTING_EVENTS": "Daily records supply loss totals; supporting events are not counted twice.",
+      "RECORDING_START_NOT_ACTIVITY": "Approved starting birds and eggs are opening balances, not production, sales or losses. They do not fill missing historical days or change the original placement age.",
       "REPORT_LOAD_FAILED": "One source failed to load. No zero result has been substituted.",
       "WAREHOUSE_LEVEL_BALANCES": "These are whole-warehouse balances.",
       "CURRENT_PRICE_ESTIMATE": "Stock value uses current item prices, not historical accounting valuation.",

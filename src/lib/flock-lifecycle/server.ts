@@ -55,12 +55,15 @@ export async function loadFlockProfile(context: AccessContext, flockId: string, 
     completionDate, beforeClearanceBirds: clearanceResult.data?.before_clearance_birds ?? null,
   };
   const period = profilePeriod(metadata, days, today);
-  const [dailyResult, feedResult, weightResult, targetResult] = await Promise.all([
+  const [dailyResult, feedResult, weightResult, targetResult, startResult] = await Promise.all([
     period.from && period.to ? db.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,culls,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,updated_at").eq("org_id", context.orgId).eq("flock_id", flock.id).is("voided_at", null).gte("record_date", period.from).lte("record_date", period.to).order("record_date").limit(1000) : Promise.resolve({data: [], error: null}),
     period.from && period.to ? db.from("feed_day_closures").select("record_date").eq("org_id", context.orgId).eq("flock_id", flock.id).eq("status", "closed").gte("record_date", period.from).lte("record_date", period.to).order("record_date").limit(1000) : Promise.resolve({data: [], error: null}),
     period.to ? db.from("weight_records").select("record_date,average_weight_g,uniformity_pct").eq("org_id", context.orgId).eq("flock_id", flock.id).gte("record_date", flock.placement_date).lte("record_date", period.to).order("record_date", {ascending: false}).order("created_at", {ascending: false}).order("id", {ascending: false}).limit(1000) : Promise.resolve({data: [], error: null}),
     flock.breed_id ? db.from("breed_standards").select("week_number,target_hdep_pct,target_mortality_pct,target_feed_g,target_weight_g").eq("org_id", context.orgId).eq("breed_id", flock.breed_id).order("week_number").limit(1000) : Promise.resolve({data: [], error: null}),
+    period.to ? cyclesDb.from("flock_recording_starts").select("effective_date,live_birds").eq("org_id", context.orgId).eq("flock_id", flock.id).lte("effective_date", period.to).maybeSingle() : Promise.resolve({data: null, error: null}),
   ]);
+  if (startResult.error) throw new FlockLifecycleError("LOAD_FAILED", 500);
+  metadata.recordingStart = startResult.data ? {date: startResult.data.effective_date, birds: startResult.data.live_birds} : null;
   const daily = required(dailyResult), feed = required(feedResult), weights = required(weightResult), targets = required(targetResult);
   if ([daily, feed, weights, targets].some(rows => rows.length >= 1000)) throw new FlockLifecycleError("SOURCE_LIMIT", 409);
   const profile = buildFlockProfile({flock: metadata, days, today, daily: daily as ProfileDaily[], closedFeedDates: feed.map(row => row.record_date),

@@ -7,6 +7,8 @@ import { canAccessFarm, canAccessWarehouse, governanceAdmin, type AccessContext 
 import {managerWarehouseAccess} from "@/lib/warehouse-access";
 import { formatReconciliationNumber } from "@/lib/reconciliation-presentation";
 import { reconciliationWorkflow } from "@/lib/reconciliation-workflow";
+import {recordingStartBlocker, type RecordingStartContext} from "@/lib/recording-start-contract";
+import {addisOperatingDate} from "@/lib/flock-lifecycle/server";
 import { resolutionHref, resolutionRules, type ReconciliationResolution, type ResolutionAction, type ResolutionOwner, type ResolutionSourceRecord } from "@/lib/reconciliation-resolution-contract";
 
 type Row = Record<string, any>;
@@ -130,6 +132,22 @@ export async function loadFindingResolution(ctx: AccessContext, findingId: strin
   if (error) throw error;
   if (!finding) throw Object.assign(new Error("Record Check not found."), { status: 404 });
   await assertFindingAccess(ctx, finding);
+  // A physical count establishes today's baseline, never repairs a historical
+  // Daily Record. The same validator and authorized context protect submission.
+  let recordingStart: ReconciliationResolution["recordingStart"];
+  if (ctx.role === "farm_manager" && !ctx.supportSessionId && finding.flock_id && finding.farm_id
+    && !["cleared", "resolved", "accepted_exception"].includes(text(finding.status))
+    && ["EGG_OPENING_BALANCE_UNAVAILABLE", "BIRD_DAY_COUNTS_MISSING", "FLOCK_CURRENT_COUNT_MISMATCH"].includes(text(finding.rule_code))) {
+    const result = await db.rpc("recording_start_context", {p_actor: ctx.userId, p_flock: finding.flock_id});
+    // Archived and revoked targets keep only their existing correction paths.
+    if (result.error && !["23514", "42501"].includes(result.error.code)) throw result.error;
+    const context = result.data as (RecordingStartContext & {farm_id: string}) | null;
+    const today = addisOperatingDate();
+    if (!result.error && context && context.farm_id === finding.farm_id && !recordingStartBlocker(context, today, today)) {
+      recordingStart = {farmId: context.farm_id, flockId: text(finding.flock_id), workDate: today,
+        eggProducing: ["layer", "parent_stock"].includes(context.flock_type)};
+    }
+  }
   const [farmName, houseName, flockCode, batchCode, warehouseName, actionResult] = await Promise.all([
     label("farms", finding.farm_id, "name"), label("houses", finding.house_id, "name"), label("flocks", finding.flock_id, "flock_code"),
     label("batches", finding.batch_id, "batch_code"), label("warehouses", finding.warehouse_id, "name"),
@@ -202,6 +220,7 @@ export async function loadFindingResolution(ctx: AccessContext, findingId: strin
     },
     choices: locale === "am" ? choices.map(choice => ({...choice, label: resolutionText((`rules.${finding.rule_code}.choices.${choice.id}.label`) as Parameters<typeof resolutionText>[0]), explanation: resolutionText((`rules.${finding.rule_code}.choices.${choice.id}.explanation`) as Parameters<typeof resolutionText>[0])})) : choices,
     sourceRecords: presentedSources,
+    ...(recordingStart ? {recordingStart} : {}),
     target: {
       farmName, houseName, flockCode, batchCode, warehouseName,
       date: text(finding.rule_code) === "EGG_OPENING_BALANCE_UNAVAILABLE" ? text((finding.evidence as Row | null)?.placementDate) || (finding.record_date ? text(finding.record_date) : null) : finding.record_date ? text(finding.record_date) : null,

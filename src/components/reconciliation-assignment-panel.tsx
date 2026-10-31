@@ -8,6 +8,7 @@ import { CheckCircle2, Clock3, Loader2, Play, Send, UserCheck, X } from "lucide-
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import type { ReconciliationResolution } from "@/lib/reconciliation-resolution-contract";
+import {RecordingStartForm} from "@/components/today/recording-start-form";
 
 const statusLabel: Record<string, string> = { open: "readyToAssign", assigned: "assigned", acknowledged: "acknowledged", in_progress: "workInProgress", awaiting_verification: "waitingForCEOVerification", escalated: "overdue", resolved: "verifiedAndClosed" };
 const tomorrow = () => { const date = new Date(Date.now() + 24 * 3600000); date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); return date.toISOString().slice(0, 16); };
@@ -20,6 +21,12 @@ export function ReconciliationAssignmentPanel({ findingId, findingStatus, role, 
   const [data, setData] = useState<ReconciliationResolution | null>(null);
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   const [note, setNote] = useState(""); const [evidence, setEvidence] = useState("");
+  const [online, setOnline] = useState(false);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    queueMicrotask(update); window.addEventListener("online", update); window.addEventListener("offline", update);
+    return () => {window.removeEventListener("online", update); window.removeEventListener("offline", update);};
+  }, []);
   const load = useCallback(async () => { const response = await fetch(`/api/reconciliation/findings/${findingId}/resolution`, { cache: "no-store" }); const body = await response.json(); if (!response.ok) throw new Error(body.error ?? ui("couldNotLoadResolutionWorkflow")); setData(body); }, [findingId, ui]);
   useEffect(() => {
     const controller = new AbortController();
@@ -35,6 +42,7 @@ export function ReconciliationAssignmentPanel({ findingId, findingStatus, role, 
 
   if (!data && !error) return <div className="flex items-center gap-2 border-t border-sand-200 px-5 py-3 text-xs text-forest-500"><Loader2 className="h-4 w-4 animate-spin"/>{ui("loadingResponsibility")}</div>;
   return <section className="border-t border-sand-200 bg-sand-50/70 p-5" aria-label={ui("assignedResolutionWorkflow")}>
+    {data?.findingId === findingId && data.recordingStart ? <div className="mb-4"><RecordingStartForm key={`${findingId}:${data.recordingStart.flockId}:${data.recordingStart.workDate}`} {...data.recordingStart} findingId={findingId} online={online}/></div> : null}
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center"><div className="mr-auto"><p className="text-[10px] font-semibold uppercase tracking-[.16em] text-forest-500">{ui("accountableFollowUp")}</p><p className="mt-1 text-sm font-semibold text-forest-950">{data?.action ? `${ui((statusLabel[data.action.status] ?? "unavailable") as Parameters<typeof ui>[0])}${data.action.ownerName ? ` · ${data.action.ownerName}` : ""}` : ui("noFarmManagerHasBeenAssigned")}</p>{data?.action ? <p className="mt-1 flex items-center gap-1 text-xs text-forest-600"><Clock3 className="h-3.5 w-3.5"/>{ui("due2")} {formatOperationDateTime(data.action.dueAt, locale)}</p> : <p className="mt-1 text-xs text-forest-600">{ui("assignOnlyWhenAccountableFollowUpIsNeeded")}</p>}</div>
       <div className="flex flex-wrap gap-2">{role === "ceo" && data?.canAssign ? <button type="button" onClick={() => setOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-forest-800 bg-white px-4 text-xs font-semibold text-forest-900"><UserCheck className="h-4 w-4"/>{data.action?.ownerId ? ui("reassignFollowUp") : ui("assignFollowUp")}</button> : null}{data?.action && role === "farm_manager" && data.canWork && data.action.status === "assigned" ? <button disabled={busy} onClick={() => void transition({ command: "acknowledge", note: "I have reviewed the assigned Record Check and accept responsibility." })} className="min-h-10 rounded-xl bg-forest-900 px-4 text-xs font-semibold text-white">{ui("acknowledge")}</button> : null}{data?.action && role === "farm_manager" && data.canWork && ["acknowledged", "escalated"].includes(data.action.status) ? <button disabled={busy} onClick={() => void transition({ command: "start", note: "I started reviewing the highlighted source record." })} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-forest-900 px-4 text-xs font-semibold text-white"><Play className="h-3.5 w-3.5"/>{ui("startWork")}</button> : null}{data?.action && role === "ceo" && data.action.status === "awaiting_verification" ? <button disabled={busy} onClick={() => void transition({ command: "verify" })} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-forest-900 px-4 text-xs font-semibold text-white"><CheckCircle2 className="h-4 w-4"/>{ui("verifyAndClose")}</button> : null}</div>
     </div>

@@ -39,6 +39,7 @@ export type ReconciliationResolution = {
   comparison: { expected: string; recorded: string; difference: string };
   choices: ResolutionChoice[];
   sourceRecords: ResolutionSourceRecord[];
+  recordingStart?: {farmId: string; flockId: string; workDate: string; eggProducing: boolean};
   target: {
     farmName: string | null;
     houseName: string | null;

@@ -3,6 +3,7 @@
 import {useEffect,useState} from "react";
 import {useLocale,useTranslations} from "next-intl";
 import {recoverOfflineStore} from "@/lib/today-workspace/offline-store";
+import {verifyRecoveryIdentity} from "@/lib/today-workspace/offline-policy";
 import {TodayOfflineRuntime} from "@/lib/today-workspace/offline-runtime";
 import type {TodayWorkspace} from "@/lib/today-workspace/contracts";
 import {TodayOfflineProvider,useTodayOffline} from "./offline-context";
@@ -19,9 +20,7 @@ export function OfflineToday(){
   useEffect(()=>{let cancelled=false;void(async()=>{
     const recovered=await recoverOfflineStore();
     if(navigator.onLine){
-      const response=await fetch("/api/me/context",{cache:"no-store"});
-      const identity=response.ok?await response.json():null;
-      if(identity?.role!=="farm_manager"||identity.userId!==recovered.identity.userId||identity.orgId!==recovered.identity.tenantId)throw Error("AUTH_REQUIRED");
+      await verifyRecoveryIdentity(recovered.identity,()=>fetch("/api/me/context",{cache:"no-store"}));
     }
     if(!cancelled)setBoot({runtime:new TodayOfflineRuntime(recovered.store,recovered.identity,()=>navigator.onLine),workspaces:recovered.snapshots});
   })().catch(()=>{if(!cancelled)setFailed(true);});return()=>{cancelled=true;};},[]);

@@ -134,10 +134,17 @@ function TodayWorkspaceContent() {
       .map((name) => ({id: `workspace:${name}`, name, farm_id: farmId}));
   }, [farmId, flocks, houses, workspace]);
 
+  // Exact flock links (including approved recording starts) need no remembered
+  // house filter. Infer only from the authorized farm/workspace intersection;
+  // an explicitly supplied house is never silently replaced.
+  const requestedFlockHouseId = !requestedHouseId && workspace?.flocks.some(flock => flock.id === requestedFlockId)
+    ? flocks.find(flock => flock.id === requestedFlockId && flock.farm_id === farmId)?.house_id ?? "" : "";
   const houseId = availableHouses.some((house) => house.id === selectedHouseId)
     ? selectedHouseId
     : availableHouses.some((house) => house.id === requestedHouseId)
       ? requestedHouseId
+    : availableHouses.some((house) => house.id === requestedFlockHouseId)
+      ? requestedFlockHouseId
     : availableHouses.some((house) => house.id === scope.houseId)
       ? scope.houseId
       : availableHouses.length === 1

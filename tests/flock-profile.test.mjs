@@ -8,6 +8,17 @@ const daily = (changes={}) => ({record_date:"2026-09-30",flock_id:flock.id,openi
 const target = (changes={}) => ({week_number:18,target_hdep_pct:90,target_mortality_pct:0.1,target_feed_g:110,target_weight_g:1000,...changes});
 const profile = (changes={}) => buildFlockProfile({flock,days:30,today:"2026-09-30",daily:[daily()],closedFeedDates:["2026-09-30"],targets:[target()],weights:[],warningVariancePct:5,criticalVariancePct:10,...changes});
 
+test("a physical recording start preserves age, missing history and real loss/production totals",()=>{
+  const result=profile({flock:{...flock,recordingStart:{date:"2026-09-30",birds:997}},daily:[]});
+  assert.equal(result.flock.startingBirds,1000);
+  assert.equal(result.flock.ageDays,129);
+  assert.equal(result.coverage.expected,30);
+  assert.equal(result.coverage.missingDates.length,30);
+  assert.equal(result.results.losses,null);
+  assert.equal(result.results.eggs,null);
+  assert.equal(result.flock.recordingStart.birds,997);
+});
+
 for (const days of [7,30,90]) test(`${days}-day profile clips to placement and includes arrival age`,()=>{
   const result=profile({days});
   assert.equal(result.period.to,"2026-09-30");
