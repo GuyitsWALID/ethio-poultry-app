@@ -9,8 +9,8 @@ import {effectiveWarehouseIds} from "@/lib/warehouse-access";
 
 type Row = Record<string, unknown>;
 
-const flockTasks = new Set<TodayTaskCode>(["birds", "feeding", "eggs_water", "health_deaths", "routine_supplies"]);
-const supportedTasks = new Set<TodayTaskCode>(["birds", "feeding", "eggs_water", "health_deaths", "routine_supplies", "stock", "sales", "expenses", "assigned_fixes", "review_finish"]);
+const flockTasks = new Set<TodayTaskCode>(["birds", "feeding", "eggs_water", "health_deaths", "routine_supplies", "scheduled_work"]);
+const supportedTasks = new Set<TodayTaskCode>([...flockTasks, "stock", "sales", "expenses", "assigned_fixes", "review_finish"]);
 
 function rows(result: {data: unknown[] | null; error: {message: string} | null}, label: string) {
   if (result.error) throw new TodayWorkspaceError("INTERNAL_ERROR", `${label}: ${result.error.message}`, 500);
@@ -121,6 +121,12 @@ export async function loadTodayTaskDetail(
     dependencies: [],
   };
 
+  if(task==="scheduled_work"){
+    const {dueScheduledWork}=await import("@/lib/scheduler/server");
+    const occurrences=await dueScheduledWork(context,input.farmId,input.workDate,input.flockId);
+    // Each form persists its own occurrence revision; unrelated saves must not stale the entire card.
+    return {...base,resourceRevision:"scheduled-work-v1",data:{occurrences}};
+  }
   if (task === "feeding") {
     const [sessionsResult, closureResult, scheduleResult] = await Promise.all([
       governanceAdmin.from("feeding_session_records").select("id,session_name,session_time,feeders_count,planned_feed_kg,actual_feed_kg,notes,feed_item_id,warehouse_id,feed_type,status").eq("org_id", context.orgId).eq("flock_id", input.flockId!).eq("record_date", input.workDate).is("voided_at", null).order("session_time"),

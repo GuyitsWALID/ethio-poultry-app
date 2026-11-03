@@ -1,5 +1,6 @@
 import { dispatchNotificationOutbox } from "@/lib/notification-service";
 import { tokenMatches } from "@/lib/platform-observability";
+import {refreshScheduler} from "@/lib/scheduler/server";
 
 export async function POST(request: Request) {
   const expected = process.env.MONITORING_INGEST_TOKEN?.trim();
@@ -8,6 +9,7 @@ export async function POST(request: Request) {
   const provided = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
   if (!provided || !(await tokenMatches(provided, expected))) return Response.json({ error: "Unauthorized" }, { status: 401 });
   try {
+    await refreshScheduler();
     return Response.json(await dispatchNotificationOutbox());
   } catch {
     return Response.json({ error: "Notification dispatch failed." }, { status: 503 });

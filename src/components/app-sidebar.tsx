@@ -59,7 +59,7 @@ type NavItem = {
   href: string;
   label?: string;
   managerMessageKey?: ManagerNavigationMessageKey;
-  navigationKey?: "today" | "flocks" | "alerts" | "historyMore" | "history" | "reports" | "performance" | "more" | "approvals" | "templates" | "recordChecks";
+  navigationKey?: "today" | "flocks" | "alerts" | "historyMore" | "history" | "reports" | "performance" | "more" | "approvals" | "templates" | "recordChecks" | "scheduler";
 };
 
 type NavSection = {
@@ -100,6 +100,7 @@ const itemIcons: Record<string, LucideIcon> = {
   historyMore: History,
   history: History,
   templates: Package,
+  scheduler: CalendarDays,
 };
 
 const ceoNavSections: NavSection[] = [
@@ -198,6 +199,7 @@ const simplifiedFarmManagerNavSections: NavSection[] = [
     items: [
       {id: "governance", navigationKey: "approvals", href: "/app/governance"},
       {id: "recordChecks", navigationKey: "recordChecks", href: "/app/reconciliation"},
+      {id: "scheduler", navigationKey: "scheduler", href: "/app/scheduler"},
       {id: "templates", navigationKey: "templates", href: "/app/feeding-log?feed_target=template_management"},
     ],
   },
@@ -208,7 +210,7 @@ const historyCeoNavSections: NavSection[] = ceoNavSections.map(section => ({...s
   items: section.items.filter(item => !["analytics", "requests", "dailyRecords", "feed", "mortality", "health", "inventory", "sales"].includes(item.id)).map(item => item.id === "governance" ? {...item, navigationKey: "approvals" as const} : item.id === "reports" ? {...item, navigationKey: "performance" as const} : item),
 }));
 historyCeoNavSections[0] = {...historyCeoNavSections[0], items: [...historyCeoNavSections[0].items.slice(0, 3), {id: "history", navigationKey: "history", href: "/app/history"}, ...historyCeoNavSections[0].items.slice(3)]};
-historyCeoNavSections.push({id: "configuration", title: "", navigationKey: "more", items: [{id: "templates", navigationKey: "templates", href: "/app/feeding-log?feed_target=template_management"}]});
+historyCeoNavSections.push({id: "configuration", title: "", navigationKey: "more", items: [{id:"scheduler",navigationKey:"scheduler",href:"/app/scheduler"},{id: "templates", navigationKey: "templates", href: "/app/feeding-log?feed_target=template_management"}]});
 
 export function AppSidebar({ viewerRole, todayWorkspaceEnabled, mobileOpen = false, onMobileClose }: { viewerRole: AppRole | null; todayWorkspaceEnabled: boolean; mobileOpen?: boolean; onMobileClose?: () => void }) {
   const pathname = usePathname();

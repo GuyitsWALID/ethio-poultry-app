@@ -9,6 +9,7 @@ export const todayCommandTypes = [
   "record_mortality_event",
   "record_health_event",
   "complete_vaccination",
+  "complete_scheduled_work",
   "confirm_no_activity",
   "record_stock_receipt",
   "record_stock_count",
@@ -156,6 +157,15 @@ const expensePayload = z.object({
 });
 
 const commandSchemas = {
+  complete_scheduled_work: baseCommand.extend({
+    type:z.literal("complete_scheduled_work"),flock_id:uuid,
+    payload:z.object({occurrence_id:uuid,occurrence_revision:z.number().int().positive(),outcome:z.enum(["completed","deferred","skipped"]),
+      reason:z.string().trim().max(2000).optional(),deferred_to:date.optional(),notes:z.string().trim().max(2000).optional(),
+      sample_count:z.number().int().positive().optional(),average_weight_g:positive.optional(),min_weight_g:positive.optional(),max_weight_g:positive.optional(),uniformity_pct:z.number().min(0).max(100).optional(),
+      inventory_usage:usageRow.nullable().optional(),
+      vaccination_route:z.enum(["water","injection","spray","eye_drop"]).optional(),
+    }).superRefine((value,ctx)=>{if(value.outcome!=="completed"&&(!value.reason||value.reason.length<4))ctx.addIssue({code:"custom",path:["reason"],message:"A reason is required."});if(value.outcome==="deferred"&&!value.deferred_to)ctx.addIssue({code:"custom",path:["deferred_to"],message:"A new date is required."});}),
+  }),
   save_daily_record: baseCommand.extend({
     type: z.literal("save_daily_record"),
     flock_id: uuid,
@@ -244,6 +254,7 @@ const commandSchemas = {
 } satisfies Record<TodayCommandType, z.ZodTypeAny>;
 
 export const todayCommandSchema = z.discriminatedUnion("type", [
+  commandSchemas.complete_scheduled_work,
   commandSchemas.save_daily_record,
   commandSchemas.save_feed_session,
   commandSchemas.close_feed_day,
@@ -312,7 +323,7 @@ export function parseTodayCommand(input: unknown): TodayCommand {
 
 export type TodayTaskState = "not_started" | "draft_on_tablet" | "waiting_to_sync" | "complete" | "needs_attention";
 
-export type TodayTaskCode = "birds" | "feeding" | "eggs_water" | "health_deaths" | "routine_supplies" | "review_finish" | "stock" | "sales" | "expenses" | "assigned_fixes";
+export type TodayTaskCode = "birds" | "feeding" | "eggs_water" | "health_deaths" | "routine_supplies" | "review_finish" | "stock" | "sales" | "expenses" | "assigned_fixes" | "scheduled_work";
 
 export type TodayTask = {
   code: TodayTaskCode;
@@ -392,6 +403,7 @@ export type TodayWorkspace = {
 };
 
 export type OfflineAccessGrant = {
+  scheduleRevisions?: Record<string,{revision:number;flockId:string}>;
   tenantId: string;
   userId: string;
   farmId: string;

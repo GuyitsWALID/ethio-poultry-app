@@ -21,12 +21,12 @@
 - [x] 3.4 Preserve legacy sales and provide exact governed source corrections. No allocation backfill. Manager proposal → CEO approval → replay-safe manager application revalidates sale revisions, source context, conversion and current access; stale reviews become auditable conflicts. Signed-in Chromium covers the complete flow, History, scoped totals, frozen reports and bilingual tablet layouts. Whole-release/device gates remain in section 6.
 
 ## 4. Scheduler
-- [ ] 4.1 Add structured rules/occurrences, permission/revision checks and read-only legacy mapping preflight.
-- [ ] 4.2 Add one-time/daily/weekly generation with 90-day window, stable occurrence identity and archive boundaries.
-- [ ] 4.3 Build bilingual Scheduler under More with previews and role-specific editing.
-- [ ] 4.4 Add authoritative Today completion commands/forms for weights, cleaning and medical work.
-- [ ] 4.5 Integrate due/overdue Alerts, notifications and reasoned outcomes with atomic Finish day.
-- [ ] 4.6 Extend offline grants/drafts/sync with backward-compatible command handling.
+- [x] 4.1 Add structured rules/occurrences, permission/revision checks and read-only legacy mapping preflight. Retry receipts and immutable creator-role ownership protect CEO plans; legacy records remain unchanged.
+- [x] 4.2 Add one-time/daily/weekly generation with 90-day window, stable occurrence identity and archive boundaries. Changes affect unfinished future work only; today's promised work and overdue reminders survive cancellation of future generation.
+- [x] 4.3 Build bilingual Scheduler under More with previews and role-specific editing. English/Amharic signed-in Chromium and 768/1024px tablet layouts passed.
+- [x] 4.4 Add authoritative Today completion commands/forms for weights, cleaning and medical work. Actual records, inventory deductions, assignment/revision checks and audit evidence remain atomic and replay-safe.
+- [x] 4.5 Integrate due/overdue Alerts, notifications and reasoned outcomes with atomic Finish day. Exact-source verification requires actual evidence; unresolved due work blocks closure under the shared farm lock.
+- [x] 4.6 Extend offline grants/drafts/sync with backward-compatible command handling. Prepared occurrence revisions, independent drafts and offline save/reconnect passed; interrupted downloads preserve cached forms without swallowing permission/storage failures. Physical-device/cross-browser gates remain in section 6.
 
 ## 5. Expenses & purchases
 - [ ] 5.1 Consolidate existing expense/receipt forms under More and reuse them in Today.

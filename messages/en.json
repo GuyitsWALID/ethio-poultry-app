@@ -1,4 +1,9 @@
 {
+  "Scheduler": {
+    "reviewChanged":"I reviewed the changed plan; keep my inputs",
+    "route":"Vaccination route", "water":"Drinking water", "injection":"Injection", "spray":"Spray", "eye_drop":"Eye drop", "legacy":"Existing plans awaiting mapping review", "legacyHelp":"These original plans are retained. Review their named flock and outcome evidence before conversion; no status is guessed.", "inspect":"Inspect original plan",
+    "title":"Scheduler", "intro":"Plan work for named flocks. Record the work itself in Today.", "new":"Create plan", "edit":"Edit plan", "save":"Save plan", "cancel":"Cancel plan", "close":"Close editor", "refresh":"Refresh plans", "loading":"Loading scheduled work…", "failed":"Scheduled work could not load. Refresh and try again.", "denied":"This plan or farm is no longer available to you.", "changed":"This plan changed. Refresh before saving again.", "invalid":"Check the plan dates, named flocks and required fields.", "saved":"Plan saved.", "farm":"Farm", "allFarms":"All authorized farms", "flocks":"Named flocks", "choose":"Choose", "name":"Work to do", "notes":"Instructions / completed work", "kind":"Work type", "frequency":"Repeat", "from":"Start date", "to":"End date (optional)", "once":"Once", "daily":"Every day", "weekly":"Weekly on the start-date weekday", "weight":"Weigh birds", "cleaning":"Cleaning and biosecurity", "vaccination":"Vaccination", "treatment":"Treatment", "preview":"Next planned dates", "previewHelp":"Up to 90 operating days. Plans stop when the named flock cycle ends; replacements do not inherit them.", "agenda":"Scheduled work", "plans":"Plans", "empty":"No work in this period. Create a plan or change the dates.", "pending":"Due", "completed":"Completed", "deferred":"Deferred", "skipped":"Skipped", "cancelled":"Cancelled", "inactive":"Inactive", "ceoPlan":"Only the creator or CEO can edit this plan.", "today":"Complete in Today", "more":"Load more", "outcome":"Outcome", "complete":"Record completed work", "defer":"Defer to another date", "skip":"Skip with a reason", "reason":"Reason", "later":"New date", "sample":"Birds sampled", "average":"Average weight (g)", "minimum":"Minimum weight (g)", "maximum":"Maximum weight (g)", "uniformity":"Uniformity (%)", "item":"Medicine / vaccine item", "warehouse":"Warehouse", "quantity":"Quantity used", "saveOutcome":"Save outcome", "outcomeHelp":"Enter what actually happened. Completion creates the real record; inventory is deducted once when used.", "none":"No pending scheduled work.", "offline":"Plans must be managed online. Prepared Today work can be recorded offline.", "filtersFrom":"From", "filtersTo":"To", "readOnly":"Completed outcomes are retained as evidence. Editing a plan changes unfinished future work only."
+  },
   "EggSaleSources": {
     "title": "Egg source flocks", "help": "Allocate whole eggs to each producing flock in this farm. The total must equal quantity × eggs per sale unit. This remains one sale and one payment record.",
     "flock": "Source flock", "eggs": "Eggs from this flock", "choose": "Choose a flock", "add": "Add source flock", "remove": "Remove source",
@@ -2388,6 +2393,7 @@
     "addisAbaba": "Addis Ababa"
   },
   "Navigation": {
+    "scheduler": "Scheduler",
     "performance": "Farm performance",
     "history": "History",
     "reports": "Reports",
@@ -3008,6 +3014,7 @@
         "sales": "Record what was sold, the quantity, price, and amount already paid.",
         "expenses": "Record a farm cost such as transport, utilities, labour, or maintenance.",
         "assignedFixes": "Update the work here; open exact evidence only when you need to inspect the source record.",
+        "scheduledWork": "Record the real work, or provide a reason to defer or skip it before finishing the day.",
         "review": "Check every missing or unsynced job before closing the farm day."
       },
       "readySummary": "Open and enter this work here without leaving Today.",
@@ -3176,7 +3183,8 @@
       "stock": "Stock work",
       "sales": "Sales",
       "expenses": "Expenses",
-      "assignedFixes": "Assigned fixes"
+      "assignedFixes": "Assigned fixes",
+      "scheduledWork": "Scheduled work"
     },
     "states": {
       "notStarted": "Not started",

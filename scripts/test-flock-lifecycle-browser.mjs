@@ -14,8 +14,9 @@ const created=[];
 const reuseBuild=process.argv.includes('--reuse-local-build');
 const recordingStartOnly=process.argv.includes('--recording-start-only');
 const eggSalesOnly=process.argv.includes('--egg-sales-only');
-const specs=eggSalesOnly?['tests/browser/egg-sale-sources.spec.ts']:recordingStartOnly?['tests/browser/recording-start.spec.ts']:['tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts'];
-const testArgs=process.argv.slice(2).filter(arg=>!['--reuse-local-build','--recording-start-only','--egg-sales-only'].includes(arg));
+const schedulerOnly=process.argv.includes('--scheduler-only');
+const specs=schedulerOnly?['tests/browser/scheduler.spec.ts']:eggSalesOnly?['tests/browser/egg-sale-sources.spec.ts']:recordingStartOnly?['tests/browser/recording-start.spec.ts']:['tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts'];
+const testArgs=process.argv.slice(2).filter(arg=>!['--reuse-local-build','--recording-start-only','--egg-sales-only','--scheduler-only'].includes(arg));
 let cloned=false, app, proxy;
 assert.match(database,/^flock_browser_[a-f0-9]{32}$/);
 function docker(args,input){
@@ -155,7 +156,7 @@ try{
       commit;`);
   }
   if(reuseBuild)console.log('Reusing the previously verified LOCAL bundle for test-only retries; never deploy this bundle.');
-  else await runNode(['node_modules/next/dist/bin/next','build','--webpack'],env);
+  else await runNode(schedulerOnly?['node_modules/@opennextjs/cloudflare/dist/cli/index.js','build']:['node_modules/next/dist/bin/next','build','--webpack'],env);
   app=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3100'],{env,stdio:'inherit'});
   await ready(`${env.APP_BASE_URL}/auth/sign-in`,180_000);
   // Check protected routes outside the interaction test deadline.

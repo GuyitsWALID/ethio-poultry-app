@@ -1,6 +1,7 @@
 export const TERMINOLOGY_GLOSSARY_VERSION = "2026-10-30-approved-2" as const;
 
 export const managerTodayMessageKeys = [
+  "Navigation.scheduler", "Today.tasks.scheduledWork", "Today.embedded.examples.scheduledWork",
   "Today.birdCheck.sources.placement",
   "Today.birdCheck.sources.baseline",
   "Common.language",
@@ -330,6 +331,7 @@ export const managerTodayMessageKeys = [
 export const pendingTerminologyReviewKeys: readonly string[] = [
   "Today.embedded.eggSources", "Today.embedded.eggSourcesHelp", "Today.embedded.sourceFlock",
   "Today.embedded.sourceEggs", "Today.embedded.addSourceFlock", "Today.embedded.eggsPerUnit",
+  "Navigation.scheduler", "Today.tasks.scheduledWork", "Today.embedded.examples.scheduledWork",
 ];
 
 export const terminologyReview = {

@@ -1,6 +1,7 @@
 import "server-only";
 import {governanceAdmin, type AccessContext} from "@/lib/access-context";
 import type {TodayWorkspace} from "./contracts";
+import {dueScheduledWork} from "@/lib/scheduler/server";
 
 // Call only after the workspace has passed tenant, role and assignment checks.
 export async function attachOfflineGrant(context: AccessContext, workspace: TodayWorkspace, now = new Date()) {
@@ -13,9 +14,11 @@ export async function attachOfflineGrant(context: AccessContext, workspace: Toda
     .is("revoked_at",null).lte("starts_at",now.toISOString())
     .or(`expires_at.is.null,expires_at.gt.${now.toISOString()}`).maybeSingle();
   const dayEnd = `${today}T21:00:00.000Z`;
+  const scheduled=await dueScheduledWork(context,workspace.farm.id,today);
   if (!assignment.error && assignment.data) workspace.offlineAccess = {
     tenantId:context.orgId,userId:context.userId,farmId:workspace.farm.id,
     flockIds:workspace.flocks.filter(flock=>flock.canRecord!==false).map(flock=>flock.id),
+    scheduleRevisions:Object.fromEntries(scheduled.map(row=>[row.id,{revision:row.revision,flockId:row.flock_id}])),
     workDate:today,issuedAt:now.toISOString(),
     expiresAt:assignment.data.expires_at && Date.parse(assignment.data.expires_at)<Date.parse(dayEnd) ? assignment.data.expires_at : dayEnd,
   };

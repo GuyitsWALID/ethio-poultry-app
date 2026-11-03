@@ -211,6 +211,17 @@ export async function getCurrentAlerts(
   }
 
   const unique = new Map<string, CurrentAlert>();
+  // Stable occurrence identity lets the existing action/notification custody
+  // verify resolution from the real completion/defer/skip outcome.
+  const scheduled=await allAlertRows<{id:string;farm_id:string;flock_id:string;due_date:string;title:string;created_at:string}>((from,to)=>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabaseAdmin as any).from("scheduled_work_occurrences").select("id,farm_id,flock_id,due_date,title,created_at").eq("org_id",orgId).eq("status","pending").lte("due_date",today).order("id").range(from,to));
+  for(const row of scheduled){
+    const flock=(flocksRes.data??[]).find(f=>f.id===row.flock_id);
+    if(!flock||flock.completed_at||!["active","quarantined"].includes(String(flock.status)))continue;
+    alerts.push({id:`scheduled-work-${row.id}`,title:row.title,severity:row.due_date<today?"high":"medium",source:"Scheduler",farmId:row.farm_id,
+      context:`${flock.flock_code} · ${row.due_date}`,route:`/app/today?farm_id=${row.farm_id}&flock_id=${row.flock_id}&task=scheduled_work`,createdAt:row.created_at});
+  }
   alerts.forEach((alert) => {
     if (!unique.has(alert.id)) unique.set(alert.id, alert);
   });

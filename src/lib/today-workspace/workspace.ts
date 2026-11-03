@@ -76,6 +76,7 @@ export type TodayWorkspaceData = {
     suppliesAttestationFingerprint: string | null;
   }>;
   assignedActionCount: number;
+  scheduledWork?: Array<{flockId:string;pending:number;revision?:string}>;
   farmActivity?: {stockReceipts: number; stockCounts: number; sales: number; expenses: number};
 };
 
@@ -143,6 +144,8 @@ export function deriveTodayWorkspace(
         sourceFingerprint: flock.suppliesFingerprint,
       }),
     ];
+    const scheduledCount=data.scheduledWork?.find(row=>row.flockId===flock.id)?.pending??0;
+    if(scheduledCount&&!flock.completedAt)tasks.push(task({code:"scheduled_work",required:true,applicable:true,state:"not_started",resourceRevision:data.scheduledWork?.find(row=>row.flockId===flock.id)?.revision}));
     return {
       id: flock.id,
       canRecord: canEdit && !flock.completedAt && data.operatingDay.status === "open",
@@ -414,5 +417,8 @@ export async function loadTodayWorkspace(
       expenses: expenses.data?.length ?? 0,
     },
   };
+  const {dueScheduledWork}=await import("@/lib/scheduler/server");
+  const scheduled=await dueScheduledWork(context,selection.farmId,selection.workDate);
+  data.scheduledWork=flockIds.map(id=>({flockId:id,pending:scheduled.filter(row=>row.flock_id===id).length,revision:scheduled.filter(row=>row.flock_id===id).map(row=>`${row.id}:${row.revision}`).join("|")}));
   return deriveTodayWorkspace(data, selection, context.role === "farm_manager");
 }

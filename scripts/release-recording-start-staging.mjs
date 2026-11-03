@@ -7,6 +7,8 @@ import {verifyMigrationLock} from "./deployment-contract.mjs";
 nextEnv.loadEnvConfig(process.cwd());
 const mode = process.argv[2];
 const eggSales = process.argv.includes("--egg-sales");
+const scheduler = process.argv.includes("--scheduler");
+assert.ok(!(eggSales&&scheduler),"Release one work package at a time.");
 assert.ok(["inspect", "check", "deploy"].includes(mode), "Use inspect, check (rollback), or deploy.");
 const connection = process.env.STAGING_DB_URL;
 assert.ok(connection, "STAGING_DB_URL is required; never paste credentials.");
@@ -31,18 +33,21 @@ assert.ok(lock.ok, "Migration lock mismatch. Review before release.");
 const files = Object.keys(lock.actual.files).sort();
 const local = files.map(file => file.slice(0,14));
 const remote = sql("select version from supabase_migrations.schema_migrations order by version;").split(/\r?\n/);
-const allowed = eggSales ? ["20261102000000_traceable_egg_sales.sql"] : ["20261030000000_verified_today_opening_source.sql", "20261030001000_governed_recording_start.sql"];
+const allowed = scheduler ? ["20261103000000_named_flock_scheduler.sql"] : eggSales ? ["20261102000000_traceable_egg_sales.sql"] : ["20261030000000_verified_today_opening_source.sql", "20261030001000_governed_recording_start.sql"];
+if(scheduler)assert.ok(remote.includes("20261102000000"),"Egg-source prerequisite must already be migrated.");
 if (eggSales) assert.ok(remote.includes("20261030001000"), "Recording-start prerequisite must already be migrated.");
 assert.ok(remote.every(version => local.includes(version)), "Unknown staging migration history. Stopped.");
 const pending = files.filter(file => !remote.includes(file.slice(0,14)));
 assert.ok(pending.every(file => allowed.includes(file)), "Unrelated pending staging migrations. Stopped.");
 assert.ok(allowed.every(file => files.includes(file)), "Expected release files are missing.");
 console.log(`Verified staging ${project}; pending: ${pending.join(", ") || "none"}`);
+if(scheduler)console.log(`Read-only legacy preflight: ${sql("select json_build_object('unfinished_weight_tasks',(select count(*) from public.batch_weight_check_tasks where status<>'completed'),'encoded_health_targets',(select count(*) from public.health_events where voided_at is null and description like 'SCHEDULE_TARGET|%'),'encoded_health_outcomes',(select count(*) from public.health_events where voided_at is null and description like 'SCHEDULE_STATUS|%')); ")}. No legacy schedules are converted; unresolved mappings remain blocked for review.`);
 if (mode !== "inspect") {
   const tables = ["organizations","profiles","user_farm_access","flocks","batches","daily_farm_records",
     "mortality_events","flock_cull_events","stock_ledger","daily_sales_records","governance_requests",
     "governance_audit_events","egg_custody_opening_balances"];
   if (remote.includes("20261030001000")) tables.push("flock_recording_starts");
+  if(scheduler)tables.push("batch_weight_check_tasks","weight_records","vaccination_events","health_events","biosecurity_checks");
   const fingerprint = table => `md5(coalesce((select string_agg((${table === "daily_sales_records" && eggSales ? "to_jsonb(t)-array['egg_source_version','egg_sources','egg_conversion_multiplier','sale_request_id','sale_request_hash']" : "to_jsonb(t)"})::text,'' order by id) from public.${table} t),''))`;
   const before = tables.map(table => `('${table}',${fingerprint(table)})`).join(",");
   const statements = [];
@@ -83,6 +88,20 @@ ${eggSales ? `do $$ begin
   or position('management-report-v3' in pg_get_functiondef('public.check_management_report_resources()'::regprocedure))=0
  then raise exception 'RELEASE_CHECK: egg-source permissions or snapshot safeguards differ'; end if;
 end $$;` : ""}
+${scheduler ? `do $$ begin
+ if not (select relrowsecurity from pg_class where oid='public.scheduled_work_rules'::regclass)
+  or not (select relrowsecurity from pg_class where oid='public.scheduled_work_occurrences'::regclass)
+  or has_table_privilege('authenticated','public.scheduled_work_rules','insert')
+  or has_table_privilege('authenticated','public.scheduled_work_occurrences','update')
+  or has_function_privilege('authenticated','public.apply_scheduled_work_outcome(uuid,uuid,uuid,date,jsonb)','execute')
+  or has_function_privilege('anon','public.save_scheduled_work_rule(uuid,uuid,uuid,integer,jsonb)','execute')
+  or has_function_privilege('authenticated','public.save_scheduled_work_rule(uuid,uuid,uuid,integer,jsonb)','execute')
+  or position('r.created_by_role' in pg_get_functiondef('public.save_scheduled_work_rule(uuid,uuid,uuid,integer,jsonb)'::regprocedure))=0
+  or position('complete_scheduled_work' in pg_get_functiondef('public.execute_today_command_v1(uuid,jsonb)'::regprocedure))=0
+  or position('SCHEDULE_DUE' in pg_get_functiondef('public.operational_action_source_state(uuid,uuid)'::regprocedure))=0
+  or position('Scheduled work is still missing an outcome.' in pg_get_functiondef('public.finish_farm_operating_day_v1(uuid,uuid,integer,jsonb,uuid,date,text)'::regprocedure))=0
+ then raise exception 'RELEASE_CHECK: Scheduler permissions or command/closure guards differ'; end if;
+end $$;` : ""}
 `;
   const history = remote.map(value => `'${value}'`).join(",");
   sql(`begin;
@@ -97,5 +116,5 @@ insert into release_sources values ${before};
 ${statements.join("\n")}
 ${checks}
 ${mode === "deploy" ? "commit" : "rollback"};`);
-  console.log(`PASS: ${eggSales ? "egg-source" : "starting-count"} staging ${mode === "deploy" ? "migrations committed" : "dry run rolled back"}; permissions and operational source preservation verified. Production not accessed.`);
+  console.log(`PASS: ${scheduler ? "Scheduler" : eggSales ? "egg-source" : "starting-count"} staging ${mode === "deploy" ? "migrations committed" : "dry run rolled back"}; permissions and operational source preservation verified. Production not accessed.`);
 }

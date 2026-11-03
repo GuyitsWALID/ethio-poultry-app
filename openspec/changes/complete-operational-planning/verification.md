@@ -111,3 +111,40 @@ automated validation, not a new claim of independent partner review.
   on 2026-11-03. The release transaction verified permission contracts and original
   operational-field fingerprints. Application release uses `notmain`; remote CI,
   deployment and post-deployment acceptance are separate from these local checks.
+
+## Task 4 — named-flock Scheduler, 2026-11-03
+
+- Tasks 4.1–4.6 are implemented. Task 5 has not started. Interface, permissions,
+  generation and legacy boundaries are documented in `scheduler.md`.
+- Full unit suite: 586 passed, no failures/skips. Final Scheduler regressions,
+  changed-source ESLint, TypeScript and strict OpenSpec validation passed.
+- Fresh production and OpenNext Cloudflare builds passed. Their disposable local
+  configuration is never deployed or committed as generated artifacts.
+- Docker dry run applied all 33 forward migrations; populated preservation,
+  all 29 SQL integration files and archived-correction assertions passed. The
+  original local postgres database was preserved.
+- SQL acceptance covers 90-day generation, creator-role permissions, revisions,
+  named targets, actual four-kind completion, inventory deductions once, replay,
+  deferral, overdue escalation, RLS/revocation, forced audit rollback, source
+  verification and atomic Finish-day blocking.
+- The final real two-session completion race passed: one weight, one outcome
+  audit, safe competing conflict and stable retry replay. Its clone was removed.
+- Signed-in production-bundle Chromium passed manager plan creation, CEO-created
+  plan protection, real weight recording, offline skip/reconnect and English/
+  Amharic Scheduler at 768/1024px. The resulting Amharic screenshot was inspected;
+  existing typography, palette and date controls were retained.
+- Acceptance found and fixed invalid enum filtering, inaccessible select labels,
+  whole-number weight-sample validity, and interrupted background preparation
+  incorrectly pausing already cached forms. HTTP authorization and storage errors
+  remain blocking; reconnect independently reauthorizes commands.
+- The pinned staging rollback-only migration check passed with unchanged original
+  operational-field fingerprints. Read-only legacy preflight found zero pending
+  weight tasks, zero encoded targets and four encoded outcomes; none are converted.
+- New terminology remains pending partner review. Physical-device, cross-browser,
+  whole-release staging application acceptance and pilot gates remain in section 6.
+  No production access or pilot sign-off is implied.
+- Staging migration `20261103000000_named_flock_scheduler.sql` committed on
+  2026-11-03 to `uzmhpecehmlwojdmitgj`. The release transaction verified permissions,
+  the exact-source checker and unchanged original operational-field fingerprints.
+  Application release uses `notmain`; remote deployment acceptance is not implied
+  by the local/browser checks above.

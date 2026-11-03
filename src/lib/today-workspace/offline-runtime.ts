@@ -10,6 +10,7 @@ export const taskDraftKey = (selection: OfflineSelection, task: string) => `task
 const selectionOf = (command: TodayCommand): OfflineSelection => ({farmId: command.farm_id, flockId: command.flock_id, workDate: command.work_date});
 
 export function commandResourceKey(command: TodayCommand) {
+  if(command.type==="complete_scheduled_work")return `scheduled:${command.payload.occurrence_id}`;
   const key = `${command.farm_id}:${command.flock_id ?? "farm"}:${command.work_date}`;
   if (command.type === "save_daily_record") return `daily:${key}`;
   if (command.type === "save_feed_session" || command.type === "close_feed_day") return `feed:${key}`;
@@ -17,6 +18,11 @@ export function commandResourceKey(command: TodayCommand) {
 }
 
 export function remainingDraft(draft: OfflineDraft, command: TodayCommand): OfflineDraft | undefined {
+  if(draft.taskId==="scheduled_work"&&command.type==="complete_scheduled_work"){
+    const value=draft.value as {revision?:string;fields?:Record<string,unknown>};
+    const fields=Object.fromEntries(Object.entries(value.fields??{}).filter(([key])=>!key.startsWith(`field:${command.payload.occurrence_id}:`)));
+    return Object.keys(fields).length?{...draft,value:{...value,fields}}:undefined;
+  }
   if (draft.taskId !== "health_deaths") return undefined;
   const value = draft.value as {revision?: string; fields?: Record<string, unknown>};
   if (!value.fields) return undefined;
@@ -87,7 +93,7 @@ export class TodayOfflineRuntime {
       if (entry.taskKey) {
         const draft = await this.store.getDraft(entry.taskKey);
         const fields=(draft?.value as {fields?:Record<string,unknown>}|undefined)?.fields;
-        if(draft && draft.taskId!=="health_deaths" && draft.updatedAt!==entry.draftUpdatedAt && !(draft.taskId==="feeding"&&fields?.["feeding.editingId"]==null))return;
+        if(draft && !["health_deaths","scheduled_work"].includes(draft.taskId) && draft.updatedAt!==entry.draftUpdatedAt && !(draft.taskId==="feeding"&&fields?.["feeding.editingId"]==null))return;
         const remaining = draft && remainingDraft(draft, entry.command);
         if (remaining) await this.store.putDraft(remaining);
         else await this.store.removeDraft(entry.taskKey);
@@ -98,6 +104,11 @@ export class TodayOfflineRuntime {
     if (command.type === "finish_operating_day") throw Error("ONLINE_REQUIRED");
     return this.serialize(async () => {
       if (!this.online()) await this.assertEditable(selectionOf(command));
+      if(!this.online()&&command.type==="complete_scheduled_work"){
+        const stored=await this.store.getDraft(`grant:${workspaceKey(command.farm_id,command.work_date)}`);
+        const grant=(stored?.value as StoredOfflineGrant|undefined)?.grant.scheduleRevisions?.[command.payload.occurrence_id];
+        if(!grant||grant.revision!==command.payload.occurrence_revision||grant.flockId!==command.flock_id)throw Error("OFFLINE_NOT_AUTHORIZED");
+      }
       const queue = await this.store.listCommands();
       const existing = queue.find(row => row.command.command_id === command.command_id);
       if (existing) {
@@ -107,7 +118,7 @@ export class TodayOfflineRuntime {
       const sameScope=queue.filter(row=>row.command.farm_id===command.farm_id&&row.command.flock_id===command.flock_id&&row.command.work_date===command.work_date);
       // Equal append-only events can be intentional (two identical expenses or
       // feedings). Only repeated mutable/zero-confirmation saves are coalesced.
-      const coalescible=["save_daily_record","close_feed_day","confirm_no_activity"].includes(command.type);
+      const coalescible=["save_daily_record","close_feed_day","confirm_no_activity","complete_scheduled_work"].includes(command.type);
       const duplicate=coalescible&&sameScope.find(row=>row.command.type===command.type&&JSON.stringify(row.command.payload)===JSON.stringify(command.payload));
       if(duplicate)return duplicate.result??{command_id:duplicate.command.command_id,status:"queued"};
       const daily=sameScope.filter(row=>row.command.type==="save_daily_record"||row.command.type==="close_feed_day").at(-1)?.command.command_id;

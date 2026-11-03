@@ -16,7 +16,7 @@ const base = {
 };
 
 test("Today command catalogue is closed and complete", () => {
-  assert.equal(todayCommandTypes.length, 13);
+  assert.equal(todayCommandTypes.length, 14);
   assert.throws(() => parseTodayCommand({...base, type: "invent_new_command", payload: {}}));
 });
 
@@ -31,6 +31,7 @@ test("every version-one command has a usable validated interface", () => {
     {...base, type: "record_mortality_event", payload: {count: 1, cause: "Natural causes"}},
     {...base, type: "record_health_event", payload: {event_type: "observation", event: {description: "Healthy flock"}}},
     {...base, type: "complete_vaccination", payload: {schedule_id: actionId, item_id: itemId, warehouse_id: warehouseId, quantity: 100}},
+    {...base, type: "complete_scheduled_work", payload: {occurrence_id: actionId,occurrence_revision:1,outcome:"skipped",reason:"Not required today"}},
     {...base, type: "confirm_no_activity", payload: {task_code: "routine_supplies", source_fingerprint: "source-fingerprint"}},
     {...base, type: "record_stock_receipt", payload: {warehouse_id: warehouseId, item_id: itemId, quantity: 10, unit_cost: 25}},
     {...base, type: "record_stock_count", payload: {warehouse_id: warehouseId, rows: [{item_id: itemId, counted_quantity: 10}]}},

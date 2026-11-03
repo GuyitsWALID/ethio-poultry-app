@@ -4,6 +4,10 @@ import type {OfflineIdentity} from "./offline-store.ts";
 export type StoredOfflineGrant = {grant: OfflineAccessGrant; receivedAt: number; lastSeenAt: number};
 export type OfflineEditDecision = "allowed" | "expired" | "clock_changed" | "not_authorized";
 
+export function preparationInterrupted(error: unknown, online: boolean): boolean {
+  return !online && error instanceof Error && error.message === "OFFLINE_PREPARATION_NETWORK";
+}
+
 // navigator.onLine is only a hint (especially during a service-worker reload).
 // A transport failure cannot prove sign-out. Cached editing still needs its
 // unexpired grant; foreground synchronization independently reauthorizes online.

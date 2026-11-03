@@ -9,6 +9,7 @@ import {TodayOfflineRuntime, taskDraftKey, workspaceKey, type LocalCommandResult
 import {startForegroundSync} from "@/lib/today-workspace/foreground-sync";
 import {requestBackgroundSync, sendTodayCommand} from "@/lib/today-workspace/sync";
 import {offlineWorkerFailed} from "@/lib/today-workspace/offline-worker";
+import {preparationInterrupted} from "@/lib/today-workspace/offline-policy";
 
 type OfflineContextValue = {
   runtime: TodayOfflineRuntime | null;
@@ -64,12 +65,16 @@ export function TodayOfflineProvider({children,bootstrapRuntime}: {children: Rea
       runtimeRef.current=active;setRuntime(active);
     }
     await runtimeRef.current.rememberWorkspace(workspace);
-    await runtimeRef.current.prepareDetails(workspace,async(task,flockId)=>{
+    try { await runtimeRef.current.prepareDetails(workspace,async(task,flockId)=>{
       const params=new URLSearchParams({farm_id:workspace.farm.id,date:workspace.workDate});if(flockId)params.set("flock_id",flockId);
-      const response=await fetch(`/api/farm-manager/today/tasks/${task}?${params}`,{cache:"no-store"});
+      const response=await fetch(`/api/farm-manager/today/tasks/${task}?${params}`,{cache:"no-store"}).catch(()=>{throw Error("OFFLINE_PREPARATION_NETWORK");});
       if(!response.ok)throw Error("OFFLINE_PREPARATION_FAILED");
       return response.json();
-    });
+    }); } catch(error) {
+      // Interrupted downloads must not disable forms already stored under a valid grant.
+      if(!preparationInterrupted(error,navigator.onLine))throw error;
+      await refresh();return;
+    }
     setProblem(null);
     await refresh();
   },[refresh]);

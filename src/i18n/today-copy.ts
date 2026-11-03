@@ -11,6 +11,7 @@ export const todayTaskMessageKeys = {
   sales: "tasks.sales",
   expenses: "tasks.expenses",
   assigned_fixes: "tasks.assignedFixes",
+  scheduled_work: "tasks.scheduledWork",
 } as const satisfies Record<TodayTask["code"], `tasks.${string}`>;
 
 export const todayStateMessageKeys = {

@@ -60,7 +60,7 @@ test("every Today task, state, and server error resolves through a catalog key",
   assert.deepEqual(Object.keys(todayErrorMessageKeys).sort(), [...todayErrorCodes].sort());
   assert.deepEqual(Object.keys(todayTaskMessageKeys).sort(), [
     "assigned_fixes", "birds", "eggs_water", "expenses", "feeding", "health_deaths",
-    "review_finish", "routine_supplies", "sales", "stock",
+    "review_finish", "routine_supplies", "sales", "scheduled_work", "stock",
   ]);
   assert.deepEqual(Object.keys(todayStateMessageKeys).sort(), [
     "complete", "draft_on_tablet", "needs_attention", "not_started", "waiting_to_sync",
@@ -93,6 +93,7 @@ test("partner approval is recorded explicitly with its reviewed version", () => 
   assert.deepEqual(pendingTerminologyReviewKeys, [
     "Today.embedded.eggSources", "Today.embedded.eggSourcesHelp", "Today.embedded.sourceFlock",
     "Today.embedded.sourceEggs", "Today.embedded.addSourceFlock", "Today.embedded.eggsPerUnit",
+    "Navigation.scheduler", "Today.tasks.scheduledWork", "Today.embedded.examples.scheduledWork",
   ]);
   assert.deepEqual(terminologyReview.pendingReviewMessageKeys, pendingTerminologyReviewKeys);
   assert(pendingTerminologyReviewKeys.every((key) => managerTodayMessageKeys.includes(key)));
