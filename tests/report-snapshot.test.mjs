@@ -25,7 +25,8 @@ test("legacy rendering stays version-specific and unknown versions fail closed",
   assert.equal(readableReportVersion("management-report-v1"), "management-report-v1");
   assert.equal(readableReportVersion(scopedReportVersion), "management-report-v1-scoped");
   assert.equal(readableReportVersion("management-report-v2"), "management-report-v2");
-  for (const version of [null, undefined, "management-report-v3", ""]) assert.throws(() => readableReportVersion(version), /not supported/);
+  assert.equal(readableReportVersion("management-report-v3"), "management-report-v3");
+  for (const version of [null, undefined, "management-report-v4", ""]) assert.throws(() => readableReportVersion(version), /not supported/);
 });
 
 test("all application snapshot reads use the database permission boundary", async () => {

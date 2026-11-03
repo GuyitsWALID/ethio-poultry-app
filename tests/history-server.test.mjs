@@ -9,6 +9,7 @@ import {historySources} from "../src/lib/history/sources.ts";
 let source = await readFile(new URL("../src/lib/history/server.ts", import.meta.url), "utf8");
 source = source.replace('import "server-only";', '').replace(/^import .* from "@\/lib\/access-context";$/m, 'const governanceAdmin = {};').replace(/^import .* from "@\/lib\/warehouse-access";$/m, 'const effectiveWarehouseIds = async () => [];');
 for (const file of ["contracts", "sources"]) source = source.replace(`from "./${file}"`, `from "${new URL(`../src/lib/history/${file}.ts`, import.meta.url).href}"`);
+source = source.replace('from "@/lib/egg-sale-sources"', `from "${new URL('../src/lib/egg-sale-sources.ts',import.meta.url).href}"`);
 const {listHistory, historyDetail} = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`);
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const org = uuid(1), otherOrg = uuid(2), farm = uuid(10), otherFarm = uuid(11), flock = uuid(20), otherFlock = uuid(21), house = uuid(30), batch = uuid(40), store = uuid(50), shared = uuid(51);
@@ -30,6 +31,21 @@ function fixtures() {
 }
 const input = (changes = {}) => parseHistoryInput(new URLSearchParams({from: "2020-01-01", to: "2026-10-17", ...changes}));
 const warehouses = async () => [store];
+test("combined egg sale stays one History row, matches every named source and preserves exact correction context", async () => {
+  const tables = fixtures();
+  tables.flocks.push(row(22,{flock_code:"Second flock",farm_id:farm,house_id:house,batch_id:batch,status:"active"}));
+  tables.daily_sales_records = [row(330,{farm_id:farm,flock_id:null,house_id:null,batch_id:null,sale_date:"2026-10-01",product_category:"egg",quantity:2,unit:"tray",gross_amount:30,paid_amount:10,balance_due:20,
+    egg_source_version:1,egg_sources:[{flock_id:flock,flock:"Archived flock",house_id:house,batch_id:batch,egg_quantity:30,multiplier:30},{flock_id:uuid(22),flock:"Second flock",house_id:house,batch_id:batch,egg_quantity:30,multiplier:30}]})];
+  for(const target of [flock,uuid(22)]) {
+    const page=await listHistory(ctx,input({category:"sales",flock_id:target}),null,historyDb(tables),warehouses);
+    assert.equal(page.items.length,1);assert.equal(page.items[0].id,uuid(330));
+  }
+  const detail=await historyDetail(ctx,"sale",uuid(330),historyDb(tables),warehouses);
+  assert.equal(detail.supporting.length,2);assert.equal(detail.supporting[0].fields.find(field=>field.key==="egg_quantity").value,30);
+  const correction=new URL(detail.correctionHref,"https://local.invalid");
+  assert.equal(correction.searchParams.get("request_type"),"egg_sale_sources");assert.equal(correction.searchParams.get("source_id"),uuid(330));
+  assert.equal(detail.fields.find(field=>field.key==="gross_amount").value,30);
+});
 const denied = error => ["ACCESS_DENIED", "UNAVAILABLE"].includes(error.code);
 
 test("History scopes before pagination and reaches 1,205 archived-flock records", async () => {

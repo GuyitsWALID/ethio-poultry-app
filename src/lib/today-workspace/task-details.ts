@@ -166,6 +166,15 @@ export async function loadTodayTaskDetail(
     }};
   }
 
+  if (task === "sales") {
+    const [flocks, conversions] = await Promise.all([
+      governanceAdmin.from("flocks").select("id,flock_code,house_id,batch_id").eq("org_id", context.orgId).eq("farm_id", input.farmId)
+        .in("flock_type", ["layer", "parent_stock"]).lte("placement_date", input.workDate).order("flock_code"),
+      governanceAdmin.from("sales_unit_conversions").select("unit,multiplier").eq("org_id", context.orgId).eq("product_category", "egg").order("unit"),
+    ]);
+    return {...base, task, data: {sourceFlocks: rows(flocks, "Egg source flocks"), eggUnits: rows(conversions, "Egg sale units")}};
+  }
+
   if (task === "health_deaths") {
     const [mortalityResult, healthResult, vaccinationResult] = await Promise.all([
       governanceAdmin.from("mortality_events").select("id,count,cause,recorded_time,diagnosis,notes").eq("org_id", context.orgId).eq("flock_id", input.flockId!).eq("record_date", input.workDate),

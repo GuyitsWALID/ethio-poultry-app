@@ -191,6 +191,12 @@ export const managerTodayMessageKeys = [
   "Today.embedded.unitPrice",
   "Today.embedded.paid",
   "Today.embedded.saleSaved",
+  "Today.embedded.eggSources",
+  "Today.embedded.eggSourcesHelp",
+  "Today.embedded.sourceFlock",
+  "Today.embedded.sourceEggs",
+  "Today.embedded.addSourceFlock",
+  "Today.embedded.eggsPerUnit",
   "Today.embedded.recordSale",
   "Today.embedded.feed",
   "Today.embedded.utility",
@@ -321,7 +327,10 @@ export const managerTodayMessageKeys = [
 ] as const;
 
 // Product owner confirmed full partner review in chat on 2026-10-30.
-export const pendingTerminologyReviewKeys: readonly string[] = [];
+export const pendingTerminologyReviewKeys: readonly string[] = [
+  "Today.embedded.eggSources", "Today.embedded.eggSourcesHelp", "Today.embedded.sourceFlock",
+  "Today.embedded.sourceEggs", "Today.embedded.addSourceFlock", "Today.embedded.eggsPerUnit",
+];
 
 export const terminologyReview = {
   version: TERMINOLOGY_GLOSSARY_VERSION,

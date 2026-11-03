@@ -1,5 +1,6 @@
 import {warehouseAssignmentScope} from "@/lib/warehouse-access";
 import "server-only";
+import {eggSaleSources} from "@/lib/egg-sale-sources";
 import {allAlertRows} from "./alert-pagination.ts";
 
 import {
@@ -373,7 +374,7 @@ export async function ensureFreshReconciliation(
         governanceAdmin
           .from("daily_sales_records")
           .select(
-            "id,flock_id,farm_id,sale_date,product_category,product_label,quantity,unit,gross_amount,customer_name,created_at,recorded_by",
+            "id,flock_id,farm_id,sale_date,product_category,product_label,quantity,unit,gross_amount,customer_name,created_at,recorded_by,egg_sources,egg_source_version",
           )
           .eq("org_id", ctx.orgId)
           .is("voided_at", null)
@@ -507,6 +508,7 @@ export async function ensureFreshReconciliation(
             customer: text(row.customer_name),
             createdAt: String(row.created_at),
             recordedBy: text(row.recorded_by),
+            eggSources: row.egg_source_version ? eggSaleSources(row.egg_sources).map(source => ({flockId: source.flock_id, quantity: Number(source.egg_quantity)})) : undefined,
           }) satisfies SaleInput,
       ),
       conversions: conversionRows.map(

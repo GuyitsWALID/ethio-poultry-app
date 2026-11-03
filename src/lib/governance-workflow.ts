@@ -10,8 +10,9 @@ import {loadCycleContext, prepareCycleProposal, cycleSubmissionHash, recoverCycl
 import {addisOperatingDate} from "@/lib/flock-lifecycle/server";
 import {loadArchivedCorrectionContext, prepareArchivedCorrection} from "@/lib/flock-lifecycle/archived-corrections";
 import {prepareRecordingStart} from "@/lib/recording-start";
+import {prepareEggSourceCorrection} from "@/lib/egg-sale-sources.server";
 
-const requestTypes = ["batch_create","batch_archive","flock_place","flock_transfer","flock_close","flock_archive","feed_template","breed_target","health_schedule","warning_threshold","locked_correction","void_record","egg_opening_balance","sales_unit_conversion","batch_cycle_create","batch_cycle_close","archived_cycle_correction","recording_start"] as const;
+const requestTypes = ["batch_create","batch_archive","flock_place","flock_transfer","flock_close","flock_archive","feed_template","breed_target","health_schedule","warning_threshold","locked_correction","void_record","egg_opening_balance","sales_unit_conversion","batch_cycle_create","batch_cycle_close","archived_cycle_correction","recording_start","egg_sale_sources"] as const;
 const sourceTables = new Set(["flocks","batches","batch_cycles","feed_control_settings","daily_farm_records","daily_sales_records","health_events","vaccination_events","feeding_session_records","biosecurity_checks","batch_weight_check_tasks"]);
 const db = governanceAdmin as any;
 
@@ -110,6 +111,7 @@ function readableSourceLabel(table:string|null,record:Row|null,maps:Map<string,s
 }
 
 export async function submitGovernanceRequest(ctx:AccessContext,input:GovernanceInput){
+  if(input.request_type==="egg_sale_sources") input=await prepareEggSourceCorrection(ctx,input);
   if(input.request_type==="recording_start") input=await prepareRecordingStart(ctx,input);
   const cycleRequest=input.request_type==="batch_cycle_create"||input.request_type==="batch_cycle_close"||input.request_type==="flock_transfer"||input.request_type==="archived_cycle_correction";
   const cycleHash=cycleRequest?await cycleSubmissionHash(input):null;
@@ -130,6 +132,11 @@ export async function submitGovernanceRequest(ctx:AccessContext,input:Governance
   const farmName=resolvedFarmId?labels.maps.get(resolvedFarmId)??null:null;const warehouseName=warehouseId?labels.maps.get(warehouseId)??null:null;
   const intent=text(input.intent)||requestType;
   const context={title:human(requestType),farmName,houseName:houseId?labels.maps.get(houseId)??null:null,flockName:flockId?labels.maps.get(flockId)??null:null,batchName:batchId?labels.maps.get(batchId)??null:null,warehouseName,sourceLabel:sourceId?(readableSourceLabel(sourceTable,source.record,labels.maps)??`${human(sourceTable??"record")} record`):"New governed record",currentValues:source.values,proposedValues:readableValues(proposed,labels.maps),impact:requestType==="void_record"?"The original record remains auditable and normal calculations exclude it.":"Only the listed values may change after approval.",...(cycleHash?{cycle_submission_hash:cycleHash}:{})};
+  if(requestType==="egg_sale_sources") {
+    context.currentValues = readableValues({egg_sources: sourceRecord.egg_sources ?? [], sale_date: sourceRecord.sale_date,
+      quantity: sourceRecord.quantity, unit: sourceRecord.unit, gross_amount: sourceRecord.gross_amount, paid_amount: sourceRecord.paid_amount}, labels.maps);
+    context.impact = "Only the listed flock egg sources change. Sale amount, payments and original source revisions remain preserved.";
+  }
   if(requestType==="batch_cycle_close"&&farmId&&sourceId){
     const reviewed=await loadCycleContext(ctx,farmId,sourceId,addisOperatingDate(new Date(String(proposed.completed_at))));
     // Bind the human review to the same source revision as the typed proposal.

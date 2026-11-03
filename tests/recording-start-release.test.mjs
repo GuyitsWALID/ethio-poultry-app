@@ -14,5 +14,6 @@ test("recording-start release refuses a non-staging target before SQL", () => {
 test("recording-start release is locked, source-preserving and transactionally reversible for checks", async () => {
   const source = await readFile("scripts/release-recording-start-staging.mjs","utf8");
   for (const guard of ["verifyMigrationLock", "Unrelated pending staging migrations", "operational sources changed", "rollback", "lock_timeout", "has_function_privilege"]) assert.ok(source.includes(guard),guard);
-  assert.ok(source.includes('allowed = ["20261030000000_verified_today_opening_source.sql", "20261030001000_governed_recording_start.sql"]'));
+  assert.ok(source.includes('["20261030000000_verified_today_opening_source.sql", "20261030001000_governed_recording_start.sql"]'));
+  assert.ok(source.includes('eggSales ? ["20261102000000_traceable_egg_sales.sql"]'));
 });

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import "server-only";
+import {projectEggSales} from "@/lib/egg-sale-sources";
 import type {ReportReadSession} from "@/lib/report-read-session.server";
 import {managerWarehouseAccess} from "@/lib/warehouse-access";
 import {reportOperatingDate, reportTimestampBounds, reportWarehouseAllowed} from "@/lib/report-safety";
@@ -156,7 +157,7 @@ export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchPar
     ]);
 
     const scopedSales = ((salesRes.data ?? []) as DailySalesRecord[]).filter((record) => hasScopedAccess(ctx, record));
-    const records = applySalesFilters(scopedSales, params);
+    const records = applySalesFilters(projectEggSales(scopedSales), params);
     const requestedScope = {
       branch_id: params.get("branch_id"),
       farm_id: params.get("farm_id"),
@@ -312,7 +313,7 @@ export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchPar
     const costs=records.map(costForRecord);
     const estimatedCost = costs.some(cost=>cost===null)?null:costs.reduce<number>((sum,cost)=>sum+(cost??0),0);
     const estimatedProfit = estimatedCost===null?null:totalRevenue-estimatedCost;
-    const eggRecords = records.filter((record) => record.product_category === "egg");
+    const eggRecords = [...new Map(records.filter(record => record.product_category === "egg").map(record => [record.id,record])).values()];
     const belowTargetCount = eggRecords.filter((record) => {
       if (!costBasis.targetPricePerEgg) return false;
       return unitPricePerEgg(record) < costBasis.targetPricePerEgg;
@@ -375,7 +376,7 @@ export async function loadSalesAnalytics(ctx: SalesContext, params: URLSearchPar
     return json({
       filters: { dateFrom, dateTo },
       kpis: {
-        records: records.length,
+        records: new Set(records.map(record => record.id)).size,
         todayRevenue: round(records.filter((record) => record.sale_date === todayDate).reduce((sum, record) => sum + record.gross_amount, 0)),
         revenue: round(totalRevenue),
         paid: round(totalPaid),

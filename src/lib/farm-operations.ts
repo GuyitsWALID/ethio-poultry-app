@@ -11,6 +11,7 @@ import {hasManualFeedInput} from "@/lib/daily-record-input";
 import {feedAdmin, resolveFeedBatch, type FeedContext} from "@/lib/feed-control";
 import {resolveSaleScope, supabaseAdmin, type SalesContext} from "@/lib/sales";
 import type {Json} from "@/types/supabase";
+import {eggSaleSourcesSchema} from "@/lib/egg-sale-sources";
 
 export class FarmOperationError extends Error {
   constructor(
@@ -45,6 +46,8 @@ const dailyRecordInput = z.object({
 });
 
 const saleInput = z.object({
+  egg_sources: eggSaleSourcesSchema.optional(),
+  request_id: z.string().uuid().optional(),
   product_category: z.enum(["egg", "bird", "training", "equipment_medicine", "consultancy", "package"]),
   product_label: z.string().trim().min(1),
   sale_date: z.string().trim().min(1),
@@ -165,11 +168,21 @@ export async function recordSale(context: SalesContext, input: unknown) {
   if (value.paid_amount < 0 || value.paid_amount > grossAmount) throw new FarmOperationError("Paid amount must be between zero and gross amount.", undefined, undefined, "paidAmountMustBeBetweenZeroAndGross");
   const scope = await resolveSaleScope(context, {...value, require_farm: true});
   if ("error" in scope) throw new FarmOperationError(scope.error ?? "The selected sales scope is unavailable.");
+  if (value.product_category === "egg") {
+    if (!value.farm_id || value.farm_id !== scope.farm_id) throw new FarmOperationError("Choose one farm matching every egg source flock.");
+    if (!value.egg_sources || !value.request_id) throw new FarmOperationError("Choose the source flocks and provide a retry identifier for this egg sale.");
+    const {data, error} = await supabaseAdmin.rpc("record_egg_sale", {
+      p_actor: context.userId, p_farm: scope.farm_id, p_date: value.sale_date,
+      p_payload: {...value, unit: value.unit ?? "tray"}, p_request: value.request_id,
+    });
+    if (error) throw new FarmOperationError(error.message, databaseStatus(error.code));
+    return data;
+  }
   const {data, error} = await supabaseAdmin.from("daily_sales_records").insert({
     org_id: context.orgId, ...scope, sale_date: value.sale_date,
     product_category: value.product_category, product_label: value.product_label,
     quantity: value.quantity,
-    unit: value.unit ?? (value.product_category === "egg" ? "tray" : value.product_category === "bird" ? "bird" : "unit"),
+    unit: value.unit ?? (value.product_category === "bird" ? "bird" : "unit"),
     unit_price: value.unit_price, gross_amount: grossAmount, paid_amount: value.paid_amount,
     balance_due: Math.round((grossAmount - value.paid_amount) * 100) / 100,
     payment_method: value.payment_method ?? null, customer_name: value.customer_name ?? null,

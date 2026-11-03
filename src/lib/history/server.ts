@@ -4,6 +4,7 @@ import {governanceAdmin, type AccessContext} from "@/lib/access-context";
 import {effectiveWarehouseIds} from "@/lib/warehouse-access";
 import {HistoryError, historyUuid, mergeHistoryPages, parseHistoryCursor, type HistoryCursor, type HistoryDetail, type HistoryInput, type HistoryItem, type HistoryOption, type HistoryOptions, type HistoryRow} from "./contracts";
 import {historyFields, historySources, sourceColumns, type HistorySource} from "./sources";
+import {eggSaleSources} from "@/lib/egg-sale-sources";
 
 type Db = Pick<SupabaseClient, "from">;
 type Scope = {farms: HistoryRow[]; houses: HistoryRow[]; flocks: HistoryRow[]; batches: HistoryRow[]; warehouses: HistoryRow[]; restricted: boolean};
@@ -110,7 +111,9 @@ function sourceQuery(db: Db, ctx: AccessContext, source: HistorySource, scope: S
   }
   if (["sale", "expense", "warehouse"].includes(source.scope)) {
     if (source.kind === "physical_count" && (input.house || input.flock || input.batch)) return null;
-    for (const [column, value] of [["house_id", input.house], ["flock_id", input.flock], ["batch_id", input.batch]]) if (value) query = query.eq(column, value);
+    for (const [column, value] of [["house_id", input.house], ["flock_id", input.flock], ["batch_id", input.batch]]) if (value) {
+      query = source.scope === "sale" ? query.or(`${column}.eq.${value},egg_sources.cs.${JSON.stringify([{[column]: value}])}`) : query.eq(column, value);
+    }
     if (input.warehouse && source.scope !== "warehouse" && source.scope !== "expense") return null;
   }
   if (source.predicate === "sessions") query = query.in("status", ["completed", "missed"]);
@@ -163,8 +166,21 @@ export async function historyDetail(ctx: AccessContext, kind: string, id: string
   const detail: HistoryDetail = {...item, fields: historyFields(source, row), supporting: [], correctionHref: null};
   const flock = scope.flocks.find(value => value.id === row.flock_id);
   const farmId = text(row.farm_id ?? flock?.farm_id);
+  if (kind === "sale" && row.product_category === "egg") {
+    detail.supporting = eggSaleSources(row.egg_sources).map(source => ({kind: "egg_source", fields: [
+      {key: "flock", value: text(scope.flocks.find(f => f.id === source.flock_id)?.flock_code) || source.flock || null},
+      {key: "egg_quantity", value: Number(source.egg_quantity), format: "number"},
+      {key: "conversion_multiplier", value: Number(source.multiplier), format: "number"},
+    ]}));
+    if (ctx.role === "farm_manager") {
+      const params = new URLSearchParams({request_type: "egg_sale_sources", source_table: "daily_sales_records", source_id: id,
+        farm_id: farmId, destination: `${item.date} · ${item.context}`, proposed_values: JSON.stringify({egg_sources: row.egg_sources ?? [], sale_date: item.date}),
+        correction_route: `/app/sales?record=${id}`});
+      detail.correctionHref = `/app/governance?${params}`;
+    }
+  }
   const correctable = ["daily_record", "loss_record", "feed_session", "health_event", "sale", "biosecurity_check"].includes(kind);
-  if (ctx.role === "farm_manager" && correctable && (!flock || ["active", "quarantined"].includes(text(flock.status)))) {
+  if (ctx.role === "farm_manager" && correctable && !(kind === "sale" && row.product_category === "egg") && (!flock || ["active", "quarantined"].includes(text(flock.status)))) {
     const proposed = Object.fromEntries(source.fields.filter(field => field.format !== "code").map(field => [field.key, row[field.key] ?? ""]));
     const path = {daily_farm_records: "/app/daily-records", feeding_session_records: "/app/feeding-log", health_events: "/app/health", biosecurity_checks: "/app/health", daily_sales_records: "/app/sales"}[source.table] ?? "/app/governance";
     const target = new URLSearchParams({record: id, source_id: id, filter_view: "1", filter_preset: "custom", filter_dateFrom: item.date, filter_dateTo: item.date});

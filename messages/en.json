@@ -1,4 +1,10 @@
 {
+  "EggSaleSources": {
+    "title": "Egg source flocks", "help": "Allocate whole eggs to each producing flock in this farm. The total must equal quantity × eggs per sale unit. This remains one sale and one payment record.",
+    "flock": "Source flock", "eggs": "Eggs from this flock", "choose": "Choose a flock", "add": "Add source flock", "remove": "Remove source",
+    "loading": "Loading eligible flocks…", "failed": "Source flocks could not load. Refresh and try again.", "correction": "Correct egg source allocation",
+    "EGG_SOURCE_ACCESS_DENIED": "This egg sale or farm is outside your current access.", "EGG_SOURCE_INVALID": "Choose distinct source flocks and positive whole-egg quantities.", "EGG_SOURCE_LOAD_FAILED": "Egg source evidence could not be loaded. Try again."
+  },
   "RecordingStart": {
     "recordCheckHelp": "These physical counts establish a new recording starting point today. They do not correct or clear earlier discrepancies. Keep using the exact historical correction where a past record is wrong; after approval and application, run Record Checks again.",
     "title": "Establish the recording starting point",
@@ -1289,6 +1295,7 @@
     "returnedForChanges": "Returned for changes",
     "readyToFix": "Ready to fix",
     "recordingStartingPoint": "Recording starting point",
+    "correctEggSaleSources": "Correct egg source allocation",
     "differenceFoundStep": "Difference found",
     "managerProposesStep": "Manager proposes",
     "ceoAuthorizesStep": "CEO authorizes",
@@ -2048,7 +2055,8 @@
       "sale": "Sale",
       "expense": "Expense",
       "operating_day": "Operating day",
-      "exception": "Documented exception"
+      "exception": "Documented exception",
+      "egg_source": "Egg source allocation"
     },
     "fields": {
       "opening_birds": "Birds at the start",
@@ -2126,7 +2134,10 @@
       "batch_number": "Lot number",
       "flock": "Flock",
       "reason": "Reason",
-      "requirement": "Requirement"
+      "requirement": "Requirement",
+      "egg_quantity": "Eggs from this flock",
+      "egg_sources": "Egg source flocks", "sale_date": "Sale date",
+      "conversion_multiplier": "Eggs per sale unit"
     },
     "statuses": {
       "recorded": "Recorded",
@@ -3114,6 +3125,9 @@
       "unitPrice": "Price per unit (ETB)",
       "paid": "Amount paid (ETB)",
       "saleSaved": "Sale saved.",
+      "eggSources": "Egg source flocks",
+      "eggSourcesHelp": "Enter whole eggs from each producing flock in this farm. Source eggs must equal sale quantity × eggs per unit. One sale keeps one payment record.",
+      "sourceFlock": "Source flock", "sourceEggs": "Eggs from this flock", "addSourceFlock": "Add source flock", "eggsPerUnit": "{count} eggs per unit",
       "recordSale": "Record sale",
       "feed": "Feed",
       "utility": "Water or electricity",
@@ -3537,6 +3551,7 @@
       "RECORDED_HEALTH_EVENTS_ONLY": "Zero recorded events does not confirm that no health problems occurred.",
       "DAILY_LOSSES_NOT_SUPPORTING_EVENTS": "Daily records supply loss totals; supporting events are not counted twice.",
       "RECORDING_START_NOT_ACTIVITY": "Approved starting birds and eggs are opening balances, not production, sales or losses. They do not fill missing historical days or change the original placement age.",
+      "EGG_SOURCES_ALLOCATED": "Combined egg sales keep one financial record. Flock-level figures use the explicit egg sources and proportional sale/payment amounts; combined totals are not counted again. Legacy sales without reviewed sources remain at their original scope.",
       "REPORT_LOAD_FAILED": "One source failed to load. No zero result has been substituted.",
       "WAREHOUSE_LEVEL_BALANCES": "These are whole-warehouse balances.",
       "CURRENT_PRICE_ESTIMATE": "Stock value uses current item prices, not historical accounting valuation.",

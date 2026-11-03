@@ -15,10 +15,10 @@
   - Full suite: 572 passed. Docker checks cover stale source/approval, replay, revoked access, cross-tenant isolation, source preservation and lifecycle closure. Real two-session races produce one baseline and one daily record. Signed-in Chromium acceptance passes manager proposal, CEO approval, replay, English/Amharic tablet layouts, missing report evidence, offline reload, preserved queue and safe stale-command conflict after reconnect/Refresh today. Physical-device, cross-browser and whole-release staging acceptance remain explicit release gates in section 6, not unfinished Task 2 implementation.
 
 ## 3. Traceable egg sales
-- [ ] 3.1 Add explicit one/multi-flock source rows within one authorized farm.
-- [ ] 3.2 Persist exact converted quantities, allocation and sale evidence atomically with concurrency protection.
-- [ ] 3.3 Adapt History, reconciliation, reports and versioned snapshots without double-counting.
-- [ ] 3.4 Preserve legacy sales and provide exact governed source corrections.
+- [x] 3.1 Add explicit one/multi-flock source rows within one authorized farm. Today and retained sales creation use the same source validation; English/Amharic controls preserve draft quantities.
+- [x] 3.2 Persist exact converted quantities, allocation and sale evidence atomically with concurrency protection. One financial sale, append-only source revisions, frozen conversion, custody locks, stable retry identity and atomic audit are enforced in PostgreSQL. Real competing transactions cannot oversell.
+- [x] 3.3 Adapt History, reconciliation, reports and versioned snapshots without double-counting. Source-aware scope filters retain one financial identity; cent-balanced money shares preserve totals. New v3 snapshots retain frozen evidence and effective-access checks; old snapshots remain unchanged.
+- [x] 3.4 Preserve legacy sales and provide exact governed source corrections. No allocation backfill. Manager proposal → CEO approval → replay-safe manager application revalidates sale revisions, source context, conversion and current access; stale reviews become auditable conflicts. Signed-in Chromium covers the complete flow, History, scoped totals, frozen reports and bilingual tablet layouts. Whole-release/device gates remain in section 6.
 
 ## 4. Scheduler
 - [ ] 4.1 Add structured rules/occurrences, permission/revision checks and read-only legacy mapping preflight.

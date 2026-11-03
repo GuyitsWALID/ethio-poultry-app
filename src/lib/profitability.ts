@@ -29,7 +29,7 @@ export function round(value: number, places = 2) {
   return Math.round(value * factor) / factor;
 }
 
-export function reportSaleCost(record:Pick<DailySalesRecord,"product_category"|"quantity"|"unit"|"batch_id">,costPerEgg:number|null,birdCosts:ReadonlyMap<string,number>):number|null {
+export function reportSaleCost(record:Pick<DailySalesRecord,"product_category"|"quantity"|"unit"|"batch_id"|"egg_conversion_multiplier">,costPerEgg:number|null,birdCosts:ReadonlyMap<string,number>):number|null {
   if(record.product_category==="egg")return costPerEgg===null?null:eggUnitsSold(record)*costPerEgg;
   if(record.product_category==="bird"&&record.batch_id&&/^(bird|birds|head|heads|piece|pieces|pcs)$/i.test(record.unit.trim())){
     const cost=birdCosts.get(record.batch_id);return cost===undefined?null:record.quantity*cost;
@@ -37,7 +37,8 @@ export function reportSaleCost(record:Pick<DailySalesRecord,"product_category"|"
   return null;
 }
 
-export function eggUnitsSold(record: Pick<DailySalesRecord, "quantity" | "unit">) {
+export function eggUnitsSold(record: Pick<DailySalesRecord, "quantity" | "unit" | "egg_conversion_multiplier">) {
+  if (record.egg_conversion_multiplier != null) return record.quantity * record.egg_conversion_multiplier;
   const unit = record.unit.toLowerCase();
   if (unit.includes("tray")) return record.quantity * 30;
   if (unit.includes("crate")) return record.quantity * 360;
@@ -45,7 +46,8 @@ export function eggUnitsSold(record: Pick<DailySalesRecord, "quantity" | "unit">
   return record.quantity;
 }
 
-export function unitPricePerEgg(record: Pick<DailySalesRecord, "unit_price" | "unit">) {
+export function unitPricePerEgg(record: Pick<DailySalesRecord, "unit_price" | "unit" | "egg_conversion_multiplier">) {
+  if (record.egg_conversion_multiplier != null) return record.unit_price / record.egg_conversion_multiplier;
   const unit = record.unit.toLowerCase();
   if (unit.includes("tray")) return record.unit_price / 30;
   if (unit.includes("crate")) return record.unit_price / 360;

@@ -168,6 +168,20 @@ export async function loadFindingResolution(ctx: AccessContext, findingId: strin
   const resolvedSourceRecords = await sourceRecords(ctx, finding);
   if (workflow.recordedExplanation) resolvedSourceRecords.push({label: guidance("recordedExplanation"), fields: [{label: guidance("recordedExplanation"), value: workflow.recordedExplanation}]});
   const choices = (rule.choices ?? []).map(choice => ({ ...choice, href: resolutionHref(choice.path, findingId, choice.id) }));
+  let eggSourceHref: string | null = null;
+  if (finding.rule_code === "EGG_SALE_UNLINKED" && ctx.role === "farm_manager") {
+    const saleId = text((finding.evidence as Row | null)?.saleId);
+    if (saleId) {
+      const sale = await db.from("daily_sales_records").select("id,farm_id,sale_date,product_label,egg_sources")
+        .eq("org_id",ctx.orgId).eq("id",saleId).is("voided_at",null).maybeSingle();
+      if (sale.error) throw sale.error;
+      if (sale.data && sale.data.farm_id === finding.farm_id) {
+        eggSourceHref = `/app/governance?${new URLSearchParams({request_type: "egg_sale_sources", source_table: "daily_sales_records", source_id: saleId,
+          farm_id: sale.data.farm_id, finding: findingId, source: "selected_source", destination: `${sale.data.product_label} · ${sale.data.sale_date}`,
+          proposed_values: JSON.stringify({egg_sources: sale.data.egg_sources ?? [], sale_date: sale.data.sale_date}), correction_route: `/app/reconciliation?finding=${findingId}`})}`;
+      }
+    }
+  }
   if (text(finding.rule_code) === "EGG_OPENING_BALANCE_UNAVAILABLE") {
     const legacy = choices.find(choice => choice.id === "legacy_balance");
     if (legacy) {
@@ -212,7 +226,7 @@ export async function loadFindingResolution(ctx: AccessContext, findingId: strin
     findingId, ruleCode: text(finding.rule_code), status: text(finding.status), title: workflow.plainTitle,
     problem: workflow.plainExplanation, scopeLabel, recordDate: finding.record_date ? text(finding.record_date) : null,
     mode: rule.mode,
-    correction: { label: locale === "am" ? resolutionText((`rules.${finding.rule_code}.label`) as Parameters<typeof resolutionText>[0]) : rule.label, href: resolutionHref(rule.path, findingId), page: resolutionText((`pages.${resolutionPageKeys[finding.rule_code]}`) as Parameters<typeof resolutionText>[0]), instruction: locale === "am" ? resolutionText((`rules.${finding.rule_code}.instruction`) as Parameters<typeof resolutionText>[0]) : rule.instruction, focusFields: rule.focusFields },
+    correction: { label: locale === "am" ? resolutionText((`rules.${finding.rule_code}.label`) as Parameters<typeof resolutionText>[0]) : rule.label, href: eggSourceHref ?? resolutionHref(rule.path, findingId), page: resolutionText((`pages.${resolutionPageKeys[finding.rule_code]}`) as Parameters<typeof resolutionText>[0]), instruction: locale === "am" ? resolutionText((`rules.${finding.rule_code}.instruction`) as Parameters<typeof resolutionText>[0]) : rule.instruction, focusFields: rule.focusFields },
     comparison: {
       expected: formatReconciliationNumber(finding.expected_value, locale === "am" && codeText.has((unit) as Parameters<typeof codeText>[0]) ? codeText((unit) as Parameters<typeof codeText>[0]) : unit, locale === "am" ? resolutionText("missing") : "Evidence unavailable", locale),
       recorded: formatReconciliationNumber(finding.recorded_value, locale === "am" && codeText.has((unit) as Parameters<typeof codeText>[0]) ? codeText((unit) as Parameters<typeof codeText>[0]) : unit, locale === "am" ? resolutionText("missing") : "Evidence unavailable", locale),

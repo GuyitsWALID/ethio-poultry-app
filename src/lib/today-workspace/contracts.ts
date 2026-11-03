@@ -127,6 +127,7 @@ const stockCount = z.object({
 });
 
 const salePayload = z.object({
+  egg_sources: z.array(z.object({flock_id: uuid, egg_quantity: z.number().int().positive()})).min(1).max(100).optional(),
   product_category: z.enum(["egg", "bird", "training", "equipment_medicine", "consultancy", "package"]),
   product_label: nonEmpty,
   quantity: positive,

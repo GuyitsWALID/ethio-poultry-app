@@ -1,5 +1,6 @@
 export const scopedReportVersion = "management-report-v1-scoped";
-export const performanceReportVersion = "management-report-v2";
+export const performanceReportVersion = "management-report-v3";
+export const isPerformanceReportVersion = (version: unknown) => version === "management-report-v2" || version === performanceReportVersion;
 export type ReportResources = {schema_version: 1; complete: boolean; farm_ids: string[]; warehouse_ids: string[]};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -13,6 +14,6 @@ export function reportResources(farmIds: Iterable<string>, stock: readonly {ware
 }
 
 export function readableReportVersion(version: unknown) {
-  if (version !== "management-report-v1" && version !== scopedReportVersion && version !== performanceReportVersion) throw new Error("This report version is not supported.");
+  if (version !== "management-report-v1" && version !== scopedReportVersion && !isPerformanceReportVersion(version)) throw new Error("This report version is not supported.");
   return version;
 }

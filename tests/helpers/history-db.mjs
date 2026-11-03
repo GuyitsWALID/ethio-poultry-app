@@ -2,8 +2,8 @@
 const split = value => {
   const parts = []; let depth = 0, start = 0;
   for (let i = 0; i < value.length; i++) {
-    if (value[i] === "(") depth++;
-    if (value[i] === ")") depth--;
+    if (['(', '[', '{'].includes(value[i])) depth++;
+    if (")]}".includes(value[i])) depth--;
     if (value[i] === "," && depth === 0) {parts.push(value.slice(start, i)); start = i + 1;}
   }
   parts.push(value.slice(start)); return parts;
@@ -13,6 +13,7 @@ const compare = (row, field, op, value) => {
   if (op === "is") return value === "null" || value === null ? actual === null : actual === value;
   if (op === "eq") return actual === value;
   if (op === "in") return (Array.isArray(value) ? value : split(value.slice(1, -1))).includes(actual);
+  if (op === "cs") return Array.isArray(actual) && JSON.parse(value).every(wanted => actual.some(entry => Object.entries(wanted).every(([key,val]) => entry[key] === val)));
   if (op === "like") return typeof actual === "string" && new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("%", ".*").replaceAll("_", ".")}$`).test(actual);
   if (actual === null) return false;
   if (op === "lt") return actual < value;

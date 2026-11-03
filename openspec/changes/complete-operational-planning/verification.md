@@ -79,3 +79,35 @@ automated validation, not a new claim of independent partner review.
   the notmain release path; post-deployment staging acceptance stays in section 6.
 - Section 6 continues to track whole-release/Cloudflare, staging, physical-device
   and cross-browser acceptance. No production or pilot sign-off is implied.
+
+## Task 3 — traceable egg sales, 2026-11-03
+
+- Tasks 3.1–3.4 are implemented. Task 4 has not started. Reader/write-path details
+  are recorded in `egg-sale-sources.md`.
+- Full unit suite: 580 passed, no failures/skips. Full lint, TypeScript, fresh
+  production build, strict OpenSpec, environment and migration contracts passed.
+- Docker migration/integration checks cover exact quantities, single financial
+  identity, legacy preservation, access/RLS, audit rollback, stale approvals,
+  custody and immutable source revisions. Final correction and sale helper
+  changes were rechecked in the disposable migrated template.
+- Real concurrent transactions passed: only one competing sale can consume the
+  available eggs; stable retry preserves one sale and one allocation revision.
+- Signed-in Chromium passed combined-flock Today entry, History supporting
+  sources, reviewed correction, apply replay, scoped cent totals, saved v3
+  snapshot retry/frozen rendering and English/Amharic 768/1024px layouts. The
+  initial test raced the asynchronous source dropdowns; it now waits for their
+  selected values and asserts native form validity before submission.
+- Staging rollback-only migration check passed against the pinned project
+  `uzmhpecehmlwojdmitgj`, verifying permissions and unchanged original business
+  fields. No production database was accessed.
+- New terminology remains pending partner review; this does not extend the
+  previous terminology sign-off. Physical-device and cross-browser acceptance
+  remain section 6 release gates.
+- The fresh production-bundle Chromium acceptance also passed (one test). The
+  proper Cloudflare standalone build completed and generated the worker. An
+  earlier packaging-only attempt could not reuse an ordinary non-standalone
+  Next.js build; no generated local/test artifacts are committed or deployed.
+- Staging migration `20261102000000_traceable_egg_sales.sql` committed successfully
+  on 2026-11-03. The release transaction verified permission contracts and original
+  operational-field fingerprints. Application release uses `notmain`; remote CI,
+  deployment and post-deployment acceptance are separate from these local checks.

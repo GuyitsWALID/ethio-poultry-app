@@ -2035,6 +2035,11 @@ export type Database = {
       }
       daily_sales_records: {
         Row: {
+          egg_sources: Json
+          egg_source_version: number
+          egg_conversion_multiplier: number | null
+          sale_request_id: string | null
+          sale_request_hash: string | null
           balance_due: number
           batch_id: string | null
           branch_id: string | null
@@ -7154,6 +7159,14 @@ export type Database = {
       }
     }
     Functions: {
+      record_egg_sale: {
+        Args: {p_actor: string; p_farm: string; p_date: string; p_payload: Json; p_request: string}
+        Returns: Json
+      }
+      egg_sale_source_evidence: {
+        Args: {p_org: string; p_farm: string; p_date: string; p_quantity: number; p_unit: string; p_sources: Json; p_multiplier?: number | null}
+        Returns: Json
+      }
       operational_low_stock_balances: {
         Args: {p_org_id: string}
         Returns: {item_id: string; warehouse_id: string; quantity: number}[]

@@ -27,6 +27,9 @@ export type SalesContext = {
 };
 
 export type DailySalesRecord = {
+  egg_sources?: unknown;
+  egg_source_version?: number;
+  egg_conversion_multiplier?: number | null;
   id: string;
   org_id: string;
   branch_id: string | null;
@@ -191,9 +194,8 @@ export function applySalesFilters<T extends { sale_date: string; product_categor
     if (productCategory && row.product_category !== productCategory) return false;
     if (branchId && row.branch_id !== branchId) return false;
     if (farmId && row.farm_id !== farmId) return false;
-    if (houseId && row.house_id !== houseId) return false;
-    if (flockId && row.flock_id !== flockId) return false;
-    if (batchId && row.batch_id !== batchId) return false;
+    const matches = (source: {house_id?: unknown; flock_id?: unknown; batch_id?: unknown}) => (!houseId || source.house_id === houseId) && (!flockId || source.flock_id === flockId) && (!batchId || source.batch_id === batchId);
+    if (!matches(row) && !("egg_sources" in row && Array.isArray(row.egg_sources) && row.egg_sources.some(source => source && typeof source === "object" && matches(source)))) return false;
     return true;
   });
 }

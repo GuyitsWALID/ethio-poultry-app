@@ -6,6 +6,7 @@ import {verifyMigrationLock} from "./deployment-contract.mjs";
 
 nextEnv.loadEnvConfig(process.cwd());
 const mode = process.argv[2];
+const eggSales = process.argv.includes("--egg-sales");
 assert.ok(["inspect", "check", "deploy"].includes(mode), "Use inspect, check (rollback), or deploy.");
 const connection = process.env.STAGING_DB_URL;
 assert.ok(connection, "STAGING_DB_URL is required; never paste credentials.");
@@ -30,7 +31,8 @@ assert.ok(lock.ok, "Migration lock mismatch. Review before release.");
 const files = Object.keys(lock.actual.files).sort();
 const local = files.map(file => file.slice(0,14));
 const remote = sql("select version from supabase_migrations.schema_migrations order by version;").split(/\r?\n/);
-const allowed = ["20261030000000_verified_today_opening_source.sql", "20261030001000_governed_recording_start.sql"];
+const allowed = eggSales ? ["20261102000000_traceable_egg_sales.sql"] : ["20261030000000_verified_today_opening_source.sql", "20261030001000_governed_recording_start.sql"];
+if (eggSales) assert.ok(remote.includes("20261030001000"), "Recording-start prerequisite must already be migrated.");
 assert.ok(remote.every(version => local.includes(version)), "Unknown staging migration history. Stopped.");
 const pending = files.filter(file => !remote.includes(file.slice(0,14)));
 assert.ok(pending.every(file => allowed.includes(file)), "Unrelated pending staging migrations. Stopped.");
@@ -41,7 +43,7 @@ if (mode !== "inspect") {
     "mortality_events","flock_cull_events","stock_ledger","daily_sales_records","governance_requests",
     "governance_audit_events","egg_custody_opening_balances"];
   if (remote.includes("20261030001000")) tables.push("flock_recording_starts");
-  const fingerprint = table => `md5(coalesce((select string_agg(to_jsonb(t)::text,'' order by id) from public.${table} t),''))`;
+  const fingerprint = table => `md5(coalesce((select string_agg((${table === "daily_sales_records" && eggSales ? "to_jsonb(t)-array['egg_source_version','egg_sources','egg_conversion_multiplier','sale_request_id','sale_request_hash']" : "to_jsonb(t)"})::text,'' order by id) from public.${table} t),''))`;
   const before = tables.map(table => `('${table}',${fingerprint(table)})`).join(",");
   const statements = [];
   for (const file of pending) {
@@ -70,6 +72,17 @@ do $$ begin
 end $$;
 ${tables.map(table => `do $$ begin if (select hash from release_sources where name='${table}') is distinct from ${fingerprint(table)}
  then raise exception 'RELEASE_CHECK: operational sources changed during migration'; end if; end $$;`).join("\n")}
+${eggSales ? `do $$ begin
+ if not (select relrowsecurity from pg_class where oid='public.egg_sale_sources'::regclass)
+  or has_table_privilege('anon','public.egg_sale_sources','select')
+  or has_table_privilege('authenticated','public.egg_sale_sources','insert')
+  or has_function_privilege('authenticated','public.record_egg_sale(uuid,uuid,date,jsonb,uuid)','execute')
+  or has_function_privilege('authenticated','public.write_egg_sale_sources(uuid,uuid,jsonb,numeric,uuid)','execute')
+  or has_function_privilege('anon','public.apply_egg_sale_sources_request(uuid)','execute')
+  or not has_function_privilege('authenticated','public.apply_egg_sale_sources_request(uuid)','execute')
+  or position('management-report-v3' in pg_get_functiondef('public.check_management_report_resources()'::regprocedure))=0
+ then raise exception 'RELEASE_CHECK: egg-source permissions or snapshot safeguards differ'; end if;
+end $$;` : ""}
 `;
   const history = remote.map(value => `'${value}'`).join(",");
   sql(`begin;
@@ -84,5 +97,5 @@ insert into release_sources values ${before};
 ${statements.join("\n")}
 ${checks}
 ${mode === "deploy" ? "commit" : "rollback"};`);
-  console.log(`PASS: starting-count staging ${mode === "deploy" ? "migrations committed" : "dry run rolled back"}; permissions and operational source preservation verified. Production not accessed.`);
+  console.log(`PASS: ${eggSales ? "egg-source" : "starting-count"} staging ${mode === "deploy" ? "migrations committed" : "dry run rolled back"}; permissions and operational source preservation verified. Production not accessed.`);
 }

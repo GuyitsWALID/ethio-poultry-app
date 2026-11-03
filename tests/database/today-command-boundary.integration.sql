@@ -44,6 +44,8 @@ begin
   insert into public.user_farm_access(org_id, profile_id, farm_id, starts_at) values
     (v_org, v_manager, v_farm, now() - interval '1 day'),
     (v_org, v_manager, v_locked_farm, now() - interval '1 day');
+  insert into public.daily_farm_records(org_id,flock_id,record_date,opening_birds,closing_birds,normal_eggs,broken_eggs,dirty_eggs,recorded_by)
+  values(v_org,v_flock,current_date-1,100,100,60,0,0,v_manager);
   insert into public.warehouses(id, org_id, branch_id, farm_id, name, type, status)
   values (v_warehouse, v_org, v_branch, v_farm, 'Today command store', 'farm_store', 'active');
   -- Farm assignment is the sole authority for this farm-owned store.
@@ -93,7 +95,8 @@ begin
     'work_date', v_day,
     'payload', jsonb_build_object(
       'product_category', 'egg', 'product_label', 'Test tray',
-      'quantity', 2, 'unit_price', 100, 'paid_amount', 200, 'unit', 'tray'
+      'quantity', 2, 'unit_price', 100, 'paid_amount', 200, 'unit', 'tray',
+      'egg_sources',jsonb_build_array(jsonb_build_object('flock_id',v_flock,'egg_quantity',60))
     )
   );
   v_result := public.dispatch_today_command_v1(v_actor, v_command);

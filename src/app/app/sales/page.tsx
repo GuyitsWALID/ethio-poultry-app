@@ -2,13 +2,14 @@
 "use client";
 
 import {useLocale, useTranslations} from "next-intl";
+import {useRouter} from "next/navigation";
 import {formatNumber, formatOperationDate} from "@/i18n/formats";
 
 import {OperationDateInput} from "@/components/operation-date-input";
 import { usePageFilter } from "@/components/page-filter-controls";
 import { FarmScopeFilters } from "@/components/farm-scope-filters";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ReferenceLine, XAxis, YAxis } from "recharts";
 import {
   AlertTriangle,
@@ -36,8 +37,11 @@ import { RecordCheckCorrectionBanner } from "@/components/record-check-correctio
 import {TodayEntryLink} from "@/components/today/today-entry-link";
 import {ReportAnalyticsHandoff} from "@/components/reports/report-analytics-handoff";
 import type { ReconciliationResolution } from "@/lib/reconciliation-resolution-contract";
+import {EggSaleSourceEditor} from "@/components/egg-sale-source-editor";
+import type {EggSaleSource} from "@/lib/egg-sale-sources";
 
 type SalesRecord = {
+  egg_sources?: EggSaleSource[];
   id: string;
   branch_id: string | null;
   farm_id: string | null;
@@ -231,6 +235,7 @@ export default function SalesPage() {
   const feedback = useTranslations("OperationFeedback");
   const chartText = useTranslations("OperationCharts");
   const locale = useLocale();
+  const router = useRouter();
   const codeLabels = useTranslations("History.codes");
   const labelize = (value: string | null | undefined) => !value ? "—" : codeLabels.has((value) as Parameters<typeof codeLabels>[0]) ? codeLabels((value) as Parameters<typeof codeLabels>[0]) : value.replaceAll("_", " ");
   const currency = (value: number | null) => value === null ? ui("unavailable") : formatNumber(value, locale, Math.abs(value) < 100 ? 2 : 0);
@@ -257,6 +262,8 @@ export default function SalesPage() {
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const openedFindingRef = useRef("");
+  const saleRequestId = useRef(crypto.randomUUID());
+  const [eggSources, setEggSources] = useState<EggSaleSource[]>([]);
   const [form, setForm] = useState<FormState>(() =>
     emptyForm({
       branch_id: scope.branchId,
@@ -309,6 +316,7 @@ export default function SalesPage() {
   }, [params]);
 
   const openCreate = () => {
+    saleRequestId.current = crypto.randomUUID(); setEggSources([]);
     const selectedFarmId = scope.farmId && farms.some((farm) => farm.id === scope.farmId)
       ? scope.farmId
       : farms.length === 1
@@ -327,7 +335,13 @@ export default function SalesPage() {
     setModalOpen(true);
   };
 
-  const openEdit = (record: SalesRecord) => {
+  const openEdit = useCallback((record: SalesRecord) => {
+    if (record.product_category === "egg") {
+      const params = new URLSearchParams({request_type: "egg_sale_sources", source_table: "daily_sales_records", source_id: record.id,
+        farm_id: record.farm_id ?? "", destination: `${record.product_label} · ${record.sale_date}`,
+        proposed_values: JSON.stringify({egg_sources: record.egg_sources ?? [], sale_date: record.sale_date}), correction_route: `/app/sales?record=${record.id}`});
+      router.push(`/app/governance?${params}`); return;
+    }
     setForm({
       id: record.id,
       sale_date: record.sale_date,
@@ -348,7 +362,7 @@ export default function SalesPage() {
       batch_id: record.batch_id ?? "",
     });
     setModalOpen(true);
-  };
+  }, [router]);
 
   useEffect(() => {
     if (!canMutate || loading) return;
@@ -368,7 +382,7 @@ export default function SalesPage() {
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [canMutate, loading, records]);
+  }, [canMutate, loading, records, openEdit]);
 
   const submit = async () => {
     setSaving(true);
@@ -376,7 +390,7 @@ export default function SalesPage() {
     const response = await fetch(form.id ? `/api/sales/records/${form.id}` : "/api/sales/records", {
       method: form.id ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({...form, request_id: saleRequestId.current, ...(form.product_category === "egg" ? {egg_sources: eggSources, house_id: null, flock_id: null, batch_id: null} : {})}),
     });
     const data = await response.json();
     setSaving(false);
@@ -580,6 +594,7 @@ export default function SalesPage() {
               <div className="p-4 sm:px-6"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-forest-500">{ui("balance")}</p><p className={`mt-1 font-display text-xl font-semibold ${draftBalance > 0 ? "text-ember-500" : "text-forest-900"}`}>{currency(draftBalance)} {ui("etb")}</p></div>
             </div>
 
+            {form.product_category === "egg" ? <div className="p-5 sm:p-6"><EggSaleSourceEditor key={form.farm_id} farmId={form.farm_id} date={form.sale_date} value={eggSources} onChange={setEggSources}/></div> : null}
             <div className="grid gap-4 p-5 sm:p-6 md:grid-cols-3">
               <label className="grid gap-1 text-xs text-forest-600">
                 {ui("date")}

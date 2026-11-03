@@ -1,6 +1,6 @@
 import type {PerformanceResponse} from "./farm-performance";
 import type {ReportResources} from "./report-snapshot";
-export type PerformanceSnapshot = PerformanceResponse & {evidence_revision: string; report_resources: ReportResources; organization_name: string; display_locale: "en" | "am"};
+export type PerformanceSnapshot = PerformanceResponse & {evidence_revision: string; egg_sale_evidence_version?: 1; report_resources: ReportResources; organization_name: string; display_locale: "en" | "am"};
 
 // A monotonic database revision detects changes between independently authorized
 // readers. Publication rechecks the same revision inside its audit transaction.

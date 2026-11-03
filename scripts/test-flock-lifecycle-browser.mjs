@@ -13,8 +13,9 @@ const template='ethio_flock_lifecycle_dryrun_20261007';
 const created=[];
 const reuseBuild=process.argv.includes('--reuse-local-build');
 const recordingStartOnly=process.argv.includes('--recording-start-only');
-const specs=recordingStartOnly?['tests/browser/recording-start.spec.ts']:['tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts'];
-const testArgs=process.argv.slice(2).filter(arg=>!['--reuse-local-build','--recording-start-only'].includes(arg));
+const eggSalesOnly=process.argv.includes('--egg-sales-only');
+const specs=eggSalesOnly?['tests/browser/egg-sale-sources.spec.ts']:recordingStartOnly?['tests/browser/recording-start.spec.ts']:['tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts'];
+const testArgs=process.argv.slice(2).filter(arg=>!['--reuse-local-build','--recording-start-only','--egg-sales-only'].includes(arg));
 let cloned=false, app, proxy;
 assert.match(database,/^flock_browser_[a-f0-9]{32}$/);
 function docker(args,input){
@@ -119,6 +120,15 @@ try{
     values('12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000012',(now() at time zone 'Africa/Addis_Ababa')::date-1,100,100,'${manager.id}');
     insert into public.houses(id,org_id,branch_id,farm_id,name,house_type)
     values('12000000-0000-4000-8000-000000000013','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','12000000-0000-4000-8000-000000000003','Empty replacement house','layer');
+    commit;`);
+  if(eggSalesOnly)query(`begin;
+    update public.daily_farm_records set normal_eggs=100,broken_eggs=0,dirty_eggs=0 where flock_id='12000000-0000-4000-8000-000000000012';
+    insert into public.batches(id,org_id,branch_id,farm_id,house_id,batch_cycle_id,batch_code,source,placement_date,age_at_placement_days,total_count,status)
+    values('12000000-0000-4000-8000-000000000016','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','12000000-0000-4000-8000-000000000003','12000000-0000-4000-8000-000000000013','12000000-0000-4000-8000-000000000010','EGG-SECOND-BATCH','external_purchase',current_date-40,120,100,'active');
+    insert into public.flocks(id,org_id,farm_id,house_id,batch_id,flock_code,flock_type,source,placement_date,placed_at,age_at_placement_days,initial_count,current_count,status)
+    values('12000000-0000-4000-8000-000000000017','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000003','12000000-0000-4000-8000-000000000013','12000000-0000-4000-8000-000000000016','EGG-SECOND-FLOCK','layer','external_purchase',current_date-40,now()-interval '40 days',120,100,100,'active');
+    insert into public.daily_farm_records(org_id,flock_id,record_date,opening_birds,closing_birds,normal_eggs,broken_eggs,dirty_eggs,recorded_by)
+    values('12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000017',(now() at time zone 'Africa/Addis_Ababa')::date-1,100,100,100,0,0,'${manager.id}');
     commit;`);
   for(const slot of [2,3,4,5]){
     const id=offset=>`12000000-0000-4000-8000-${String(slot*100+offset).padStart(12,'0')}`;
