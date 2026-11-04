@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 import { getSalesContext, hasScopedAccess, json, supabaseAdmin } from "@/lib/sales";
 import {FarmOperationError, farmOperationErrorBody, recordExpense} from "@/lib/farm-operations";
+import {managerWarehouseAccess} from "@/lib/warehouse-access";
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,9 +29,10 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query;
     if (error) return json({error: error.message}, 500);
+    const warehouseIds=ctx.role==='farm_manager'?new Set((await managerWarehouseAccess(ctx.userId,ctx.orgId)).map(w=>w.id)):null;
     const scoped =
       ctx.role === "farm_manager"
-        ? (data ?? []).filter((row) => hasScopedAccess(ctx, row))
+        ? (data ?? []).filter((row) => hasScopedAccess(ctx, row)&&(!row.warehouse_id||warehouseIds?.has(row.warehouse_id)))
         : data ?? [];
     return json({ costEntries: scoped });
   } catch (error: unknown) {

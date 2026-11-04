@@ -91,6 +91,7 @@ test("partner approval is recorded explicitly with its reviewed version", () => 
   assert.equal(terminologyReview.reviewer, "product_owner_poultry_partner");
   assert.equal(terminologyReview.reviewedAt, "2026-10-30");
   assert.deepEqual(pendingTerminologyReviewKeys, [
+    "Navigation.expensesPurchases",
     "Today.embedded.eggSources", "Today.embedded.eggSourcesHelp", "Today.embedded.sourceFlock",
     "Today.embedded.sourceEggs", "Today.embedded.addSourceFlock", "Today.embedded.eggsPerUnit",
     "Navigation.scheduler", "Today.tasks.scheduledWork", "Today.embedded.examples.scheduledWork",

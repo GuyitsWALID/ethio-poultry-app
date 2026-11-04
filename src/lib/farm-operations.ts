@@ -67,6 +67,7 @@ const saleInput = z.object({
 });
 
 const costInput = z.object({
+  request_id: z.string().uuid().optional(),
   category: z.enum(["feed", "medicine", "vaccine", "vitamin", "supplement", "payroll", "utility", "biosecurity", "transport", "maintenance", "labor", "rent", "packaging", "miscellaneous"]),
   allocation_method: z.enum(["direct", "bird_count", "egg_count", "feed_consumption", "manual_percent"]).default("direct"),
   entry_kind: z.enum(["monthly", "one_off"]).default("one_off"),
@@ -206,39 +207,10 @@ export async function recordExpense(context: SalesContext, input: unknown) {
   });
   if (!parsed.success) throw new FarmOperationError(issueMessage(parsed.error));
   const value = parsed.data;
-  let branchId = value.branch_id ?? null;
-  let farmId = value.farm_id ?? null;
-  if (value.warehouse_id) {
-    if (!context.supportSessionId) {
-      if (!await canAccessWarehouse(context, value.warehouse_id)) throw new FarmOperationError("Farm access or explicit shared-store permission is required.", 403, undefined, "farmAccessOrExplicitSharedStorePermissionIs");
-    }
-    const {data: warehouse} = await governanceAdmin.from("warehouses").select("branch_id,farm_id").eq("id", value.warehouse_id).eq("org_id", context.orgId).eq("status", "active").maybeSingle();
-    if (!warehouse) throw new FarmOperationError("Select an active warehouse in this organization.", undefined, undefined, "selectAnActiveWarehouseInThisOrganization");
-    branchId = String(warehouse.branch_id);
-    farmId = warehouse.farm_id ? String(warehouse.farm_id) : null;
-  }
-  let recurringTemplateId = value.recurring_template_id ?? null;
-  if (value.entry_kind === "monthly" && value.remember_template && value.warehouse_id && !recurringTemplateId) {
-    const template = await (governanceAdmin as any).from("recurring_cost_templates").upsert({
-      org_id: context.orgId, warehouse_id: value.warehouse_id, category: value.category,
-      description: value.description, default_amount: value.amount, supplier_name: value.supplier_name ?? null,
-      is_active: true, created_by: context.userId, updated_at: new Date().toISOString(),
-    }, {onConflict: "org_id,warehouse_id,category,description"}).select("id").single();
-    if (template.error) throw new FarmOperationError(template.error.message);
-    recurringTemplateId = String(template.data.id);
-  }
-  const confirmationMonth = value.entry_kind === "monthly" && recurringTemplateId ? `${value.entry_date.slice(0, 7)}-01` : null;
-  const {data, error} = await (supabaseAdmin as any).from("cost_entries").insert({
-    org_id: context.orgId, branch_id: branchId, farm_id: farmId, house_id: value.house_id ?? null,
-    flock_id: value.flock_id ?? null, batch_id: value.batch_id ?? null, entry_date: value.entry_date,
-    entry_kind: value.entry_kind, category: value.category, description: value.description,
-    amount: value.amount, allocation_method: value.allocation_method, supplier_name: value.supplier_name ?? null,
-    invoice_number: value.invoice_number ?? null, reference_doc: value.reference_doc ?? null,
-    warehouse_id: value.warehouse_id ?? null, recurring_template_id: recurringTemplateId,
-    confirmation_month: confirmationMonth, recorded_by: context.userId,
-  }).select("*").single();
-  if (error) throw new FarmOperationError(error.code === "23505" ? "This monthly expense template has already been confirmed for this month." : error.message, error.code === "23505" ? 409 : 500);
-  await recordAuditEvent(context, {eventType: "cost_entry.recorded", operation: "insert", entityTable: "cost_entries", entityId: String(data.id), reason: value.description, after: data, farmId: data.farm_id, houseId: data.house_id, flockId: data.flock_id, batchId: data.batch_id, warehouseId: value.warehouse_id ?? null});
+  const {data,error}=await (supabaseAdmin as any).rpc("record_operational_expense",{
+    p_actor:context.userId,p_org:context.orgId,p_date:value.entry_date,p_payload:value,p_request:value.request_id??crypto.randomUUID(),
+  });
+  if(error)throw new FarmOperationError(error.message,error.code==="40001"?409:databaseStatus(error.code));
   return data;
 }
 

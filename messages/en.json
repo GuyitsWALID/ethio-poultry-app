@@ -1,4 +1,9 @@
 {
+  "Expenses": {
+    "title":"Expenses & purchases", "intro":"Confirm farm costs and receive purchased stock. Past entries stay in History.", "refresh":"Refresh options", "loading":"Loading authorized farms and stores…", "failed":"The entry could not be saved or loaded. Check the fields, connection and open operating date, then retry.", "denied":"Your farm or warehouse access changed. Refresh your access before recording.", "changed":"This monthly expense is already confirmed or its evidence changed. Inspect the exact entry in History before retrying.", "saved":"Entry saved.", "queued":"Waiting to sync. Keep this tablet's saved draft until connected.", "farm":"Farm", "choose":"Choose", "chooseFarm":"Choose an assigned farm to begin.", "expenses":"Expenses", "purchases":"Stock purchases", "history":"Browse History", "openSaved":"View saved entry in History", "ceoReadOnly":"The Farm Manager records expenses and stock receipts. Use History to inspect existing entries.",
+    "expenseHelp":"Record operating costs here. Receive stock purchases in Stock purchases; do not enter the same inventory purchase again as an expense. Existing stock-consumption costing remains authoritative.", "template":"Monthly template", "newExpense":"New expense", "farmLevel":"Farm-level — no warehouse", "kind":"Expense type", "oneOff":"One-off", "monthly":"Monthly", "category":"Category", "warehouse":"Warehouse (optional)", "description":"Description", "amount":"Amount (ETB)", "supplier":"Supplier / payee", "invoice":"Invoice / receipt reference", "reference":"Supporting document reference", "monthHelp":"Confirm the actual cost recorded on {date}. Billing month: {month} (Gregorian). Templates never post expenses automatically.", "remember":"Save this as a monthly template for this farm or warehouse", "confirm":"Confirm monthly expense", "saveExpense":"Record expense", "date":"Actual recording date",
+    "purchaseHelp":"A purchase creates one stock receipt, not a second expense. Stock costs continue to be attributed through the existing inventory rules.", "warehouseRequired":"Receiving warehouse", "itemMode":"Item choice", "existingItem":"Existing inventory item", "newItem":"Register a new item", "item":"Inventory item", "itemName":"Item name", "unit":"Stock unit", "reorder":"Reorder level", "quantity":"Quantity received", "unitCost":"Cost per stock unit (ETB)", "purchaseType":"Purchase type", "emergency":"Emergency", "miscellaneous":"Other purchase", "notes":"Notes", "recordingDate":"Receipt date", "savePurchase":"Receive purchased stock"
+  },
   "Scheduler": {
     "reviewChanged":"I reviewed the changed plan; keep my inputs",
     "route":"Vaccination route", "water":"Drinking water", "injection":"Injection", "spray":"Spray", "eye_drop":"Eye drop", "legacy":"Existing plans awaiting mapping review", "legacyHelp":"These original plans are retained. Review their named flock and outcome evidence before conversion; no status is guessed.", "inspect":"Inspect original plan",
@@ -2394,6 +2399,7 @@
   },
   "Navigation": {
     "scheduler": "Scheduler",
+    "expensesPurchases": "Expenses & purchases",
     "performance": "Farm performance",
     "history": "History",
     "reports": "Reports",

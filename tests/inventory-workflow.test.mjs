@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import {readFileSync} from "node:fs";
 import test from "node:test";
 import en from "../messages/en.json" with {type: "json"};
 
@@ -48,7 +49,9 @@ test("monthly and one-off expenses are validated and persisted distinctly", () =
   assert.match(migration, /check \(entry_kind in \('monthly', 'one_off'\)\)/);
   assert.match(costRoute, /recordExpense/);
   assert.match(farmOperations, /z\.enum\(\["monthly", "one_off"\]\)/);
-  assert.match(farmOperations, /entry_kind: value\.entry_kind/);
+  assert.match(farmOperations, /p_payload:value/);
+  const expenseSql=readFileSync(new URL('../supabase/migrations/20261104000000_farm_expense_confirmations.sql',import.meta.url),'utf8');
+  assert.match(expenseSql,/kind,category_value,description_value,amount_value/);
   assert.equal(en.Inventory.expense.monthly, "Confirmed monthly expense");
   assert.equal(en.Inventory.expense.oneOff, "One-off miscellaneous expense");
   assert.match(en.Inventory.expense.warning, /does not change warehouse stock/i);

@@ -68,7 +68,7 @@ export function AppShell({ children, viewerRole, todayWorkspaceEnabled }: { chil
 
   const route = routeTitles.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
   const feedMode = pathname === "/app/feeding-log" ? feedSecondaryMode(query, todayWorkspaceEnabled && viewerRole === "farm_manager") : null;
-  const pageTitle = pathname === "/app/scheduler" ? navigation("scheduler") : feedMode ? feedMode === "template_management" ? navigation("templates") : destinations("weights") : todayWorkspaceEnabled && (viewerRole === "ceo" || viewerRole === "farm_manager") && ["/app/reports", "/app/analytics"].includes(pathname) ? tPage("farmPerformance") : tPage(route?.[1] ?? "operationsWorkspace");
+  const pageTitle = pathname === "/app/expenses-purchases" ? navigation("expensesPurchases") : pathname === "/app/scheduler" ? navigation("scheduler") : feedMode ? feedMode === "template_management" ? navigation("templates") : destinations("weights") : todayWorkspaceEnabled && (viewerRole === "ceo" || viewerRole === "farm_manager") && ["/app/reports", "/app/analytics"].includes(pathname) ? tPage("farmPerformance") : tPage(route?.[1] ?? "operationsWorkspace");
   const pageGroup = tPage(route?.[2] ?? "groups.poultryManagement");
 
   return (

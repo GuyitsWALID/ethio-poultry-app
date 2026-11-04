@@ -29,9 +29,9 @@
 - [x] 4.6 Extend offline grants/drafts/sync with backward-compatible command handling. Prepared occurrence revisions, independent drafts and offline save/reconnect passed; interrupted downloads preserve cached forms without swallowing permission/storage failures. Physical-device/cross-browser gates remain in section 6.
 
 ## 5. Expenses & purchases
-- [ ] 5.1 Consolidate existing expense/receipt forms under More and reuse them in Today.
-- [ ] 5.2 Add farm-level monthly templates and retry-safe explicit confirmations.
-- [ ] 5.3 Preserve warehouse scope, source identity, evidence links and non-duplicated cost attribution.
+- [x] 5.1 Consolidate existing expense/receipt forms under More and reuse them in Today. One bilingual Expenses & purchases workspace uses the same entry forms as Today; History keeps exact saved-record links. Disabled organizations and Admin navigation remain unchanged.
+- [x] 5.2 Add farm-level monthly templates and retry-safe explicit confirmations. Existing templates remain unchanged; farm templates need no warehouse. One atomic SQL operation validates scope, operating date and money, then records the optional template, explicit Gregorian billing-month confirmation and audit. Competing confirmations produce one expense.
+- [x] 5.3 Preserve warehouse scope, source identity, evidence links and non-duplicated cost attribution. Effective warehouse permissions apply to reads/writes. Purchases retain one stock receipt and never also generate a cost entry; existing profitability formulas remain unchanged. Changed retry evidence conflicts, and failed audit rolls back the expense/template transaction.
 
 ## 6. Acceptance and release
 - [ ] 6.1 Focused regressions per work package, then full tests/type/lint/production/Cloudflare builds.

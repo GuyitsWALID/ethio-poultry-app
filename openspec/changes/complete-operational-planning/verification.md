@@ -148,3 +148,40 @@ automated validation, not a new claim of independent partner review.
   the exact-source checker and unchanged original operational-field fingerprints.
   Application release uses `notmain`; remote deployment acceptance is not implied
   by the local/browser checks above.
+
+## Task 5 — expenses and purchases, 2026-11-04
+
+- Tasks 5.1–5.3 are implemented. Details are recorded in
+  `expenses-purchases.md`; whole-release acceptance remains in section 6.
+- Full unit suite: 590 passed, no failures. Strict OpenSpec validation passed.
+- Docker dry run applied all 34 forward migrations and passed all 30 integration
+  files, populated preservation checks and archived-correction assertions. The
+  original local postgres database and its migration history were unchanged.
+- Focused SQL covers farm templates without warehouse grants, request/monthly
+  replay, different-evidence conflicts, CEO mutation denial, another farm/shared
+  store denial, future dates, forced audit rollback, inherited receipt access,
+  no duplicate purchase expense, RLS and revoked template reads.
+- Real concurrent monthly confirmations passed: one template, one cost entry and
+  one explicit audit event. The disposable clone was removed.
+- Staging rollback-only preflight passed against the pinned project
+  `uzmhpecehmlwojdmitgj`, preserving original costs, templates and stock fields.
+- A stalled standalone TypeScript check was stopped during local Docker startup
+  memory pressure. The final production build must run TypeScript before release.
+- Full lint, final changed-source lint, TypeScript, fresh production/OpenNext
+  Cloudflare builds and signed-in Chromium acceptance passed. Disposable local
+  build artifacts are not deployable and are not committed.
+- Browser acceptance covers farm-level monthly confirmation and retry, exact
+  History navigation, template reuse in Today, a real stock receipt and English/
+  Amharic 768/1024px layouts. Screenshot review also corrected the stretching farm
+  selector and a success message that did not translate after a locale switch;
+  the final browser run explicitly checks the Amharic success message.
+- Monthly retry History links use the original persisted entry date, not a newly
+  requested date. Final focused regressions passed after that correction.
+- New terminology remains pending partner review; deployed staging application,
+  physical-device, cross-browser and pilot acceptance remain section 6 gates.
+  Production is not approved.
+- Staging migration `20261104000000_farm_expense_confirmations.sql` committed on
+  2026-11-04 to `uzmhpecehmlwojdmitgj`. The release transaction verified permission
+  contracts, Today delegation, receipt replay guards and unchanged original costs,
+  templates and stock fields. Application release uses `notmain`; no production
+  database or deployment was accessed.

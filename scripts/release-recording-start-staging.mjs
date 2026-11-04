@@ -8,7 +8,8 @@ nextEnv.loadEnvConfig(process.cwd());
 const mode = process.argv[2];
 const eggSales = process.argv.includes("--egg-sales");
 const scheduler = process.argv.includes("--scheduler");
-assert.ok(!(eggSales&&scheduler),"Release one work package at a time.");
+const expenses = process.argv.includes("--expenses");
+assert.ok([eggSales,scheduler,expenses].filter(Boolean).length<=1,"Release one work package at a time.");
 assert.ok(["inspect", "check", "deploy"].includes(mode), "Use inspect, check (rollback), or deploy.");
 const connection = process.env.STAGING_DB_URL;
 assert.ok(connection, "STAGING_DB_URL is required; never paste credentials.");
@@ -33,7 +34,8 @@ assert.ok(lock.ok, "Migration lock mismatch. Review before release.");
 const files = Object.keys(lock.actual.files).sort();
 const local = files.map(file => file.slice(0,14));
 const remote = sql("select version from supabase_migrations.schema_migrations order by version;").split(/\r?\n/);
-const allowed = scheduler ? ["20261103000000_named_flock_scheduler.sql"] : eggSales ? ["20261102000000_traceable_egg_sales.sql"] : ["20261030000000_verified_today_opening_source.sql", "20261030001000_governed_recording_start.sql"];
+const allowed = expenses ? ["20261104000000_farm_expense_confirmations.sql"] : scheduler ? ["20261103000000_named_flock_scheduler.sql"] : eggSales ? ["20261102000000_traceable_egg_sales.sql"] : ["20261030000000_verified_today_opening_source.sql", "20261030001000_governed_recording_start.sql"];
+if(expenses)assert.ok(remote.includes("20261103000000"),"Scheduler prerequisite must already be migrated.");
 if(scheduler)assert.ok(remote.includes("20261102000000"),"Egg-source prerequisite must already be migrated.");
 if (eggSales) assert.ok(remote.includes("20261030001000"), "Recording-start prerequisite must already be migrated.");
 assert.ok(remote.every(version => local.includes(version)), "Unknown staging migration history. Stopped.");
@@ -48,7 +50,8 @@ if (mode !== "inspect") {
     "governance_audit_events","egg_custody_opening_balances"];
   if (remote.includes("20261030001000")) tables.push("flock_recording_starts");
   if(scheduler)tables.push("batch_weight_check_tasks","weight_records","vaccination_events","health_events","biosecurity_checks");
-  const fingerprint = table => `md5(coalesce((select string_agg((${table === "daily_sales_records" && eggSales ? "to_jsonb(t)-array['egg_source_version','egg_sources','egg_conversion_multiplier','sale_request_id','sale_request_hash']" : "to_jsonb(t)"})::text,'' order by id) from public.${table} t),''))`;
+  if(expenses)tables.push("cost_entries","recurring_cost_templates");
+  const fingerprint = table => `md5(coalesce((select string_agg((${table === "cost_entries" && expenses ? "to_jsonb(t)-array['expense_request_id','expense_request_hash']" : table === "recurring_cost_templates" && expenses ? "to_jsonb(t)-'farm_id'" : table === "daily_sales_records" && eggSales ? "to_jsonb(t)-array['egg_source_version','egg_sources','egg_conversion_multiplier','sale_request_id','sale_request_hash']" : "to_jsonb(t)"})::text,'' order by id) from public.${table} t),''))`;
   const before = tables.map(table => `('${table}',${fingerprint(table)})`).join(",");
   const statements = [];
   for (const file of pending) {
@@ -102,6 +105,15 @@ ${scheduler ? `do $$ begin
   or position('Scheduled work is still missing an outcome.' in pg_get_functiondef('public.finish_farm_operating_day_v1(uuid,uuid,integer,jsonb,uuid,date,text)'::regprocedure))=0
  then raise exception 'RELEASE_CHECK: Scheduler permissions or command/closure guards differ'; end if;
 end $$;` : ""}
+${expenses ? `do $$ begin
+ if has_function_privilege('authenticated','public.record_operational_expense(uuid,uuid,date,jsonb,uuid)','execute')
+  or has_function_privilege('anon','public.record_operational_expense(uuid,uuid,date,jsonb,uuid)','execute')
+  or has_table_privilege('authenticated','public.recurring_cost_templates','insert')
+  or not (select relrowsecurity from pg_class where oid='public.recurring_cost_templates'::regclass)
+  or position('record_operational_expense' in pg_get_functiondef('public.execute_today_command_v1(uuid,jsonb)'::regprocedure))=0
+  or position('different evidence' in pg_get_functiondef('public.receive_inventory_stock(uuid,uuid,uuid,jsonb,numeric,numeric,date,public.procurement_type,text,text,text,text)'::regprocedure))=0
+ then raise exception 'RELEASE_CHECK: expense or receipt safeguards differ';end if;
+end $$;` : ""}
 `;
   const history = remote.map(value => `'${value}'`).join(",");
   sql(`begin;
@@ -116,5 +128,5 @@ insert into release_sources values ${before};
 ${statements.join("\n")}
 ${checks}
 ${mode === "deploy" ? "commit" : "rollback"};`);
-  console.log(`PASS: ${scheduler ? "Scheduler" : eggSales ? "egg-source" : "starting-count"} staging ${mode === "deploy" ? "migrations committed" : "dry run rolled back"}; permissions and operational source preservation verified. Production not accessed.`);
+  console.log(`PASS: ${expenses ? "expense" : scheduler ? "Scheduler" : eggSales ? "egg-source" : "starting-count"} staging ${mode === "deploy" ? "migrations committed" : "dry run rolled back"}; permissions and operational source preservation verified. Production not accessed.`);
 }

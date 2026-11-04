@@ -145,6 +145,8 @@ const salePayload = z.object({
 });
 
 const expensePayload = z.object({
+  recurring_template_id: nullableUuid,
+  remember_template: z.boolean().optional(),
   category: z.enum(["feed", "medicine", "vaccine", "vitamin", "supplement", "payroll", "utility", "biosecurity", "transport", "maintenance", "labor", "rent", "packaging", "miscellaneous"]),
   description: nonEmpty,
   amount: positive,

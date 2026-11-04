@@ -128,6 +128,5 @@ export async function receiveInventoryStock(ctx:AccessContext,input:unknown){
     p_supplier_name:value.supplierName??null,p_invoice_number:value.invoiceNumber??null,p_notes:value.notes??null,p_idempotency_key:value.idempotencyKey,
   });
   if(error)throw new InventoryOperationsError(error.message,error.code==="42501"?403:error.code==="23505"?409:400);
-  await recordAuditEvent(ctx,{eventType:"inventory.stock.received",operation:"insert",entityTable:"stock_ledger",entityId:String(data.movement_id),reason:`Received stock into the assigned warehouse${value.invoiceNumber?` against ${value.invoiceNumber}`:""}.`,after:data,warehouseId:value.warehouseId});
   return data;
 }

@@ -1,6 +1,7 @@
 export const TERMINOLOGY_GLOSSARY_VERSION = "2026-10-30-approved-2" as const;
 
 export const managerTodayMessageKeys = [
+  "Navigation.expensesPurchases",
   "Navigation.scheduler", "Today.tasks.scheduledWork", "Today.embedded.examples.scheduledWork",
   "Today.birdCheck.sources.placement",
   "Today.birdCheck.sources.baseline",
@@ -329,6 +330,7 @@ export const managerTodayMessageKeys = [
 
 // Product owner confirmed full partner review in chat on 2026-10-30.
 export const pendingTerminologyReviewKeys: readonly string[] = [
+  "Navigation.expensesPurchases",
   "Today.embedded.eggSources", "Today.embedded.eggSourcesHelp", "Today.embedded.sourceFlock",
   "Today.embedded.sourceEggs", "Today.embedded.addSourceFlock", "Today.embedded.eggsPerUnit",
   "Navigation.scheduler", "Today.tasks.scheduledWork", "Today.embedded.examples.scheduledWork",
