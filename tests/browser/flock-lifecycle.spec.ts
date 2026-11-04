@@ -11,7 +11,7 @@ const flock='12000000-0000-4000-8000-000000000012';
 const farm='12000000-0000-4000-8000-000000000003';
 const other='99000000-0000-4000-8000-000000000001';
 async function login(page: Page,role='FARM_MANAGER'){
-  page.on('requestfailed',request=>console.log('Local browser request failed:',new URL(request.url()).origin,new URL(request.url()).pathname,request.failure()?.errorText));
+  page.on('requestfailed',request=>{if(request.failure()?.errorText!=='net::ERR_ABORTED')console.log('Local browser request failed:',new URL(request.url()).origin,new URL(request.url()).pathname,request.failure()?.errorText);});
   await page.goto('/auth/sign-in');
   await page.getByRole('textbox',{name:'Work email',exact:true}).fill(process.env[`E2E_${role}_EMAIL`]!);
   await page.locator('input[name="password"]').fill(process.env[`E2E_${role}_PASSWORD`]!);
@@ -22,6 +22,7 @@ async function login(page: Page,role='FARM_MANAGER'){
   // contexts. Each case starts in English before testing its own language.
   await page.getByRole('group',{name:/Language|ቋንቋ/}).getByRole('button',{name:'EN',exact:true}).click();
   await expect(page.locator('html')).toHaveAttribute('lang','en');
+  await expect.poll(async()=>{const response=await page.request.get('/api/me/context');return response.ok()?(await response.json()).preferredLocale:null;}).toBe('en');
 }
 
 test('anonymous lifecycle interfaces deny access',async({page})=>{
@@ -59,7 +60,11 @@ test('inline profile, old URL compatibility, tablet layout and reduced motion',a
   const panel=page.locator('#selected-flock-details');
   await expect(panel.getByRole('heading',{name:'BROWSER-LAYER',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Flock registry',exact:true})).toHaveCount(0);
-  await expect(panel.getByRole('button',{name:'History — coming soon'})).toBeDisabled();
+  const history=panel.getByRole('link',{name:messages.History.title,exact:true});
+  await expect(history).toBeVisible();
+  const historyUrl=new URL((await history.getAttribute('href'))!,page.url());
+  expect(historyUrl.pathname).toBe('/app/history');
+  expect(historyUrl.searchParams.get('filter_page_history_flock')).toBe(flock);
   const periods=panel.getByRole('group',{name:'Profile period'});
   await expect(periods.getByRole('button',{name:'30 days',exact:true})).toHaveAttribute('aria-pressed','true');
   for(const days of [7,90,30]){

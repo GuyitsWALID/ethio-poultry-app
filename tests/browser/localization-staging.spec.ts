@@ -27,6 +27,19 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     expect(context.orgName).toBe(fixture.organizationName);
     expect(context.role).toBe(role === "CEO" ? "ceo" : "farm_manager");
     expect(context.todayWorkspaceEnabled, "Do not change rollout to pass localization checks").toBe(true);
+    const scopeResponse=await page.request.get('/api/scope/options');
+    expect(scopeResponse.status()).toBe(200);
+    const scope=await scopeResponse.json();
+    const planningFarm=scope.farms.find((farm:{name:string})=>farm.name===fixture.managerFarmName);
+    expect(planningFarm,'The existing populated farm must remain authorized; do not create assignments to pass').toBeTruthy();
+    for(const endpoint of [`/api/scheduler?farm_id=${planningFarm.id}`,`/api/expenses/workspace?farm_id=${planningFarm.id}`]){
+      const response=await page.request.get(endpoint);
+      expect(response.status(),endpoint.split('?')[0]).toBe(200);
+      expect(response.headers()['cache-control']).toContain('no-store');
+      const body=await response.json();
+      if(endpoint.startsWith('/api/scheduler')){expect(body.role).toBe(context.role);expect(body.rules).toEqual(expect.any(Array));expect(body.occurrences).toEqual(expect.any(Array));}
+      else{expect(body.farmId).toBe(planningFarm.id);expect(body.canOperate).toBe(role==='FARM_MANAGER');expect(body.templates).toEqual(expect.any(Array));}
+    }
     const originalLocale = context.preferredLocale === "am" ? "am" : "en";
     const query = new URLSearchParams({filter_view: "1", filter_preset: "custom", filter_dateFrom: fixture.dateFrom, filter_dateTo: fixture.dateTo, filter_page_dateFrom: fixture.dateFrom, filter_page_dateTo: fixture.dateTo});
     try {
@@ -69,11 +82,25 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
           ["/app/reconciliation", copy.OperationUI.seeWhatDoesNotAgreeAndExactlyWhereToFix],
           ["/app/health", copy.OperationUI.keepEveryPreventiveActionOnTheRunway],
           ["/app/sales", copy.OperationUI.turnEverySaleIntoCollectedCashAndProtectedMargin],
+          ["/app/scheduler", copy.Scheduler.title],
+          [`/app/expenses-purchases?farm_id=${planningFarm.id}`, copy.Expenses.title],
         ];
         for (const [url, heading] of routes) {
           const response = await page.goto(url);
           expect(response?.status(), `${role} ${locale} ${url} document response`).toBe(200);
           await expect(page.getByRole("heading", {name: heading, exact: true}).first()).toBeVisible();
+          if(url==='/app/scheduler'){
+            // Opening an editor only previews fields; no plan or business record is posted.
+            await page.getByRole('button',{name:copy.Scheduler.new,exact:true}).click();
+            await expect(page.locator('form').getByLabel(copy.Scheduler.name,{exact:true})).toBeVisible();
+            if(locale==='am')await expect(page.getByRole('group',{name:copy.Calendar.ethiopian,exact:true}).first()).toBeVisible();
+          }
+          if(url.startsWith('/app/expenses-purchases')&&role==='FARM_MANAGER'){
+            const form=page.locator('form');
+            await expect(form.getByRole('combobox',{name:copy.Expenses.template,exact:true})).toBeVisible();
+            const action=form.getByRole('button',{name:copy.Expenses.saveExpense,exact:true});
+            await expect(action).toBeVisible();expect((await action.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+          }
           const layout = await page.evaluate(() => ({
             viewport: window.innerWidth,
             width: document.documentElement.scrollWidth,
