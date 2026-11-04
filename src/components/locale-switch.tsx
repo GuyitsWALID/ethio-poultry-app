@@ -35,7 +35,6 @@ export function LocaleSwitch({ viewerRole }: { viewerRole: ActiveRole | null }) 
   if (role !== "ceo" && role !== "farm_manager") return null;
 
   const selectLocale = (locale: AppLocale) => {
-    if (locale === activeLocale) return;
     selectedLocally.current = true;
     setDeviceLocale(locale);
     void fetch("/api/me/locale", {

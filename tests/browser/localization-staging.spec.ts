@@ -8,6 +8,7 @@ test.skip(new URL(process.env.APP_BASE_URL || "http://localhost:3000").hostname 
 for (const role of ["CEO", "FARM_MANAGER"] as const) {
   test(`Localized operational screens and tablet layouts: ${role}`, async ({page}) => {
     test.setTimeout(300_000);
+    page.setDefaultTimeout(30_000);
     const email = process.env[`E2E_${role}_EMAIL`];
     const password = process.env[`E2E_${role}_PASSWORD`];
     expect(Boolean(email && password), "Dedicated staging credentials required").toBe(true);
@@ -16,8 +17,9 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     page.on("console", message => {
       if (/MISSING_MESSAGE|FORMATTING_ERROR/.test(message.text())) errors.push("Translation lookup or formatting error");
     });
-    await page.goto("/auth/sign-in");
-    await page.getByLabel("Email").fill(email!);
+    const signIn = await page.goto("/auth/sign-in");
+    expect(signIn?.status(), "Staging sign-in must be available").toBe(200);
+    await page.locator('input[type="email"]').fill(email!);
     await page.locator('input[name="password"]').fill(password!);
     await page.locator('form button[type="submit"]').click();
     await expect(page).toHaveURL(/\/app\/(ceo|farm-manager|today)/);

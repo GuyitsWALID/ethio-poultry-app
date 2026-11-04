@@ -10,6 +10,7 @@ test.skip(new URL(process.env.APP_BASE_URL || "http://localhost:3000").hostname 
 for (const role of ["CEO", "FARM_MANAGER"] as const) {
   test(`Populated staging Reports preserve ${role} source totals`, async ({page}) => {
     test.setTimeout(240_000);
+    page.setDefaultTimeout(30_000);
     // Playwright transport errors can include authenticated Cookie headers.
     // Keep failures explicit without writing session credentials to CI logs.
     const get=async(url:string)=>{
@@ -19,8 +20,9 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     const email = process.env[`E2E_${role}_EMAIL`];
     const password = process.env[`E2E_${role}_PASSWORD`];
     expect(Boolean(email && password), "Dedicated staging credentials must exist").toBe(true);
-    await page.goto("/auth/sign-in");
-    await page.getByLabel("Email").fill(email!);
+    const signIn = await page.goto("/auth/sign-in");
+    expect(signIn?.status(), "Staging sign-in must be available").toBe(200);
+    await page.locator('input[type="email"]').fill(email!);
     await page.locator('input[name="password"]').fill(password!);
     await page.locator('form button[type="submit"]').click();
     await expect(page).toHaveURL(/\/app\/(ceo|farm-manager|today)/);
@@ -42,7 +44,13 @@ for (const role of ["CEO", "FARM_MANAGER"] as const) {
     const input: ReportInput = {dateFrom: fixture.dateFrom, dateTo: to, farmId, month: to.slice(0, 7)};
     const read = async (url: string) => {
       const response = await get(url);
-      expect(response.status(), `Authorized source ${url.split("?")[0]}`).toBe(200);
+      // Report only allowlisted diagnostics, never authenticated headers or record contents.
+      let code = "";
+      if (!response.ok() && response.headers()["content-type"]?.includes("application/json")) {
+        const body = await response.json();
+        if (typeof body.code === "string" && /^[A-Z_]{1,64}$/.test(body.code)) code = body.code;
+      }
+      expect(response.status(), `Authorized source ${url.split("?")[0]} ${code} (ray ${response.headers()["cf-ray"] ?? "none"})`).toBe(200);
       if (url.startsWith("/api/reports/evidence")) expect(response.headers()["cache-control"]).toContain("no-store");
       return response.json();
     };
