@@ -13,7 +13,9 @@ test('Today complete offline day survives reload and browser restart then closes
   const profile=await mkdtemp(join(tmpdir(),'ep-offline-'));
   const options={baseURL:process.env.APP_BASE_URL,viewport:{width:768,height:1024},...(info.project.name==="edge"?{channel:"msedge"}:{})};
   let context=await engine.launchPersistentContext(profile,options);
+  context.setDefaultTimeout(30_000);
   let page=context.pages()[0]??await context.newPage();
+  await page.bringToFront();
   const destination=`/app/today?farm_id=${id(1)}&flock_id=${id(5)}`;
   const queue=(target:Page)=>target.evaluate(async()=>{
     const name=localStorage.getItem('ethiopoultry.offline_identity');if(!name)throw Error('No offline identity');
@@ -42,14 +44,14 @@ test('Today complete offline day survives reload and browser restart then closes
     await page.getByRole('button',{name:'Open my workspace',exact:true}).click();await expect(page).toHaveURL(/\/app\//);
     await page.goto(destination);
     await expect(page.locator('#today-task-birds')).toBeVisible();
-    await expect.poll(()=>page.evaluate(async()=>Boolean(navigator.serviceWorker.controller&&await caches.match('/offline'))),{timeout:90000}).toBe(true);
+    await expect.poll(()=>page.evaluate(async()=>Boolean(navigator.serviceWorker.controller&&(await caches.keys()).includes('ethiopoultry-static-v3')&&await caches.match('/offline'))),{timeout:90000}).toBe(true);
     console.log(`${info.project.name}: offline shell installed`);
     // Every applicable input form is prepared online, not only the open card.
-    await expect.poll(()=>page.evaluate(async()=>{
+    await expect.poll(()=>page.evaluate(async(farmId)=>{
       const name=localStorage.getItem('ethiopoultry.offline_identity');if(!name)return 0;
       const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open(name);r.onsuccess=()=>resolve(r.result);});
-      try{return await new Promise<number>(resolve=>{const r=db.transaction('drafts').objectStore('drafts').getAllKeys();r.onsuccess=()=>resolve(r.result.filter(key=>String(key).startsWith('detail:')).length);});}finally{db.close();}
-    })).toBeGreaterThanOrEqual(8);
+      try{return await new Promise<number>(resolve=>{const r=db.transaction('drafts').objectStore('drafts').getAllKeys();r.onsuccess=()=>resolve(r.result.filter(key=>String(key).startsWith(`detail:task:${farmId}:`)).length);});}finally{db.close();}
+    },id(1)),{timeout:90_000}).toBeGreaterThanOrEqual(8);
     await context.setOffline(true);
     const birds=await open('birds');await birds.getByRole('button',{name:'Save bird check',exact:true}).click();
     await expect.poll(async()=>(await queue(page)).length).toBe(1);
@@ -58,8 +60,9 @@ test('Today complete offline day survives reload and browser restart then closes
     await expect.poll(async()=>(await queue(page)).length).toBe(2);
     const beforeRestart=(await queue(page)).map(row=>row.command.command_id).sort();
     await context.close();
-    context=await engine.launchPersistentContext(profile,options);await context.setOffline(true);
-    page=context.pages()[0]??await context.newPage();await page.goto(destination);
+    context=await engine.launchPersistentContext(profile,options);context.setDefaultTimeout(30_000);await context.setOffline(true);
+    page=context.pages()[0]??await context.newPage();await page.bringToFront();await page.goto(destination);
+    await expect.poll(()=>page.evaluate(()=>document.visibilityState)).toBe('visible');
     await expect.poll(async()=>(await queue(page)).map(row=>row.command.command_id).sort()).toEqual(beforeRestart);
     console.log(`${info.project.name}: browser restart preserved outbox`);
     await feeding('Second','15:00');
@@ -76,7 +79,8 @@ test('Today complete offline day survives reload and browser restart then closes
     const queued=await queue(page);expect(new Set(queued.map(row=>row.command.command_id)).size).toBe(7);
     const review=await open('review_finish');await expect(review.getByRole('button',{name:'Finish the day',exact:true})).toBeDisabled();
     await context.setOffline(false);
-    await expect.poll(async()=>(await queue(page)).length,{timeout:90000}).toBe(0);
+    await expect.poll(()=>page.evaluate(()=>navigator.onLine)).toBe(true);
+    await expect.poll(async()=>(await queue(page)).map(row=>({type:row.command.type,state:row.state,error:row.result?.error_code})),{timeout:90000}).toEqual([]);
     console.log(`${info.project.name}: dependent commands synchronized`);
     await page.goto(destination);
     const date=await page.getByLabel('Work date',{exact:true}).inputValue();

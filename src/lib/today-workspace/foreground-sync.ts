@@ -67,7 +67,12 @@ export function startForegroundSync({store, send, beforeSync, lockName, onSummar
     running = true;
     try {
       const result = await host.withLock(lockName, async () => {
-        if (stopped || !host.online() || !host.visible() || !await beforeSync()) return null;
+        if (stopped || !host.online() || !host.visible()) return null;
+        if (!await beforeSync()) {
+          // A reconnect may not emit another online event when the browser hint never changed.
+          if ((await store.listCommands()).some(row => row.state === "queued" || row.state === "sending")) schedule(30_000);
+          return null;
+        }
         if (stopped) return null;
         return drainCommands ? await drainCommands() ?? null : syncOutbox(store, send, now);
       });

@@ -34,8 +34,8 @@
 - [x] 5.3 Preserve warehouse scope, source identity, evidence links and non-duplicated cost attribution. Effective warehouse permissions apply to reads/writes. Purchases retain one stock receipt and never also generate a cost entry; existing profitability formulas remain unchanged. Changed retry evidence conflicts, and failed audit rolls back the expense/template transaction.
 
 ## 6. Acceptance and release
-- [ ] 6.1 Focused regressions per work package, then full tests/type/lint/production/Cloudflare builds.
-- [ ] 6.2 Docker dry runs and migration/RLS/concurrency/offline integration.
-- [ ] 6.3 Signed-in English/Amharic tablet acceptance using disposable authorized fixtures.
-- [ ] 6.4 Staging migrations/application validation and separate notmain commits per work package.
-- [ ] 6.5 Record remaining physical-device and Task 8 pilot gates without implying production approval.
+- [x] 6.1 Focused regressions per work package, then full tests/type/lint/production/Cloudflare builds. Final suite: 596 passed; full lint, TypeScript and fresh production/OpenNext Cloudflare builds passed. Strict OpenSpec validation passed.
+- [x] 6.2 Docker dry runs and migration/RLS/concurrency/offline integration. All 34 forward migrations and 30 SQL integration files passed with populated preservation and real concurrency checks. Final offline-day Chromium acceptance passed automatic reconnect, durable reload/restart, seven dependent commands, one-time stock deductions and one-time day closure; original local data stayed untouched.
+- [x] 6.3 Signed-in English/Amharic tablet acceptance using disposable authorized fixtures. Per-package transactional Chromium checks passed; read-only deployed CEO/manager Reports, History, Scheduler and Expenses tablet checks passed in staging run 41800702799. Physical-device acceptance remains a rollout gate.
+- [x] 6.4 Staging migrations/application validation and separate notmain commits per work package. The pinned staging schema is current; signed-in CEO/manager application checks passed run 41800702799. Tasks 2–5 have separate notmain checkpoints; Task 6 acceptance fixes and evidence form the final release checkpoint. No additional migration was needed for these client/test fixes.
+- [x] 6.5 Record remaining physical-device and Task 8 pilot gates without implying production approval. See verification.md; automated viewports do not constitute physical-device or pilot sign-off.

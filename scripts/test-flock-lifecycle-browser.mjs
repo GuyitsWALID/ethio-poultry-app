@@ -157,7 +157,7 @@ try{
       commit;`);
   }
   if(reuseBuild)console.log('Reusing the previously verified LOCAL bundle for test-only retries; never deploy this bundle.');
-  else await runNode(schedulerOnly||expensesOnly?['node_modules/@opennextjs/cloudflare/dist/cli/index.js','build']:['node_modules/next/dist/bin/next','build','--webpack'],env);
+  else await runNode(['node_modules/@opennextjs/cloudflare/dist/cli/index.js','build'],env);
   app=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3100'],{env,stdio:'inherit'});
   await ready(`${env.APP_BASE_URL}/auth/sign-in`,180_000);
   // Check protected routes outside the interaction test deadline.

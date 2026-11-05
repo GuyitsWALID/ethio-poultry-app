@@ -11,6 +11,7 @@ import {todayErrorMessageKeys} from "@/i18n/today-copy";
 import {actionStatuses, type ActionStatus} from "@/lib/action-desk-contract";
 import {buildFinishReview, type FinishIssue, type ReviewTask} from "@/lib/today-workspace/finish-review";
 import {sendTodayCommand} from "@/lib/today-workspace/sync";
+import {readPreparedDetail} from "@/lib/today-workspace/offline-policy";
 import {HealthTaskForm} from "@/components/today/health-task-form";
 import {ScheduledWorkForm} from "@/components/today/scheduled-work-form";
 import {ExpenseEntryForm,PurchaseEntryForm} from "@/components/expense-purchase-forms";
@@ -303,8 +304,7 @@ export function EmbeddedTaskCard({task,flock,farmId,workDate,expanded,onToggle,o
   const flockId=["feeding","eggs_water","health_deaths","routine_supplies","scheduled_work"].includes(task.code)?flock?.id:undefined;
   const readOnly=flock?.canRecord===false&&["feeding","eggs_water","health_deaths","routine_supplies","scheduled_work"].includes(task.code);
   useEffect(()=>{if(!expanded||readOnly)return;const controller=new AbortController();const params=new URLSearchParams({farm_id:farmId,date:workDate});if(flockId)params.set("flock_id",flockId);const load=async()=>{setLoading(true);setLoadError(false);try{
-    if(!navigator.onLine){const cached=await offline.runtime?.readDetail({farmId,flockId,workDate},task.code);if(!cached)throw Error("OFFLINE_DETAIL_MISSING");setDetail(cached);return;}
-    const response=await fetch(`/api/farm-manager/today/tasks/${task.code}?${params}`,{cache:"no-store",signal:controller.signal});if(!response.ok)throw new Error();const next=await response.json() as TodayTaskDetail;await offline.runtime?.rememberDetail(next);if(!controller.signal.aborted)setDetail(next);
+    const next=await readPreparedDetail<TodayTaskDetail>(navigator.onLine,()=>fetch(`/api/farm-manager/today/tasks/${task.code}?${params}`,{cache:"no-store",signal:controller.signal}),async()=>offline.runtime?.readDetail({farmId,flockId,workDate},task.code),controller.signal);await offline.runtime?.rememberDetail(next);if(!controller.signal.aborted)setDetail(next);
   }catch(error:unknown){if(error instanceof DOMException&&error.name==="AbortError")return;setLoadError(true)}finally{if(!controller.signal.aborted)setLoading(false)}};void load();return()=>controller.abort()},[expanded,readOnly,farmId,flockId,task.code,task.resourceRevision,workDate,offline.runtime]);
   const title=t(({birds:"tasks.birds",feeding:"tasks.feeding",eggs_water:"tasks.eggsWater",health_deaths:"tasks.healthDeaths",routine_supplies:"tasks.supplies",review_finish:"tasks.review",stock:"tasks.stock",sales:"tasks.sales",expenses:"tasks.expenses",assigned_fixes:"tasks.assignedFixes",scheduled_work:"tasks.scheduledWork"} as const)[task.code]);
   const exampleKey=({birds:"embedded.examples.birds",feeding:"embedded.examples.feeding",eggs_water:"embedded.examples.eggsWater",health_deaths:"embedded.examples.healthDeaths",routine_supplies:"embedded.examples.supplies",review_finish:"embedded.examples.review",stock:"embedded.examples.stock",sales:"embedded.examples.sales",expenses:"embedded.examples.expenses",assigned_fixes:"embedded.examples.assignedFixes",scheduled_work:"embedded.examples.scheduledWork"} as const)[task.code];

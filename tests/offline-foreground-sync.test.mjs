@@ -37,6 +37,28 @@ test('failed authorization preserves work until an explicit refreshed wake',asyn
   allowed=true;sync.wake();await flush();assert.equal(calls,1);sync.stop();
 });
 
+test('pending work retries authorization when reconnect emits no new online event',async()=>{
+  const store=new MemoryOfflineStore();await store.putCommand(row);
+  const {state,host}=environment();let allowed=false,calls=0;
+  const sync=startForegroundSync({store,host,lockName:'identity',beforeSync:async()=>allowed,send:async command=>{calls++;return{command_id:command.command_id,status:'applied'};},onSummary:()=>{},onError:assert.fail});
+  try{
+    await flush();assert.equal(calls,0);assert.equal((await store.listCommands()).length,1);
+    assert.equal(state.timers[0]?.delay,30_000);
+    state.timers.shift().wake();await flush();assert.equal(calls,0);
+    allowed=true;state.timers.shift().wake();await flush();
+    assert.equal(calls,1);assert.equal((await store.listCommands()).length,0);
+  }finally{sync.stop();}
+});
+
+test('an empty or terminal outbox does not poll failed authorization',async()=>{
+  for(const entries of [[],[{...row,state:'rejected'}],[{...row,state:'conflict'}]]){
+    const store=new MemoryOfflineStore();for(const entry of entries)await store.putCommand(entry);
+    const {state,host}=environment();
+    const sync=startForegroundSync({store,host,lockName:'identity',beforeSync:async()=>false,send:async()=>assert.fail('must not send'),onSummary:()=>{},onError:assert.fail});
+    await flush();assert.equal(state.timers.length,0);assert.equal((await store.listCommands()).length,entries.length);sync.stop();
+  }
+});
+
 test('retry timer follows persisted backoff and stop cancels it',async()=>{
   const store=new MemoryOfflineStore();await store.putCommand(row);
   const {state,host}=environment();let clock=Date.parse('2026-10-10T09:00:00Z'),calls=0;

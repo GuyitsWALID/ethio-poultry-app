@@ -1,4 +1,4 @@
-const STATIC_CACHE = "ethiopoultry-static-v2";
+const STATIC_CACHE = "ethiopoultry-static-v3";
 const OFFLINE_SHELL = "/offline";
 const SAFE_STATIC_PATHS = ["/app-icon.svg", "/app-icon-maskable.svg", "/manifest.webmanifest"];
 

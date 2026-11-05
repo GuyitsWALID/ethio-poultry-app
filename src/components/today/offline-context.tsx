@@ -184,6 +184,7 @@ export function TaskDraftScope({selection,task,revision,children}: {selection:Of
   },[key,runtime,fail,refresh,revision]);
   useEffect(()=>{
     let cancelled=false;
+    let usingGrant=false;
     const currentSelection={farmId:selection.farmId,flockId:selection.flockId,workDate:selection.workDate};
     const check=async()=>{
       try{if(!runtime)throw Error();await runtime.assertEditable(currentSelection);if(!cancelled)setExpired(false);}catch{if(!cancelled)setExpired(true);}
@@ -192,10 +193,10 @@ export function TaskDraftScope({selection,task,revision,children}: {selection:Of
       if(!navigator.onLine){await check();return;}
       if(!runtime){setExpired(false);return;}
       setExpired(true);
-      try{const allowed=await authorize(currentSelection);if(!cancelled)setExpired(!allowed);}catch(error){if(!cancelled){setExpired(true);fail(error);}}
+      try{const allowed=await authorize(currentSelection);if(!cancelled){usingGrant=!allowed;if(allowed)setExpired(false);else await check();}}catch(error){if(!cancelled){setExpired(true);fail(error);}}
     };
     void reconnect();
-    const timer=window.setInterval(()=>{if(!navigator.onLine)void check();},15000);
+    const timer=window.setInterval(()=>{if(!navigator.onLine||usingGrant)void check();},15000);
     window.addEventListener("offline",check);window.addEventListener("online",reconnect);
     return()=>{cancelled=true;window.clearInterval(timer);window.removeEventListener("offline",check);window.removeEventListener("online",reconnect);};
   },[runtime,authorize,fail,selection.farmId,selection.flockId,selection.workDate]);

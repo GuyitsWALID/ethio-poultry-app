@@ -1,5 +1,54 @@
 # Implementation checkpoint — 2026-10-30
 
+## Task 6 — release acceptance boundary, 2026-11-05
+
+- Tasks 1–5 have separate `notmain` checkpoints. All 34 forward migrations,
+  including `20261104000000_farm_expense_confirmations.sql`, are applied to the
+  pinned staging project `uzmhpecehmlwojdmitgj`. Production is not approved.
+- Automated English/Amharic Chromium tablet viewports and disposable fixture
+  transactions do not substitute for physical-device or cross-browser acceptance.
+- Remaining rollout gates: real target tablets in both orientations, supported
+  browser/installed-app offline restart and interrupted upgrade checks, partner
+  review of new terminology, backup/restore drill, silent manager usability test
+  and seven unassisted operating days under simplify-farm-operations Task 8.
+- Preserve staging business records and assignments during acceptance. Missing
+  report evidence must not be replaced with zero or manufactured records.
+- The broader CEO workspace remains gated; no production approval is implied.
+- Staging run `41800702799` passed read-only populated CEO/manager report-source
+  comparisons, exact History reads and English/Amharic 768/1024px operational
+  screens, including Scheduler and Expenses & purchases. No records or grants
+  were manufactured to satisfy these checks. The earlier sales 503 did not
+  recur; that cancelled run `41795744254` is not passing evidence.
+- Quality run `41800689013` passed 591 tests, TypeScript, lint, migration/environment
+  contracts, browser discovery and production build for `7d7b469`.
+- Acceptance fixed explicit EN selection being ignored while a delayed profile
+  response preferred Amharic. The regression exercises the actual switch handler.
+- Eight joined local lifecycle/bilingual/revocation checks passed. Final full
+  offline-day Chromium acceptance passed on 2026-11-05 with no synthetic focus
+  wake: disconnected reload, browser restart, seven dependent queued commands,
+  automatic reconnect, stock reduced exactly once to 90, idempotent replay and
+  one-time Finish day. Cache readiness is scoped to the selected farm.
+- Final full unit suite: 596 passed, zero failures. Full lint passed after excluding
+  generated Playwright traces/reports; application and test source remain covered.
+- Offline recovery now falls back to prepared details only on transport failure,
+  never an HTTP denial or malformed response. Editing still validates the saved
+  identity/farm/flock/day grant, including expiry when the online hint is stale.
+- Reconnect investigation: the browser reported online/visible and the session
+  returned 200, but commands stayed queued until an explicit focus wake. A failed
+  pre-sync authorization read had no retry. Pending work now retries after 30s,
+  always rechecking session and assignment before any send; empty/terminal queues
+  do not poll. The regression failed before the fix and passes after it. Storage
+  failures remain blocking, and hidden/stopped clients never send.
+- Durable test lessons: cache readiness must be scoped to the selected farm;
+  generated trace JavaScript is not source lint input. Test-only reruns may reuse
+  the verified local bundle; source changes require a fresh build.
+- Final source changes passed a fresh TypeScript/production/OpenNext Cloudflare
+  build and the original full-day reproduction. The static offline shell cache
+  advances to v3 so installed clients can receive the recovery fixes. IndexedDB
+  drafts/outbox are not deleted. Physical upgrade-failure checks remain a pilot gate.
+- No new migration was introduced by Task 6. Disposable browser stacks were
+  removed by the runner; the original local database was not migrated or reset.
+
 ## Completed implementation
 - Saved and strictly validated the approved OpenSpec change.
 - Verified actual-placement opening birds, dated preceding closes and stale

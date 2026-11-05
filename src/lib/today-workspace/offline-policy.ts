@@ -8,6 +8,20 @@ export function preparationInterrupted(error: unknown, online: boolean): boolean
   return !online && error instanceof Error && error.message === "OFFLINE_PREPARATION_NETWORK";
 }
 
+export async function readPreparedDetail<T>(online: boolean, read: () => Promise<Response>, cached: () => Promise<T | undefined>, signal: AbortSignal): Promise<T> {
+  if (online) {
+    const response = await read().catch(error => {if (signal.aborted) throw error; return null;});
+    if (response) {
+      if (!response.ok) throw Error("OFFLINE_DETAIL_DENIED");
+      return response.json();
+    }
+  }
+  // A transport failure is not permission revocation; editing still validates its grant.
+  const detail = await cached();
+  if (!detail) throw Error("OFFLINE_DETAIL_MISSING");
+  return detail;
+}
+
 // navigator.onLine is only a hint (especially during a service-worker reload).
 // A transport failure cannot prove sign-out. Cached editing still needs its
 // unexpired grant; foreground synchronization independently reauthorizes online.
