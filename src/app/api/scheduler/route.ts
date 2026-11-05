@@ -1,0 +1,5 @@
+import {accessJson,getAccessContext,isAccessResponse} from '@/lib/access-context';
+import {readScheduler,saveScheduler} from '@/lib/scheduler/server';
+function failure(error:unknown){const code=error instanceof Error?error.message:'SCHEDULER_FAILED';return accessJson({error:code},code==='SCHEDULER_DENIED'||code==='SCHEDULER_DISABLED'?403:code==='SCHEDULER_CHANGED'?409:code==='SCHEDULER_INVALID'?400:503);}
+export async function GET(request:Request){const ctx=await getAccessContext({tenant:true});if(isAccessResponse(ctx))return ctx;const p=new URL(request.url).searchParams;try{return accessJson(await readScheduler(ctx,{farmId:p.get('farm_id')??undefined,cursor:p.get('cursor')??undefined,from:p.get('from')??undefined,to:p.get('to')??undefined}));}catch(error){return failure(error);}}
+export async function POST(request:Request){const ctx=await getAccessContext({tenant:true});if(isAccessResponse(ctx))return ctx;try{return accessJson({rule:await saveScheduler(ctx,await request.json().catch(()=>null))},201);}catch(error){return failure(error);}}

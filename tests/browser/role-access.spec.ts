@@ -71,6 +71,22 @@ test.describe("Farm Manager authorization journey", () => {
     expect((await page.request.post("/api/governance/assignments", { data: {} })).status()).toBe(403);
     expect((await page.request.get("/api/admin/system-health")).status()).toBe(403);
   });
+
+  test("Farm Manager can switch the primary shell and notification chrome to Amharic", async ({ page }) => {
+    await tenantLogin(page, farmManager!);
+    const language = page.getByRole("group", { name: /Language|ቋንቋ/ });
+    await expect(language).toBeVisible();
+    await language.getByRole("button", { name: "አማ" }).click();
+
+    await expect(page.getByRole("navigation", { name: "ዋና ምናሌ" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "የሥራ አስኪያጅ ዋና ገጽ" })).toBeVisible();
+
+    await page.locator('button[aria-controls="header-notification-panel"]').click();
+    await expect(page.getByRole("heading", { name: "ትኩረት እና አዳዲስ መረጃዎች" })).toBeVisible();
+
+    await language.getByRole("button", { name: "EN" }).click();
+    await expect(page.getByRole("heading", { name: "Manager dashboard" })).toBeVisible();
+  });
 });
 
 test.describe("System Administrator authorization journey", () => {

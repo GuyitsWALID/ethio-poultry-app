@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  Bell,
   Box,
   Boxes,
   Briefcase,
@@ -12,8 +13,10 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
+  CalendarDays,
   Egg,
   HeartPulse,
+  History,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
@@ -26,129 +29,206 @@ import {
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 
 import type { AppRole } from "@/lib/roles";
-import { normalizeRole } from "@/lib/roles";
 import { SignOutButton } from "@/components/sign-out-button";
 
+type ManagerNavigationMessageKey =
+  | "sections.farmOperations"
+  | "sections.branchAnalytics"
+  | "sections.supportFunctions"
+  | "items.managerDashboard"
+  | "items.dailyRecords"
+  | "items.dailyClose"
+  | "items.feed"
+  | "items.mortality"
+  | "items.farmMonitoring"
+  | "items.flocksBatches"
+  | "items.governance"
+  | "items.recordChecks"
+  | "items.operationsAnalytics"
+  | "items.branchReports"
+  | "items.healthLog"
+  | "items.inventoryLog"
+  | "items.sales";
+
+type NavItem = {
+  id: string;
+  href: string;
+  label?: string;
+  managerMessageKey?: ManagerNavigationMessageKey;
+  navigationKey?: "today" | "flocks" | "alerts" | "historyMore" | "history" | "reports" | "performance" | "more" | "approvals" | "templates" | "recordChecks" | "scheduler" | "expensesPurchases";
+};
+
 type NavSection = {
+  id: string;
   title: string;
-  items: Array<{ label: string; href: string }>;
+  managerMessageKey?: ManagerNavigationMessageKey;
+  navigationKey?: "historyMore" | "more";
+  items: NavItem[];
 };
 
 const itemIcons: Record<string, LucideIcon> = {
-  "Command Center": LayoutDashboard,
-  "Branch Network": Building2,
-  Analytics: ChartNoAxesCombined,
-  Reports: ClipboardList,
-  "Farm Network": Warehouse,
-  "Flocks & Batches": Boxes,
-  "Daily Records": ClipboardList,
-  Feed: Package,
-  Mortality: Activity,
-  Health: HeartPulse,
-  Inventory: Box,
-  Sales: Briefcase,
-  "Manager Dashboard": LayoutDashboard,
-  "Farm Monitoring": Warehouse,
-  "Operations Analytics": ChartNoAxesCombined,
-  "Branch Reports": ClipboardList,
-  "Health Log": Stethoscope,
-  "Inventory Log": Package,
-  Governance: ShieldCheck,
-  Requests: ShieldCheck,
-  "Operating Days": ClipboardList,
-  "Daily Close": ClipboardList,
-  "Record Checks": Scale,
-  "Access & Users": Users,
+  commandCenter: LayoutDashboard,
+  branchNetwork: Building2,
+  analytics: ChartNoAxesCombined,
+  reports: ClipboardList,
+  farmNetwork: Warehouse,
+  flocksBatches: Boxes,
+  dailyRecords: ClipboardList,
+  feed: Package,
+  mortality: Activity,
+  health: HeartPulse,
+  inventory: Box,
+  sales: Briefcase,
+  managerDashboard: LayoutDashboard,
+  farmMonitoring: Warehouse,
+  operationsAnalytics: ChartNoAxesCombined,
+  branchReports: ClipboardList,
+  healthLog: Stethoscope,
+  inventoryLog: Package,
+  governance: ShieldCheck,
+  requests: ShieldCheck,
+  operatingDays: ClipboardList,
+  dailyClose: ClipboardList,
+  recordChecks: Scale,
+  accessUsers: Users,
+  today: CalendarDays,
+  alerts: Bell,
+  historyMore: History,
+  history: History,
+  templates: Package,
+  scheduler: CalendarDays,
+  expensesPurchases: Briefcase,
 };
 
 const ceoNavSections: NavSection[] = [
   {
+    id: "executive",
     title: "Executive",
     items: [
-      { label: "Command Center", href: "/app/ceo" },
-      { label: "Branch Network", href: "/app/ceo/setup" },
-      { label: "Analytics", href: "/app/analytics" },
-      { label: "Reports", href: "/app/reports" },
-      { label: "Governance", href: "/app/governance" },
-      { label: "Access & Users", href: "/app/users" },
-      { label: "Operating Days", href: "/app/operating-days" },
-      { label: "Record Checks", href: "/app/reconciliation" },
+      { id: "commandCenter", label: "Command Center", href: "/app/ceo" },
+      { id: "branchNetwork", label: "Branch Network", href: "/app/ceo/setup" },
+      { id: "analytics", label: "Analytics", href: "/app/analytics" },
+      { id: "reports", label: "Reports", href: "/app/reports" },
+      { id: "governance", label: "Governance", href: "/app/governance" },
+      { id: "accessUsers", label: "Access & Users", href: "/app/users" },
+      { id: "operatingDays", label: "Operating Days", href: "/app/operating-days" },
+      { id: "recordChecks", label: "Record Checks", href: "/app/reconciliation" },
     ],
   },
   {
+    id: "operationsOversight",
     title: "Operations Oversight",
     items: [
-      { label: "Farm Network", href: "/app/farms" },
-      { label: "Flocks & Batches", href: "/app/flocks" },
-      { label: "Requests", href: "/app/governance" },
-      { label: "Daily Records", href: "/app/daily-records" },
-      { label: "Feed", href: "/app/feeding-log" },
-      { label: "Mortality", href: "/app/mortality" },
+      { id: "farmNetwork", label: "Farm Network", href: "/app/farms" },
+      { id: "flocksBatches", label: "Flocks & Batches", href: "/app/flocks" },
+      { id: "requests", label: "Requests", href: "/app/governance" },
+      { id: "dailyRecords", label: "Daily Records", href: "/app/daily-records" },
+      { id: "feed", label: "Feed", href: "/app/feeding-log" },
+      { id: "mortality", label: "Mortality", href: "/app/mortality" },
     ],
   },
   {
+    id: "healthSupplyOversight",
     title: "Health & Supply Oversight",
     items: [
-      { label: "Health", href: "/app/health" },
-      { label: "Inventory", href: "/app/inventory" },
-      { label: "Sales", href: "/app/sales" },
+      { id: "health", label: "Health", href: "/app/health" },
+      { id: "inventory", label: "Inventory", href: "/app/inventory" },
+      { id: "sales", label: "Sales", href: "/app/sales" },
     ],
   },
 ];
 
 const farmManagerNavSections: NavSection[] = [
   {
-    title: "Farm Operations",
+    id: "farmOperations",
+    title: "",
+    managerMessageKey: "sections.farmOperations",
     items: [
-      { label: "Manager Dashboard", href: "/app/farm-manager" },
-      { label: "Daily Records", href: "/app/daily-records" },
-      { label: "Daily Close", href: "/app/operating-days" },
-      { label: "Feed", href: "/app/feeding-log" },
-      { label: "Mortality", href: "/app/mortality" },
-      { label: "Farm Monitoring", href: "/app/farms" },
-      { label: "Flocks & Batches", href: "/app/flocks" },
-      { label: "Governance", href: "/app/governance" },
-      { label: "Record Checks", href: "/app/reconciliation" },
+      { id: "managerDashboard", managerMessageKey: "items.managerDashboard", href: "/app/farm-manager" },
+      { id: "dailyRecords", managerMessageKey: "items.dailyRecords", href: "/app/daily-records" },
+      { id: "dailyClose", managerMessageKey: "items.dailyClose", href: "/app/operating-days" },
+      { id: "feed", managerMessageKey: "items.feed", href: "/app/feeding-log" },
+      { id: "mortality", managerMessageKey: "items.mortality", href: "/app/mortality" },
+      { id: "farmMonitoring", managerMessageKey: "items.farmMonitoring", href: "/app/farms" },
+      { id: "flocksBatches", managerMessageKey: "items.flocksBatches", href: "/app/flocks" },
+      { id: "governance", managerMessageKey: "items.governance", href: "/app/governance" },
+      { id: "recordChecks", managerMessageKey: "items.recordChecks", href: "/app/reconciliation" },
     ],
   },
   {
-    title: "Branch Analytics",
+    id: "branchAnalytics",
+    title: "",
+    managerMessageKey: "sections.branchAnalytics",
     items: [
-      { label: "Operations Analytics", href: "/app/analytics" },
-      { label: "Branch Reports", href: "/app/reports" },
+      { id: "operationsAnalytics", managerMessageKey: "items.operationsAnalytics", href: "/app/analytics" },
+      { id: "branchReports", managerMessageKey: "items.branchReports", href: "/app/reports" },
     ],
   },
   {
-    title: "Support Functions",
+    id: "supportFunctions",
+    title: "",
+    managerMessageKey: "sections.supportFunctions",
     items: [
-      { label: "Health Log", href: "/app/health" },
-      { label: "Inventory Log", href: "/app/inventory" },
-      { label: "Sales", href: "/app/sales" },
+      { id: "healthLog", managerMessageKey: "items.healthLog", href: "/app/health" },
+      { id: "inventoryLog", managerMessageKey: "items.inventoryLog", href: "/app/inventory" },
+      { id: "sales", managerMessageKey: "items.sales", href: "/app/sales" },
     ],
   },
 ];
 
-export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
+const simplifiedFarmManagerNavSections: NavSection[] = [
+  {
+    id: "todayFirst",
+    title: "",
+    managerMessageKey: "sections.farmOperations",
+    items: [
+      {id: "today", navigationKey: "today", href: "/app/today"},
+      {id: "flocksBatches", navigationKey: "flocks", href: "/app/flocks"},
+      {id: "alerts", navigationKey: "alerts", href: "/app/alerts"},
+      {id: "history", navigationKey: "history", href: "/app/history"},
+      {id: "reports", navigationKey: "performance", href: "/app/reports"},
+    ],
+  },
+  {
+    id: "historyMore",
+    title: "",
+    navigationKey: "more",
+    items: [
+      {id: "governance", navigationKey: "approvals", href: "/app/governance"},
+      {id: "recordChecks", navigationKey: "recordChecks", href: "/app/reconciliation"},
+      {id: "scheduler", navigationKey: "scheduler", href: "/app/scheduler"},
+      {id: "expensesPurchases", navigationKey: "expensesPurchases", href: "/app/expenses-purchases"},
+      {id: "templates", navigationKey: "templates", href: "/app/feeding-log?feed_target=template_management"},
+    ],
+  },
+];
+
+// This limited History cleanup does not activate the gated CEO redesign.
+const historyCeoNavSections: NavSection[] = ceoNavSections.map(section => ({...section,
+  items: section.items.filter(item => !["analytics", "requests", "dailyRecords", "feed", "mortality", "health", "inventory", "sales"].includes(item.id)).map(item => item.id === "governance" ? {...item, navigationKey: "approvals" as const} : item.id === "reports" ? {...item, navigationKey: "performance" as const} : item),
+}));
+historyCeoNavSections[0] = {...historyCeoNavSections[0], items: [...historyCeoNavSections[0].items.slice(0, 3), {id: "history", navigationKey: "history", href: "/app/history"}, ...historyCeoNavSections[0].items.slice(3)]};
+historyCeoNavSections.push({id: "configuration", title: "", navigationKey: "more", items: [{id:"scheduler",navigationKey:"scheduler",href:"/app/scheduler"},{id:"expensesPurchases",navigationKey:"expensesPurchases",href:"/app/expenses-purchases"},{id: "templates", navigationKey: "templates", href: "/app/feeding-log?feed_target=template_management"}]});
+
+export function AppSidebar({ viewerRole, todayWorkspaceEnabled, mobileOpen = false, onMobileClose }: { viewerRole: AppRole | null; todayWorkspaceEnabled: boolean; mobileOpen?: boolean; onMobileClose?: () => void }) {
   const pathname = usePathname();
-  const [role, setRole] = useState<AppRole>("ceo");
+  const tCommon = useTranslations("Common");
+  const tManagerNavigation = useTranslations("ManagerNavigation");
+  const tNavigation = useTranslations("Navigation");
   const [orgName, setOrgName] = useState("Organization");
   const [collapsed, setCollapsed] = useState(false);
   const [closedSections, setClosedSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const resolveRole = async () => {
-      const response = await fetch("/api/me/context", { method: "GET" });
-      if (!response.ok) {
-        setRole("ceo");
-        return;
-      }
+      const response = await fetch("/api/me/context", { method: "GET", cache: "no-store" });
+      if (!response.ok) return;
 
       const data = await response.json();
-      const resolvedRole = normalizeRole(data?.role);
-      if (resolvedRole) setRole(resolvedRole);
       const nextOrgName = String(data?.orgName ?? "").trim();
       if (nextOrgName) setOrgName(nextOrgName);
     };
@@ -164,10 +244,15 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
   }, [mobileOpen, onMobileClose]);
 
   const navSections = useMemo<NavSection[]>(() => {
-    if (role === "farm_manager") return farmManagerNavSections;
-    return ceoNavSections;
-  }, [role]);
-  const footer = role === "farm_manager" ? "Assigned Branch Scope" : "Organization Scope";
+    if (viewerRole === "farm_manager") return todayWorkspaceEnabled ? simplifiedFarmManagerNavSections : farmManagerNavSections;
+    if (viewerRole === "ceo" && todayWorkspaceEnabled) return historyCeoNavSections;
+    if (viewerRole === "ceo" || viewerRole === "system_admin") return ceoNavSections;
+    return [];
+  }, [todayWorkspaceEnabled, viewerRole]);
+  const footer = viewerRole === "farm_manager" ? tManagerNavigation("assignedBranchScope") : "Organization Scope";
+  const brand = viewerRole === "farm_manager" ? tManagerNavigation("brand") : "Poultry Farms";
+  const sectionLabel = (section: NavSection) => section.navigationKey ? tNavigation(section.navigationKey) : section.managerMessageKey ? tManagerNavigation(section.managerMessageKey) : section.title;
+  const itemLabel = (item: NavItem) => item.navigationKey ? tNavigation(item.navigationKey) : item.managerMessageKey ? tManagerNavigation(item.managerMessageKey) : item.label ?? item.id;
   const visibleNavSections = useMemo(
     () => navSections.filter((section) => section.items.length > 0),
     [navSections]
@@ -177,12 +262,13 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
     [visibleNavSections]
   );
   const isActive = (href: string) =>
-    pathname === href || (href !== "/app" && pathname.startsWith(`${href}/`));
+    pathname === href || (href !== "/app" && pathname.startsWith(`${href}/`)) ||
+    (todayWorkspaceEnabled && (viewerRole === "ceo" || viewerRole === "farm_manager") && href === "/app/reports" && pathname === "/app/analytics");
   const compactSidebar = collapsed && !mobileOpen;
 
   return (
     <>
-    {mobileOpen ? <button type="button" aria-label="Close navigation" onClick={onMobileClose} className="fixed inset-0 z-[119] bg-forest-900/55 backdrop-blur-sm lg:hidden" /> : null}
+    {mobileOpen ? <button type="button" aria-label={tCommon("closeNavigation")} onClick={onMobileClose} className="fixed inset-0 z-[119] bg-forest-900/55 backdrop-blur-sm lg:hidden" /> : null}
     <aside
       className={`fixed inset-y-0 left-0 z-[120] flex h-screen w-72 shrink-0 flex-col border-r border-white/10 bg-forest-900 text-sand-50 shadow-2xl transition-[width,transform] duration-300 lg:sticky lg:top-0 lg:z-50 lg:translate-x-0 lg:shadow-none ${mobileOpen ? "translate-x-0" : "-translate-x-full"} ${compactSidebar ? "lg:w-20" : "lg:w-72"}`}
     >
@@ -198,8 +284,8 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
           className={`flex min-w-0 items-center rounded-xl text-sand-50 transition hover:bg-white/[.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 ${
             compactSidebar ? "flex-1 gap-3 px-2 py-2 lg:h-11 lg:w-11 lg:flex-none lg:justify-center lg:px-0" : "flex-1 gap-3 px-2 py-2"
           }`}
-          aria-label="Dashboard"
-          title={compactSidebar ? "Dashboard" : undefined}
+          aria-label={tCommon("dashboard")}
+          title={compactSidebar ? tCommon("dashboard") : undefined}
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sand-50 text-forest-900">
             <Egg aria-hidden="true" className="h-5 w-5" />
@@ -208,16 +294,16 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
               <span className="block truncate text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-300">
                 {orgName}
               </span>
-              <span className="mt-0.5 block font-display text-base font-semibold">Poultry Farms</span>
+              <span className="mt-0.5 block font-display text-base font-semibold">{brand}</span>
             </span>
         </Link>
-        <button type="button" onClick={onMobileClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 transition hover:bg-white/10 lg:hidden" aria-label="Close navigation"><X className="h-4 w-4" aria-hidden="true" /></button>
+        <button type="button" onClick={onMobileClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-sand-100 transition hover:bg-white/10 lg:hidden" aria-label={tCommon("closeNavigation")}><X className="h-4 w-4" aria-hidden="true" /></button>
         <button
           type="button"
           onClick={() => setCollapsed((prev) => !prev)}
           className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 text-sand-100 transition hover:border-white/30 hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-amber-300 lg:flex"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? tCommon("expandSidebar") : tCommon("collapseSidebar")}
+          title={collapsed ? tCommon("expandSidebar") : tCommon("collapseSidebar")}
         >
           {collapsed ? (
             <PanelLeftOpen aria-hidden="true" className="h-5 w-5" />
@@ -227,11 +313,12 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
         </button>
       </div>
 
-      <nav aria-label="Primary navigation" className={`${compactSidebar ? "space-y-2 px-3" : "space-y-5 px-4"} flex-1 overflow-y-auto py-5 text-sm [scrollbar-color:rgba(239,233,221,.25)_transparent]`}>
+      <nav aria-label={tCommon("primaryNavigation")} className={`${compactSidebar ? "space-y-2 px-3" : "space-y-5 px-4"} flex-1 overflow-y-auto py-5 text-sm [scrollbar-color:rgba(239,233,221,.25)_transparent]`}>
         {compactSidebar
           ? collapsedItems.map((item) => {
-              const Icon = itemIcons[item.label] ?? ChevronRight;
+              const Icon = itemIcons[item.id] ?? ChevronRight;
               const active = isActive(item.href);
+              const label = itemLabel(item);
 
               return (
                 <Link
@@ -243,30 +330,31 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
                       ? "bg-sand-50 text-forest-900 shadow-sm"
                       : "text-sand-100 hover:bg-white/10 hover:text-white"
                   }`}
-                  aria-label={item.label}
-                  title={item.label}
+                  aria-label={label}
+                  title={label}
                 >
                   <Icon aria-hidden="true" className="h-5 w-5" />
                 </Link>
               );
             })
           : visibleNavSections.map((section) => {
-              const isOpen = !closedSections[section.title];
+              const isOpen = !closedSections[section.id];
+              const title = sectionLabel(section);
               return (
-                <div key={section.title}>
+                <div key={section.id}>
                   <button
                     type="button"
                     onClick={() =>
                       setClosedSections((prev) => ({
                         ...prev,
-                        [section.title]: !isOpen,
+                        [section.id]: !isOpen,
                       }))
                     }
                     className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sand-200 transition hover:bg-white/[.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                     aria-expanded={isOpen}
                   >
                     <span className="text-[10px] font-semibold uppercase tracking-[0.22em]">
-                      {section.title}
+                      {title}
                     </span>
                     {isOpen ? (
                       <ChevronDown aria-hidden="true" className="h-4 w-4" />
@@ -277,8 +365,9 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
                   {isOpen ? (
                     <div className="mt-2 space-y-1">
                       {section.items.map((item) => {
-                        const Icon = itemIcons[item.label] ?? ChevronRight;
+                        const Icon = itemIcons[item.id] ?? ChevronRight;
                         const active = isActive(item.href);
+                        const label = itemLabel(item);
 
                         return (
                           <Link
@@ -293,7 +382,7 @@ export function AppSidebar({ mobileOpen = false, onMobileClose }: { mobileOpen?:
                             }`}
                           >
                             <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
-                            <span>{item.label}</span>
+                            <span>{label}</span>
                           </Link>
                         );
                       })}

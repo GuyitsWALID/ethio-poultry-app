@@ -1,3 +1,5 @@
+export type AnalyticsText = (key: string, values?: Record<string, string | number>) => string;
+
 import type { BreedTarget, FlockType, WeightSample } from "@/lib/farm-manager-dashboard";
 
 export type AnalyticsDailyRow = {
@@ -7,6 +9,7 @@ export type AnalyticsDailyRow = {
   opening_birds: number | null;
   closing_birds: number | null;
   deaths: number | null;
+  culls?: number | null;
   deaths_cause: string | null;
   total_eggs: number | null;
   normal_eggs: number | null;
@@ -29,6 +32,8 @@ export type AnalyticsFlock = {
   houseId: string;
   houseName: string;
   placementDate: string;
+  completionDate?: string | null;
+  scopePeriods?: Array<{from: string; to: string | null}>;
   ageAtPlacementDays: number | null;
   currentBirds: number;
   breedId: string | null;
@@ -42,6 +47,8 @@ export type PeriodSummary = {
   layerBirdDays: number;
   eggs: number | null;
   deaths: number | null;
+  culls?: number | null;
+  birdLosses?: number | null;
   feedKg: number | null;
   hdep: number | null;
   feedPerBirdGrams: number | null;
@@ -64,6 +71,8 @@ export type DailyAnalyticsPoint = {
   date: string;
   eggs: number | null;
   deaths: number | null;
+  culls?: number | null;
+  birdLosses?: number | null;
   hdep: number | null;
   feedPerBirdGrams: number | null;
   mortalityPer1000BirdDays: number | null;
@@ -113,6 +122,8 @@ export type FlockAnalyticsRow = {
   latestWeightDate: string | null;
   eggs: number | null;
   deaths: number | null;
+  culls?: number | null;
+  birdLosses?: number | null;
   recordCoveragePct: number | null;
   status: "critical" | "watch" | "good" | "insufficient";
   statusReason: string;
@@ -127,6 +138,7 @@ export type OperationsAnalyticsResponse = {
     previousTo: string;
     timezone: "Africa/Addis_Ababa";
     scopeLabel: string;
+    farmCount?: number;
     refreshedAt: string;
     latestRecordAt: string | null;
     activeFlocks: number;
@@ -258,7 +270,8 @@ export function expectedRecordsForPeriod(flocks: AnalyticsFlock[], dateFrom: str
   return flocks.reduce((total, flock) => {
     if (flock.placementDate > dateTo) return total;
     const effectiveFrom = flock.placementDate > dateFrom ? flock.placementDate : dateFrom;
-    return total + daysBetween(effectiveFrom, dateTo) + 1;
+    const effectiveTo = flock.completionDate && flock.completionDate < dateTo ? flock.completionDate : dateTo;
+    return effectiveTo < effectiveFrom ? total : total + dateRange(effectiveFrom, effectiveTo).filter(date => !flock.scopePeriods || flock.scopePeriods.some(period => period.from <= date && (!period.to || period.to >= date))).length;
   }, 0);
 }
 
@@ -273,6 +286,12 @@ export function summarizePeriod(
   let mortalityBirdDays = 0;
   let eggs = 0;
   let deaths = 0;
+  let culls = 0;
+  let cullRows = 0;
+  let layerFeedGrams = 0;
+  let layerEvidenceComplete = true;
+  let layerRows = 0;
+  let feedDenominatorComplete = true, eggDenominatorComplete = true, waterFeedComplete = true, qualityComplete = true, mortalityDenominatorComplete = true;
   let feedGrams = 0;
   let leftoverGrams = 0;
   let waterLiters = 0;
@@ -287,23 +306,35 @@ export function summarizePeriod(
   const firstBirdsByFlock = new Map<string, { date: string; birds: number }>();
 
   for (const row of rows) {
+    const isLayer = layerFlockIds.has(row.flock_id);
+    if (isLayer) {
+      layerRows++;
+      if (row.feed_intake_grams === null || row.total_eggs === null || row.total_eggs > 0 && row.average_egg_weight_g === null) layerEvidenceComplete = false;
+      else layerFeedGrams += row.feed_intake_grams;
+    }
     const birds = birdCount(row);
+    if (row.feed_intake_grams !== null && birds === null) feedDenominatorComplete = false;
+    if (row.deaths !== null && birds === null) mortalityDenominatorComplete = false;
+    if(isLayer&&(row.normal_eggs===null||row.broken_eggs===null||row.dirty_eggs===null))qualityComplete=false;
+    if (isLayer && row.total_eggs !== null && birds === null) eggDenominatorComplete = false;
+    if (row.feed_intake_grams === null || row.water_consumed_liters === null) waterFeedComplete = false;
     if (birds !== null) {
       birdDays += birds;
       if (layerFlockIds.has(row.flock_id) && row.total_eggs !== null) layerBirdDays += birds;
       const current = firstBirdsByFlock.get(row.flock_id);
       if (!current || row.record_date < current.date) firstBirdsByFlock.set(row.flock_id, { date: row.record_date, birds });
     }
-    if (row.total_eggs !== null) {
+    if (isLayer && row.total_eggs !== null) {
       eggRows += 1;
       eggs += row.total_eggs;
-      if (row.average_egg_weight_g !== null) eggMassGrams += row.total_eggs * row.average_egg_weight_g;
+      if (isLayer && row.average_egg_weight_g !== null) eggMassGrams += row.total_eggs * row.average_egg_weight_g;
     }
     if (row.deaths !== null) {
       deathRows += 1;
       deaths += row.deaths;
       if (birds !== null) mortalityBirdDays += birds;
     }
+    if (row.culls !== null && row.culls !== undefined) {cullRows++; culls += row.culls;}
     if (row.feed_intake_grams !== null) {
       feedRows += 1;
       feedGrams += row.feed_intake_grams;
@@ -317,8 +348,10 @@ export function summarizePeriod(
       waterRows += 1;
       waterLiters += row.water_consumed_liters;
     }
-    if (row.normal_eggs !== null || row.broken_eggs !== null || row.dirty_eggs !== null) {
+    if (isLayer && (row.normal_eggs !== null || row.broken_eggs !== null || row.dirty_eggs !== null)) {
+      if(row.normal_eggs === null || row.broken_eggs === null || row.dirty_eggs === null) qualityComplete = false;
       const qualityTotal = (row.normal_eggs ?? 0) + (row.broken_eggs ?? 0) + (row.dirty_eggs ?? 0);
+      if(row.total_eggs!==null&&qualityTotal!==row.total_eggs)qualityComplete=false;
       normalEggs += row.normal_eggs ?? 0;
       qualityEggs += qualityTotal;
     }
@@ -333,14 +366,16 @@ export function summarizePeriod(
     layerBirdDays,
     eggs: eggRows > 0 ? eggs : null,
     deaths: deathRows > 0 ? deaths : null,
+    culls: cullRows > 0 ? culls : null,
+    birdLosses: deathRows === rows.length && cullRows === rows.length && rows.length > 0 ? deaths + culls : null,
     feedKg: feedRows > 0 ? round(feedGrams / 1000) : null,
-    hdep: eggRows > 0 && layerBirdDays > 0 ? percent(eggs, layerBirdDays) : null,
-    feedPerBirdGrams: feedRows > 0 && feedBirdDays > 0 ? round(feedGrams / feedBirdDays) : null,
-    mortalityPer1000BirdDays: deathRows > 0 && mortalityBirdDays > 0 ? round((deaths / mortalityBirdDays) * 1000, 3) : null,
-    cumulativeMortalityPct: deathRows > 0 && birdsAtRisk > 0 ? percent(deaths, birdsAtRisk) : null,
-    marketableRate: qualityEggs > 0 ? percent(normalEggs, qualityEggs) : null,
-    layerFcr: eggMassGrams > 0 && feedRows > 0 ? round((feedGrams / 1000) / (eggMassGrams / 1000)) : null,
-    waterFeedRatio: waterRows > 0 && feedGrams > 0 ? round(waterLiters / (feedGrams / 1000)) : null,
+    hdep: eggDenominatorComplete && eggRows > 0 && layerBirdDays > 0 ? percent(eggs, layerBirdDays) : null,
+    feedPerBirdGrams: feedDenominatorComplete && feedRows > 0 && feedBirdDays > 0 ? round(feedGrams / feedBirdDays) : null,
+    mortalityPer1000BirdDays: mortalityDenominatorComplete && deathRows > 0 && mortalityBirdDays > 0 ? round((deaths / mortalityBirdDays) * 1000, 3) : null,
+    cumulativeMortalityPct: mortalityDenominatorComplete && deathRows > 0 && deathRows === expectedRecords && rows.length === expectedRecords && birdsAtRisk > 0 ? percent(deaths, birdsAtRisk) : null,
+    marketableRate: qualityComplete && qualityEggs > 0 ? percent(normalEggs, qualityEggs) : null,
+    layerFcr: layerRows > 0 && layerEvidenceComplete && eggMassGrams > 0 ? round(layerFeedGrams / eggMassGrams) : null,
+    waterFeedRatio: waterFeedComplete && waterRows > 0 && feedGrams > 0 ? round(waterLiters / (feedGrams / 1000)) : null,
     feedLeftoverKg: leftoverRows > 0 ? round(leftoverGrams / 1000) : null,
   };
 }
@@ -364,12 +399,15 @@ export function buildDailySeries(
   const layerIds = new Set(flocks.filter((flock) => flock.type === "layer" || flock.type === "parent_stock").map((flock) => flock.id));
   return dateRange(dateFrom, dateTo).map((date) => {
     const dayRows = rows.filter((row) => row.record_date === date);
-    const activeFlocks = flocks.filter((flock) => flock.placementDate <= date);
+    const activeFlocks = flocks.filter((flock) => flock.placementDate <= date && (!flock.completionDate || flock.completionDate >= date) && (!flock.scopePeriods || flock.scopePeriods.some(period => period.from <= date && (!period.to || period.to >= date))));
     const expected = activeFlocks.length;
     const summary = summarizePeriod(dayRows, layerIds, expected);
     const targetFor = (flock: AnalyticsFlock) => standardsByBreed.get(flock.breedId ?? "")?.find((item) => item.week_number === Math.floor(ageOnDate(flock.placementDate, flock.ageAtPlacementDays, date) / 7)) ?? null;
     const weightedTarget = (eligible: AnalyticsFlock[], value: (target: BreedTarget) => number | null) => {
-      const available = eligible.map((flock) => ({ value: targetFor(flock) ? value(targetFor(flock)!) : null, weight: flock.currentBirds })).filter((item): item is { value: number; weight: number } => item.value !== null && item.weight > 0);
+      const available = eligible.map((flock) => {
+        const recorded = dayRows.find(row => row.flock_id === flock.id);
+        return {value: targetFor(flock) ? value(targetFor(flock)!) : null, weight: recorded?.opening_birds ?? recorded?.closing_birds ?? 0};
+      }).filter((item): item is { value: number; weight: number } => item.value !== null && item.weight > 0);
       const totalWeight = available.reduce((sum, item) => sum + item.weight, 0);
       return totalWeight ? round(available.reduce((sum, item) => sum + item.value * item.weight, 0) / totalWeight) : null;
     };
@@ -380,6 +418,8 @@ export function buildDailySeries(
       date,
       eggs: summary.eggs,
       deaths: summary.deaths,
+      culls: summary.culls,
+      birdLosses: summary.birdLosses,
       hdep: summary.hdep,
       feedPerBirdGrams: summary.feedPerBirdGrams,
       mortalityPer1000BirdDays: summary.mortalityPer1000BirdDays,
@@ -415,21 +455,25 @@ export function buildFlockAnalytics(input: {
   dateTo: string;
   warningVariancePct: number;
   criticalVariancePct: number;
+  translate?: AnalyticsText;
 }): FlockAnalyticsRow {
   const { flock } = input;
+  const say = (key: string, fallback: string, values?: Record<string, string | number>) => input.translate?.(key, values) ?? fallback;
   const layerMode = flock.type === "layer" || flock.type === "parent_stock";
   const layerIds = new Set(layerMode ? [flock.id] : []);
   const expected = expectedRecordsForPeriod([flock], input.dateFrom, input.dateTo);
   const summary = summarizePeriod(input.rows, layerIds, expected);
   const previous = summarizePeriod(input.previousRows, layerIds, input.previousRows.length || expected);
-  const ageDays = ageOnDate(flock.placementDate, flock.ageAtPlacementDays, input.dateTo);
+  const effectiveTo = flock.completionDate && flock.completionDate < input.dateTo ? flock.completionDate : input.dateTo;
+  const ageDays = ageOnDate(flock.placementDate, flock.ageAtPlacementDays, effectiveTo);
   const ageWeeks = Math.floor(ageDays / 7);
   const target = input.targets.find((item) => item.week_number === ageWeeks) ?? null;
-  const weights = input.weights.filter((row) => row.record_date <= input.dateTo && row.average_weight_g !== null).sort((a, b) => b.record_date.localeCompare(a.record_date));
+  const weights = input.weights.filter((row) => row.record_date >= flock.placementDate && row.record_date <= effectiveTo && row.average_weight_g !== null).sort((a, b) => b.record_date.localeCompare(a.record_date));
   const latestWeight = weights[0] ?? null;
   const previousWeight = weights[1] ?? null;
   const primaryValue = layerMode ? summary.hdep : latestWeight?.average_weight_g ?? null;
-  const primaryTarget = layerMode ? target?.target_hdep_pct ?? null : target?.target_weight_g ?? null;
+  const measurementTarget = latestWeight ? input.targets.find(item => item.week_number === Math.floor(ageOnDate(flock.placementDate, flock.ageAtPlacementDays, latestWeight.record_date) / 7)) : null;
+  const primaryTarget = layerMode ? target?.target_hdep_pct ?? null : measurementTarget?.target_weight_g ?? null;
   const baseline = layerMode ? previous.hdep : previousWeight?.average_weight_g ?? null;
   const targetGap = primaryValue !== null && primaryTarget !== null ? round(primaryValue - primaryTarget) : null;
   const targetAttainmentPct = primaryValue !== null && primaryTarget !== null && primaryTarget > 0 ? percent(primaryValue, primaryTarget) : null;
@@ -444,19 +488,19 @@ export function buildFlockAnalytics(input: {
     : null;
 
   let status: FlockAnalyticsRow["status"] = "good";
-  let statusReason = "Operating within the available comparison bands.";
+  let statusReason = say("within", "Operating within the available comparison bands.");
   let attentionScore = 0;
   if (summary.records === 0) {
     status = "insufficient";
-    statusReason = "No Daily Records were found in this period.";
+    statusReason = say("noRecords", "No Daily Records were found in this period.");
     attentionScore = 100;
   } else if ((summary.recordCoveragePct ?? 0) < 70) {
     status = "critical";
-    statusReason = `Only ${round(summary.recordCoveragePct ?? 0)}% of expected flock-days are recorded.`;
+    statusReason = say("lowCoverage", `Only ${round(summary.recordCoveragePct ?? 0)}% of expected flock-days are recorded.`, {percent: round(summary.recordCoveragePct ?? 0)});
     attentionScore = 95;
   } else if ((summary.recordCoveragePct ?? 0) < 90) {
     status = "watch";
-    statusReason = `Record coverage is ${round(summary.recordCoveragePct ?? 0)}%.`;
+    statusReason = say("coverage", `Record coverage is ${round(summary.recordCoveragePct ?? 0)}%.`, {percent: round(summary.recordCoveragePct ?? 0)});
     attentionScore = 65;
   }
 
@@ -465,36 +509,36 @@ export function buildFlockAnalytics(input: {
     const watchGap = layerMode ? targetGap < -3 : (targetAttainmentPct ?? 100) < 95;
     if (criticalGap && attentionScore < 90) {
       status = "critical";
-      statusReason = `${layerMode ? "HDEP" : "Weight"} is materially below the age target.`;
+      statusReason = say("farBelow", `${layerMode ? say("hdep", "HDEP") : say("weight", "Weight")} is materially below the age target.`, {metric: layerMode ? say("hdep", "HDEP") : say("weight", "Weight")});
       attentionScore = 90;
     } else if (watchGap && attentionScore < 60) {
       status = "watch";
-      statusReason = `${layerMode ? "HDEP" : "Weight"} is below the age target.`;
+      statusReason = say("below", `${layerMode ? say("hdep", "HDEP") : say("weight", "Weight")} is below the age target.`, {metric: layerMode ? say("hdep", "HDEP") : say("weight", "Weight")});
       attentionScore = 60;
     }
   } else if (layerMode && summary.hdep !== null && previous.hdep !== null && previous.hdep - summary.hdep > 5 && attentionScore < 55) {
     status = "watch";
-    statusReason = "HDEP declined by more than five points from the previous period.";
+    statusReason = say("decline", "HDEP declined by more than five points from the previous period.");
     attentionScore = 55;
   }
 
   if (mortalityIntensityTarget !== null && summary.mortalityPer1000BirdDays !== null && summary.mortalityPer1000BirdDays > mortalityIntensityTarget && attentionScore < 85) {
     status = "critical";
-    statusReason = "Mortality is above the available breed/week target.";
+    statusReason = say("mortalityTarget", "Mortality is above the available breed/week target.");
     attentionScore = 85;
   }
   if (feedVariancePct !== null && Math.abs(feedVariancePct) >= input.criticalVariancePct && attentionScore < 80) {
     status = "critical";
-    statusReason = "Feed per bird is outside the critical target variance band.";
+    statusReason = say("feedCritical", "Feed per bird is outside the critical target variance band.");
     attentionScore = 80;
   } else if (feedVariancePct !== null && Math.abs(feedVariancePct) >= input.warningVariancePct && attentionScore < 50) {
     status = "watch";
-    statusReason = "Feed per bird is outside the warning target variance band.";
+    statusReason = say("feedWarning", "Feed per bird is outside the warning target variance band.");
     attentionScore = 50;
   }
   if (!layerMode && (!latestWeight || daysBetween(latestWeight.record_date, input.dateTo) > 14) && attentionScore < 70) {
     status = "watch";
-    statusReason = "The latest weight sample is more than 14 days old.";
+    statusReason = say("staleWeight", "The latest weight sample is more than 14 days old.");
     attentionScore = 70;
   }
 
@@ -508,7 +552,7 @@ export function buildFlockAnalytics(input: {
     houseName: flock.houseName,
     ageWeeks,
     liveBirds: flock.currentBirds,
-    primaryLabel: layerMode ? "Period HDEP" : "Latest weight",
+    primaryLabel: layerMode ? say("periodHdep", "Period HDEP") : say("latestWeight", "Latest weight"),
     primaryValue,
     primaryUnit: layerMode ? "%" : "g",
     target: primaryTarget,
@@ -531,6 +575,8 @@ export function buildFlockAnalytics(input: {
     latestWeightDate: latestWeight?.record_date ?? null,
     eggs: summary.eggs,
     deaths: summary.deaths,
+    culls: summary.culls,
+    birdLosses: summary.birdLosses,
     recordCoveragePct: summary.recordCoveragePct,
     status,
     statusReason,

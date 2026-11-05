@@ -58,6 +58,19 @@ test("Cloudflare builds cannot silently fall back to the local environment",()=>
   assert(result.errors.some(error=>error.includes("explicitly set for a Cloudflare build")));
 });
 
+test("Cloudflare staging and production builds are bound to their release branches",()=>{
+  const staging={
+    ...valid,
+    APP_ENVIRONMENT:"staging",
+    APP_BASE_URL:"https://staging.ethiopoultry.com",
+    WORKERS_CI_COMMIT_SHA:"abcdef123456",
+  };
+  assert.deepEqual(validateEnvironment({...staging,WORKERS_CI_BRANCH:"notmain"}).errors,[]);
+  assert.match(validateEnvironment({...staging,WORKERS_CI_BRANCH:"master"}).errors.join("\n"),/notmain branch/);
+  assert.deepEqual(validateEnvironment({...valid,WORKERS_CI_COMMIT_SHA:"abcdef123456",WORKERS_CI_BRANCH:"master"}).errors,[]);
+  assert.match(validateEnvironment({...valid,WORKERS_CI_COMMIT_SHA:"abcdef123456",WORKERS_CI_BRANCH:"notmain"}).errors.join("\n"),/master branch/);
+});
+
 test("notification email remains server-only and requires a valid sender when enabled",()=>{
   const disabled=validateEnvironment({...valid,NOTIFICATION_EMAIL_ENABLED:"false"});
   assert.equal(disabled.errors.some(error=>error.includes("NOTIFICATION_EMAIL")),false);

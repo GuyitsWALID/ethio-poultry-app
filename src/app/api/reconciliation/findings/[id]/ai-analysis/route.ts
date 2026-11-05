@@ -1,4 +1,5 @@
 import { getAccessContext, isAccessResponse } from "@/lib/access-context";
+import {getLocale} from "next-intl/server";
 import {
   analyzeReconciliationFinding,
   getReconciliationAiAnalysis,
@@ -22,7 +23,7 @@ export async function GET(
   if (isAccessResponse(context)) return context;
   const { id } = await params;
   try {
-    return Response.json(await getReconciliationAiAnalysis(context, id));
+    return Response.json(await getReconciliationAiAnalysis(context, id, await getLocale()));
   } catch (error) {
     return failure(error);
   }
@@ -45,6 +46,7 @@ export async function POST(
   }
   try {
     const analysis = await analyzeReconciliationFinding(context, id, {
+      locale: await getLocale(),
       regenerate: body.regenerate === true,
       requestKey: requestKey || undefined,
     });

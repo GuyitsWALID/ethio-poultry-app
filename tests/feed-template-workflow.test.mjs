@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import en from "../messages/en.json" with {type: "json"};
 
 const controlRoute = await readFile(new URL("../src/app/api/feed/control/route.ts", import.meta.url), "utf8");
 const templateRoute = await readFile(new URL("../src/app/api/feed/templates/route.ts", import.meta.url), "utf8");
@@ -27,17 +28,17 @@ test("session and history exceptions open their exact Feed Control sections", ()
 
 test("farm manager template changes are described as governed proposals", () => {
   assert.match(templateRoute, /submitGovernanceRequest/);
-  assert.match(page, /Submit template for CEO approval/);
-  assert.match(page, /The active feed plan has not changed yet/);
-  assert.match(page, /The active feed plan changes only after approval/);
+  assert.match(page, /t\("submit"\)/);
+  assert.match(en.FeedTemplates.proposalSent, /The active feed plan has not changed yet/);
+  assert.match(en.FeedTemplates.governanceHelp, /The active feed plan changes only after approval/);
   assert.match(controlRoute, /!ctx\.canManage \? "read_only"/);
-  assert.match(page, /Executive evidence view/);
+  assert.match(en.FeedTemplates.readOnlyHelp, /Executive evidence view/);
 });
 
 test("template submission feedback is visible and accessible", () => {
   assert.match(page, /role=\{feedback\.tone === "error" \? "alert" : "status"\}/);
-  assert.match(page, /setFeedback\(\{ tone: "error", text \}\)/);
-  assert.match(page, /setFeedback\(\{ tone: "success", text \}\)/);
+  assert.match(page, /setFeedback\(\{\s*tone: "error", text\s*\}\)/);
+  assert.match(page, /setFeedback\(\{\s*tone: "success", text\s*\}\)/);
 });
 
 test("template persistence uses PostgreSQL-valid recordset ordinality syntax", () => {

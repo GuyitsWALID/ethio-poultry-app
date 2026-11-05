@@ -1,0 +1,70 @@
+## 1. Reporting safeguards
+- [x] 1.1 Enforce effective warehouse access in operations, sales/cost and evidence readers; reject contradictory targets; add permission regressions.
+  - [x] Apply effective store checks to operations stock, sales stock/cost entries and finance expense evidence; enforce manager farm scope on sales production denominators.
+  - [x] Reject unavailable/contradictory operations and sales targets using the shared evidence scope validator.
+  - [x] Fail closed for unverifiable financial aggregate amounts; verify effective-store guards and direct authenticated RLS locally. Integrated authenticated staging acceptance remains in 5.3.
+- [x] 1.2 Include historical completed/archived/quarantined flocks using verified placement, movement and completion evidence; preserve loss accounting.
+  - [x] Include historical flock identities, resolve verified clearance dates and bound expected days; expose unverified legacy completion instead of claiming full coverage.
+  - [x] Use verified original/approved movement periods, current farm authority and stored location/actual event time; verify movement evidence against the migrated Docker database.
+- [x] 1.3 Correct inclusive Addis date boundaries and replace capped totals with complete stable pagination/aggregation.
+  - [x] Correct sales and operations stock timestamp boundaries and inventory month boundaries to Addis operating days.
+  - [x] Paginate sales calculation sources, inventory ledger/counts/catalogue/expenses and stably order operations reads; fail explicitly at the safety bound.
+  - [x] Complete range-aware existing inventory/feed/mortality source adapters and explicit completeness failures. The new typed all-topic facade is Task 2.1, not part of this source-reader sign-off.
+- [x] 1.4 Preserve weighted authoritative formulas, distinct culls/deaths, stock units, FCR types and unavailable evidence.
+  - [x] Correct historical weight target age and historical daily target weights; exclude transfers/reverse returns in feed consumption costs and reject partial cost evidence.
+  - [x] Add mixed-cohort FCR, separate deaths/culls, historical movement/clearance, stock-range, unavailable money and source-coverage regressions; retain incompatible units and FCR types separately.
+- [x] 1.5 Revalidate scheduled creators and recipients; make snapshot/audit finalization atomic and scheduled/manual retries safe.
+  - [x] Recheck the schedule creator's active CEO role before execution.
+  - [x] Add service-only leased retry claims, atomic snapshot/audit/receipt finalization, lost-response recovery and scheduled-period advancement.
+  - [x] Revalidate creator/recipient farm authority and stale schedule settings at finalization; test audit rollback, retries, stale workers and revoked assignments in Docker.
+  - [x] Capture server-side used-resource provenance and revalidate every recipient's warehouse access at atomic publication, listing and download; exercise direct authenticated RLS in Docker.
+  - [x] Add true multi-connection concurrency tests; finish schedule-definition audit transactions (local Docker verification; integrated staging acceptance remains in 5.3).
+- [x] 1.6 Protect CSV text, legacy snapshots and authorized saved-report pagination/exact selection; preserve failed forms.
+  - [x] Share CSV formula protection across browser/saved exports; keep failed schedule forms open and make management reads private/no-store.
+  - [x] Restrict unverifiable legacy snapshots to current tenant CEOs without rewriting them; filter authorized saved rows before the legacy list limit and protect direct database reads.
+  - [x] Add complete saved-report pagination and exact selection with local database and desktop/tablet presentation coverage; authenticated staging validation remains in 5.3.
+## 2. Shared read model
+- [x] 2.1 Implement authorized typed `/api/reports/performance` with metrics, series, coverage, units and explanation codes.
+  - [x] Add the typed server-only facade, strict range/scope parsing and production/daily-feed/loss plus completed-health projections, retaining authoritative calculations and explicit partial/missing/failure states.
+  - [x] Complete all-topic stock, sales/cost and feeding-session adapters with Task 2.2. Visual workspace wiring remains Task 3.
+- [x] 2.2 Implement range-aware inventory, scope-wide feeding, previous-period comparisons and evidence links without duplicate events.
+  - [x] Compare equal inclusive operating periods; expose separate warehouse/item balances and units, session plans/actuals/closure coverage, separate layer/growth FCR, selected-sale collections, qualified margins and expense categories.
+  - [x] Reuse existing authoritative calculations; preserve exact authorized History evidence destinations and explicit bounded supporting previews without truncating calculation reads.
+- [x] 2.3 Verify private/no-store, no offline caching and explicit denied/session/empty/missing/failure states.
+  - [x] Exercise actual API orchestration with read-only transport fixtures, service-worker passthrough, revoked/foreign/shared-store scope checks and large source pagination. Full authenticated staging validation remains Task 5.3.
+## 3. Visual workspace
+- [x] 3.1 Add seven views, URL-persisted scope/date controls and accessible in-page supporting figures.
+  - [x] Enable the unified visual workspace for Today-enabled managers/CEOs; preserve disabled/Admin and exact correction routes. Saved reports hosts existing frozen-report controls; v2 snapshot/localization work remains Task 4.
+- [x] 3.2 Add Overview and Production visuals with coverage and age-correct targets.
+  - [x] Show comparisons, source-supported concerns, output/quality/weight plots and dated supporting evidence; explicitly label out-of-period measurements and missing targets.
+- [x] 3.3 Add Feeding and Health visuals with supported explanations and separate FCR/loss types.
+  - [x] Plot session plans/actuals, feed per bird, deaths/culls and cause/type breakdowns. Preserve null gaps, separate compatible conversion types and warn against automatic diagnosis.
+- [x] 3.4 Add Stock and Sales & Costs visuals with correctly labelled units, balances, collections and margins.
+  - [x] Separate warehouse/unit balance and movement charts; show sales, collections, balances, expense categories and qualified estimates with readable explanations and table alternatives.
+### Visual refinement requested 2026-10-22
+- [x] Replace sparse repeated plots with a broader Overview, compact metric/evidence strips, area/composed/donut/ranking/target/scatter visuals and in-page chart figures.
+- [x] Preserve null gaps, compatible units, source authority and paired-flock evidence; distinguish zero compositions and unreconciled collections.
+- [x] Verify responsive EN/AM rendering, failed-source retry and existing workspace regressions locally.
+- [x] Reproduce the deployed Feeding/Sales failure using the actual Laba tenant and July 1–October 20 range under the Worker call budget; consolidate per-attempt source reads without changing the authoritative results.
+  - Verification: original reader 68/81 calls for CEO/manager; consolidated reader 22/23. Both roles pass a 45-call budget and exact section/concern/options parity against the pre-fix reader. Fix `6b56d2a` deployed through notmain; successor `8d7a053` passed Quality gate and Cloudflare staging build. Owner confirmed deployed Feeding/Sales fixed. Later visual checkpoint `a221ef2` also passed both checks.
+
+## 4. Saved reports and compatibility
+- [x] 4.1 Add all-topic consistent v2 evidence snapshots and authorized in-page detail API/preview.
+  - [x] Capture all five domain sections between database evidence revisions; retry changing reads and reject failed sections. Atomic publication rechecks the revision and every recipient's resource access. Legacy snapshots remain unchanged.
+- [x] 4.2 Integrate paginated saved reports/schedules, retry IDs and print-friendly HTML/CSV downloads.
+  - [x] Reuse claimed generation and atomic schedule/audit services; include selected warehouse scope, frozen visual summaries, tables, unavailable evidence, safe CSV and exact paginated previews.
+- [x] 4.3 Consolidate enabled navigation and legacy links; preserve exact corrections/financial targets and disabled/Admin behavior.
+  - [x] One Farm performance entry/header for enabled CEOs/managers; direct Analytics/advanced/saved resolution, with exact correction/financial targets and rollback preserved. Limited CEO navigation exception to simplify-farm-operations Task 7.4 only.
+- [x] 4.4 Complete EN/AM, Ethiopian dates, keyboard/table alternatives, focus and 48px controls.
+  - [x] Translate saved controls/errors and schedules, preserve user text, localize dates and frozen v2 renderings, retain table alternatives and 48px controls. New navigation terminology remains explicitly pending partner review, not falsely included in prior glossary approval.
+## 5. Verification and release
+- [x] 5.1 Add behavioral permission, lifecycle, boundary, scale, formula, concurrency, retry and compatibility regressions.
+- [x] 5.2 Investigate staging Unavailable eggs against authoritative populated evidence; do not weaken assertions.
+  - Correction 2026-10-23: the earlier first-profile inspection was not pinned to Laba and cannot establish that Laba lacks populated records. Explicit Laba inspection for July 1–October 20 returns populated partial production/feeding/health/sales evidence and available stock. Keep the positive populated assertion; rerun signed-in acceptance for the intended tenant rather than manufacturing data.
+- [ ] 5.3 Run integrated full tests, TS/lint, production/Cloudflare builds and authenticated tablet/staging checks.
+  - [x] Full regression suite, TypeScript, ESLint and production build passed; latest runtime checkpoint `2a8b852` passed GitHub Quality gate.
+  - [x] Cloudflare staging Worker build/deployment passed for runtime checkpoint `2a8b852`.
+  - [x] Deploy the consolidated reader and verify the reported Feed/Sales failure is fixed on staging (owner confirmation, 2026-10-23). Production unchanged.
+  - [ ] Complete integrated signed-in/tablet acceptance for Laba across live topics, saved reports and permissions. Earlier source-evidence claim was not tenant-pinned; preserve populated assertions. Successful deployment and the owner's Feed/Sales confirmation do not by themselves complete every acceptance scenario.
+- [x] 5.4 Docker dry-run necessary migrations, migrate staging, validate and push to notmain; no production changes.
+  - [x] All six pending reporting migrations committed to verified staging; no pending migrations remain. Real staging REST location and authorized saved-report readers passed for current CEO/manager profiles. All runtime checkpoints through `2a8b852` pushed to `notmain`; production untouched. Final application acceptance remains explicitly in 5.3.

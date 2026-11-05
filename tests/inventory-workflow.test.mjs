@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import {readFileSync} from "node:fs";
 import test from "node:test";
+import en from "../messages/en.json" with {type: "json"};
 
 const migration = await readFile(new URL("../supabase/migrations/20260814001000_simple_inventory_workflows.sql", import.meta.url), "utf8");
 const costRoute = await readFile(new URL("../src/app/api/profit/cost-entries/route.ts", import.meta.url), "utf8");
@@ -15,39 +17,47 @@ const receiptIdentityFix = await readFile(new URL("../supabase/migrations/202609
 const vaccinationDateMigration = await readFile(new URL("../supabase/migrations/20260824002000_weekly_operating_grace_and_vaccination_date.sql", import.meta.url), "utf8");
 const healthPage = await readFile(new URL("../src/app/app/health/page.tsx", import.meta.url), "utf8");
 const operations = await readFile(new URL("../src/lib/inventory-operations.ts", import.meta.url), "utf8");
+const farmOperations = await readFile(new URL("../src/lib/farm-operations.ts", import.meta.url), "utf8");
 
 test("inventory begins with four plain operational jobs", () => {
-  assert.match(page, /Current stock/);
-  assert.match(page, /Start-of-month count/);
-  assert.match(page, /Receive stock/);
-  assert.match(page, /Record expense/);
-  assert.match(page, /More stock actions/);
+  assert.deepEqual([en.Inventory.jobs.stock, en.Inventory.jobs.count, en.Inventory.jobs.receive, en.Inventory.jobs.expense], ["Current stock", "Start-of-month count", "Receive stock", "Record expense"]);
+  assert.equal(en.Inventory.advanced.title, "More stock actions");
+  for (const key of ["stock", "count", "receive", "expense"]) assert.match(page, new RegExp(`t\\(\"jobs\\.${key}\"\\)`));
+  assert.match(page, /t\("advanced\.title"\)/);
 });
 
 test("receiving and issuing use plain language while optional evidence stays secondary", () => {
-  assert.match(page, /Controlled manual use/);
-  assert.match(page, /Return to stock/);
-  assert.match(page, /Transfer to another warehouse/);
-  assert.match(page, /Approved correction/);
-  assert.match(page, /Supplier/);
-  assert.match(page, /Save stock received/);
+  assert.deepEqual([en.Inventory.advanced.issue, en.Inventory.advanced.return, en.Inventory.advanced.transfer, en.Inventory.advanced.adjustment], ["Controlled manual use", "Return to stock", "Transfer to another warehouse", "Approved correction"]);
+  assert.equal(en.Inventory.receipt.supplier, "Supplier");
+  assert.equal(en.Inventory.receipt.save, "Save stock received");
+  for (const key of ["issue", "return", "transfer", "adjustment"]) assert.match(page, new RegExp(`t\\(\"advanced\\.${key}\"\\)`));
+  assert.match(page, /t\("receipt\.supplier"\)/);
+  assert.match(page, /t\("receipt\.save"\)/);
 });
 
 test("physical counts compare the shelf with the ledger without silent adjustment", () => {
   assert.match(page, /\/api\/inventory\/count-sessions/);
-  assert.match(page, /Count every stocked item together/);
-  assert.match(page, /never silently changes stock/i);
+  assert.equal(en.Inventory.count.title, "Count every stocked item together");
+  assert.match(en.Inventory.count.copy, /never silently changes stock/i);
+  assert.match(page, /t\("count\.title"\)/);
+  assert.match(page, /t\("count\.copy"\)/);
   assert.match(warehouseFirstMigration,/inventory_count_sessions/);
 });
 
 test("monthly and one-off expenses are validated and persisted distinctly", () => {
   assert.match(migration, /entry_kind text not null default 'one_off'/);
   assert.match(migration, /check \(entry_kind in \('monthly', 'one_off'\)\)/);
-  assert.match(costRoute, /VALID_ENTRY_KINDS/);
-  assert.match(costRoute, /entry_kind: entryKind/);
-  assert.match(page, /Confirmed monthly expense/);
-  assert.match(page, /One-off miscellaneous expense/);
-  assert.match(page, /does not change warehouse stock/i);
+  assert.match(costRoute, /recordExpense/);
+  assert.match(farmOperations, /z\.enum\(\["monthly", "one_off"\]\)/);
+  assert.match(farmOperations, /p_payload:value/);
+  const expenseSql=readFileSync(new URL('../supabase/migrations/20261104000000_farm_expense_confirmations.sql',import.meta.url),'utf8');
+  assert.match(expenseSql,/kind,category_value,description_value,amount_value/);
+  assert.equal(en.Inventory.expense.monthly, "Confirmed monthly expense");
+  assert.equal(en.Inventory.expense.oneOff, "One-off miscellaneous expense");
+  assert.match(en.Inventory.expense.warning, /does not change warehouse stock/i);
+  assert.match(page, /t\("expense\.monthly"\)/);
+  assert.match(page, /t\("expense\.oneOff"\)/);
+  assert.match(page, /t\("expense\.warning"\)/);
 });
 
 test("inventory catalogue and ledger loading use the governed server boundary", () => {
@@ -55,7 +65,8 @@ test("inventory catalogue and ledger loading use the governed server boundary", 
   assert.doesNotMatch(page, /\.from\("inventory_items"\)/);
   assert.doesNotMatch(page, /\.from\("stock_ledger"\)/);
   assert.match(catalogRoute, /getAccessContext\(\{ tenant: true \}\)/);
-  assert.match(catalog, /user_warehouse_access/);
+  assert.match(catalog, /effectiveWarehouseIds\(ctx\)/);
+  assert.doesNotMatch(catalog, /user_warehouse_access/);
   assert.match(catalog, /inventory\.catalogue_item\.created/);
   assert.match(catalog, /Only a Farm Manager with an assigned warehouse/);
 });
@@ -99,9 +110,10 @@ test("vaccination completion records the actual date without rewriting its plann
   assert.match(vaccinationDateMigration,/p_administered_on date/);
   assert.match(vaccinationDateMigration,/operating_date=p_administered_on and status='locked'/);
   assert.match(vaccinationDateMigration,/values\(v_org_id,v_flock_id,p_administered_on/);
-  assert.match(healthEventsRoute,/p_administered_on:administeredOn/);
+  assert.match(healthEventsRoute,/recordHealthEvidence/);
+  assert.match(farmOperations,/p_administered_on: administeredOn/);
   assert.match(healthPage,/name="administered_on"/);
-  assert.match(healthPage,/Scheduled for/);
+  assert.match(healthPage,/ui\("scheduledFor"\)/);
 });
 
 test("automatic operating-day locking keeps a governed seven-day entry window",()=>{

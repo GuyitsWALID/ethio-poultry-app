@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { type AccessContext, governanceAdmin } from "@/lib/access-context";
 import {recordAuditEvent} from "@/lib/audit-ledger";
+import {effectiveWarehouseIds} from "@/lib/warehouse-access";
 
 const warehouseTypes = ["farm_store", "pharmacy", "equipment_store", "central_warehouse"] as const;
 
@@ -28,19 +29,9 @@ function activeAssignment(row: { starts_at: string; expires_at: string | null; r
 }
 
 export async function listInventoryWarehouses(ctx: AccessContext) {
-  const nowIso = new Date().toISOString();
   let allowedIds: string[] | null = null;
   if (ctx.role === "farm_manager") {
-    const { data, error } = await governanceAdmin
-      .from("user_warehouse_access")
-      .select("warehouse_id")
-      .eq("org_id", ctx.orgId)
-      .eq("profile_id", ctx.userId)
-      .is("revoked_at", null)
-      .lte("starts_at", nowIso)
-      .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
-    if (error) throw new WarehouseManagementError(error.message, 500);
-    allowedIds = (data ?? []).map((row) => String(row.warehouse_id));
+    allowedIds = await effectiveWarehouseIds(ctx);
   }
 
   let warehouseQuery = governanceAdmin
@@ -55,18 +46,21 @@ export async function listInventoryWarehouses(ctx: AccessContext) {
 
   const managerQuery = governanceAdmin.from("profiles").select("id,full_name").eq("org_id", ctx.orgId).eq("role", "farm_manager").eq("is_active", true);
   const assignmentQuery = governanceAdmin.from("user_warehouse_access").select("warehouse_id,profile_id,starts_at,expires_at,revoked_at").eq("org_id", ctx.orgId);
+  const farmAssignmentQuery = governanceAdmin.from("user_farm_access").select("farm_id,profile_id,starts_at,expires_at,revoked_at").eq("org_id", ctx.orgId);
   if (ctx.role === "farm_manager") {
     managerQuery.eq("id", ctx.userId);
     assignmentQuery.eq("profile_id", ctx.userId);
+    farmAssignmentQuery.eq("profile_id", ctx.userId);
   }
-  const [warehousesResult, branchesResult, farmsResult, managersResult, assignmentsResult] = await Promise.all([
+  const [warehousesResult, branchesResult, farmsResult, managersResult, assignmentsResult, farmAssignmentsResult] = await Promise.all([
     warehouseQuery,
     governanceAdmin.from("branches").select("id,name").eq("org_id", ctx.orgId).order("name"),
     governanceAdmin.from("farms").select("id,branch_id,name").eq("org_id", ctx.orgId).order("name"),
     managerQuery.order("full_name"),
     assignmentQuery,
+    farmAssignmentQuery,
   ]);
-  const failure = [warehousesResult, branchesResult, farmsResult, managersResult, assignmentsResult].find((result) => result.error)?.error;
+  const failure = [warehousesResult, branchesResult, farmsResult, managersResult, assignmentsResult, farmAssignmentsResult].find((result) => result.error)?.error;
   if (failure) throw new WarehouseManagementError(failure.message, 500);
 
   const branchNames = new Map((branchesResult.data ?? []).map((row) => [row.id, row.name]));
@@ -87,7 +81,10 @@ export async function listInventoryWarehouses(ctx: AccessContext) {
       ...row,
       branch_name: branchNames.get(row.branch_id) ?? "Unknown branch",
       farm_name: row.farm_id ? farmNames.get(row.farm_id) ?? "Unknown farm" : null,
-      manager_names: assignmentsByWarehouse.get(row.id) ?? [],
+      access_source: row.farm_id ? "farm_assignment" as const : "warehouse_assignment" as const,
+      manager_names: row.farm_id
+        ? (farmAssignmentsResult.data ?? []).filter(assignment => assignment.farm_id === row.farm_id && activeAssignment(assignment, now)).map(assignment => managerNames.get(assignment.profile_id)).filter((name): name is string => Boolean(name))
+        : assignmentsByWarehouse.get(row.id) ?? [],
     })),
     branches: branchesResult.data ?? [],
     farms: farmsResult.data ?? [],
@@ -102,6 +99,7 @@ export async function createInventoryWarehouse(ctx: AccessContext, input: unknow
   const parsed = warehouseSetupSchema.safeParse(input);
   if (!parsed.success) throw new WarehouseManagementError(parsed.error.issues[0]?.message ?? "Invalid warehouse setup.");
   const values = parsed.data;
+  if (values.farmId && values.managerId) throw new WarehouseManagementError("Farm stores inherit their Farm Manager. Assign or replace the manager from Access & Users.", 400);
 
   const { data: branch } = await governanceAdmin.from("branches").select("id").eq("id", values.branchId).eq("org_id", ctx.orgId).maybeSingle();
   if (!branch) throw new WarehouseManagementError("The selected branch is outside this organization.");

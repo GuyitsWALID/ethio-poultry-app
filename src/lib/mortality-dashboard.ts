@@ -2,6 +2,10 @@ export type MortalityDailyInput = {
   flockId: string;
   recordDate: string;
   deaths: number | null;
+  culls?: number | null;
+  otherRemovals?: number | null;
+  transfersOut?: number | null;
+  transfersIn?: number | null;
   openingBirds: number | null;
   closingBirds: number | null;
   cause: string | null;
@@ -28,6 +32,7 @@ export type MortalityDashboardResponse = {
   meta: { dateFrom: string; dateTo: string; previousFrom: string; previousTo: string; timezone: string; refreshedAt: string; scopeLabel: string; days: number };
   summary: {
     officialDeaths: number | null; mortalityPerThousand: number | null; previousDeaths: number | null;
+    culls?: number | null; birdLosses?: number | null;
     direction: "up" | "down" | "flat" | "unavailable"; changePct: number | null; affectedFlocks: number;
     recordsComplete: number; recordsExpected: number; unexplainedDeaths: number; eventDeaths: number;
     peakDate: string | null; peakDeaths: number | null;
@@ -39,14 +44,14 @@ export type MortalityDashboardResponse = {
     mortalityPerThousand: number | null; weeklyRatePct: number | null; targetPct: number | null; targetGapPct: number | null;
     previousDeaths: number | null; direction: "up" | "down" | "flat" | "unavailable"; changePct: number | null;
     leadingCause: string | null; unexplainedPct: number | null; deathDays: number; lastDeathDate: string | null;
-    status: "critical" | "watch" | "stable" | "insufficient_data"; coveragePct: number;
+    status: "critical" | "watch" | "stable" | "insufficient_data"; coveragePct: number | null;
   }>;
   causes: Array<{ cause: string; deaths: number; sharePct: number }>;
   timeBands: Array<{ band: string; deaths: number }>;
   diagnoses: Array<{ diagnosis: string; deaths: number }>;
   actions: Array<{ id: string; severity: "critical" | "warning" | "data"; title: string; explanation: string; route: string; flockCode?: string }>;
   events: Array<{ id: string; date: string; time: string | null; flockCode: string; farmName: string; cause: string; diagnosis: string | null; count: number; notes: string | null }>;
-  dataTrust: { coveragePct: number; eventReconciliationPct: number | null; notes: string[] };
+  dataTrust: { coveragePct: number | null; eventReconciliationPct: number | null; notes: string[] };
 };
 
 export function roundMortality(value: number, places = 2) {
@@ -54,8 +59,8 @@ export function roundMortality(value: number, places = 2) {
   return Math.round((value + Number.EPSILON) * scale) / scale;
 }
 
-export function birdDays(row: Pick<MortalityDailyInput, "openingBirds" | "closingBirds">) {
-  if (row.openingBirds !== null && row.closingBirds !== null) return (row.openingBirds + row.closingBirds) / 2;
+export function birdDays(row: Pick<MortalityDailyInput, "openingBirds" | "closingBirds" | "otherRemovals" | "transfersOut" | "transfersIn">) {
+  if (row.openingBirds !== null && row.closingBirds !== null) return (row.openingBirds + row.closingBirds + (row.otherRemovals ?? 0) + (row.transfersOut ?? 0) - (row.transfersIn ?? 0)) / 2;
   return row.openingBirds ?? row.closingBirds;
 }
 

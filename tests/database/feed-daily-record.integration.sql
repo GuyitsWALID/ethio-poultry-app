@@ -32,21 +32,20 @@ begin
     placement_date, age_at_placement_days, total_count, status
   ) values (
     v_batch, v_org, v_branch, v_farm, v_house, 'ITEM1-BATCH', 'external_purchase',
-    date '2098-12-01', 0, 1000, 'active'
+    (now() at time zone 'Africa/Addis_Ababa')::date - 45, 0, 1000, 'active'
   );
   insert into public.flocks(
     id, org_id, farm_id, house_id, batch_id, flock_code, flock_type, source,
     placement_date, initial_count, current_count, age_at_placement_days, status
   ) values (
     v_flock, v_org, v_farm, v_house, v_batch, 'ITEM1-FLOCK', 'layer', 'external_purchase',
-    date '2098-12-01', 1000, 1000, 0, 'active'
+    (now() at time zone 'Africa/Addis_Ababa')::date - 45, 1000, 1000, 0, 'active'
   );
   insert into public.user_farm_access(org_id, profile_id, farm_id, starts_at)
   values (v_org, v_manager, v_farm, now() - interval '1 day');
   insert into public.warehouses(id, org_id, branch_id, farm_id, name, type, status)
   values (v_warehouse, v_org, v_branch, v_farm, 'Integration Store', 'farm_store', 'active');
-  insert into public.user_warehouse_access(org_id, profile_id, warehouse_id, starts_at)
-  values (v_org, v_manager, v_warehouse, now() - interval '1 day');
+  -- Farm assignment is the sole authority for this farm-owned store.
   insert into public.inventory_items(id, org_id, name, category, unit, unit_cost)
   values
     (v_feed_item, v_org, 'Integration Layer Feed', 'feed', 'kg', 20),
@@ -172,11 +171,39 @@ begin
     'layer_feed', 'completed', now(), v_manager, v_manager
   );
 
+  -- A documented missed feeding resolves the session without consuming stock.
+  insert into public.feeding_session_records(
+    org_id, batch_id, flock_id, record_date, session_name, session_time,
+    feeders_count, planned_feed_kg, actual_feed_kg, feed_type, status, notes, recorded_by
+  ) values (
+    v_org, v_batch, v_flock, v_day, 'Later feeding', time '14:00',
+    10, 5, null, 'layer_feed', 'missed', null, v_manager
+  );
+  begin
+    perform public.close_feed_day(v_manager, v_flock, v_day, null);
+    raise exception 'A missed feeding without a reason was allowed to close.';
+  exception when sqlstate '22023' then
+    if sqlerrm not like 'Complete each feeding%' then raise; end if;
+  end;
+  update public.feeding_session_records set notes = 'Feed was not delivered'
+  where org_id = v_org and flock_id = v_flock and record_date = v_day and session_name = 'Later feeding';
+
+  -- Session count is not capped at morning and afternoon.
+  insert into public.feeding_session_records(
+    org_id, batch_id, flock_id, record_date, session_name, session_time,
+    feeders_count, planned_feed_kg, actual_feed_kg, feed_item_id, warehouse_id,
+    feed_type, status, completed_at, completed_by, recorded_by
+  ) values (
+    v_org, v_batch, v_flock, v_day, 'Third feeding', time '17:00',
+    10, 2, 2, v_feed_item, v_warehouse,
+    'layer_feed', 'completed', now(), v_manager, v_manager
+  );
+
   -- Feed Control claims the day and synchronizes its total without replacing
   -- eggs, mortality, leftovers, water, or Daily Records health usage.
   perform public.close_feed_day(v_manager, v_flock, v_day, null);
   select feed_intake_grams into v_number from public.daily_farm_records where id = v_daily;
-  if v_number <> 12000 then raise exception 'Expected synchronized feed of 12000 g, found %.', v_number; end if;
+  if v_number <> 14000 then raise exception 'Expected synchronized feed of 14000 g, found %.', v_number; end if;
   if not exists (
     select 1 from public.daily_farm_records
     where id = v_daily and synced and total_eggs = 865 and deaths = 2
@@ -212,7 +239,7 @@ begin
     ),
     null
   );
-  if not exists (select 1 from public.daily_farm_records where id = v_daily and feed_intake_grams = 12000 and synced)
+  if not exists (select 1 from public.daily_farm_records where id = v_daily and feed_intake_grams = 14000 and synced)
     then raise exception 'Daily Record edit overwrote Feed Control fields.'; end if;
   if not exists (
     select 1 from public.stock_ledger

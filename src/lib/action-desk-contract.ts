@@ -29,6 +29,8 @@ export type ActionEvent = {
 
 export type ActionCard = OperationalAlert & {
   actionId: string;
+  revision: string;
+  canRetireLegacy: boolean;
   status: ActionStatus;
   ownerId: string | null;
   ownerName: string | null;
@@ -44,6 +46,7 @@ export type ActionCard = OperationalAlert & {
 };
 
 export type ActionDesk = {
+  page?: {total: number; nextCursor: string | null};
   role: "ceo" | "farm_manager" | "system_admin";
   viewerId: string;
   actions: ActionCard[];

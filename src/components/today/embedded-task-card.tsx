@@ -1,0 +1,324 @@
+"use client";
+
+import Link from "next/link";
+import {useSearchParams} from "next/navigation";
+import {useEffect, useMemo, useRef, useState} from "react";
+import {useTranslations} from "next-intl";
+import {AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Info, Plus, Save} from "lucide-react";
+
+import type {TodayFlockContext, TodayTask, TodayTaskDetail} from "@/lib/today-workspace/contracts";
+import {todayErrorMessageKeys} from "@/i18n/today-copy";
+import {actionStatuses, type ActionStatus} from "@/lib/action-desk-contract";
+import {buildFinishReview, type FinishIssue, type ReviewTask} from "@/lib/today-workspace/finish-review";
+import {sendTodayCommand} from "@/lib/today-workspace/sync";
+import {readPreparedDetail} from "@/lib/today-workspace/offline-policy";
+import {HealthTaskForm} from "@/components/today/health-task-form";
+import {ScheduledWorkForm} from "@/components/today/scheduled-work-form";
+import {ExpenseEntryForm,PurchaseEntryForm} from "@/components/expense-purchase-forms";
+import type {ExpenseTemplate} from "@/lib/expenses";
+import {managerDestination} from "@/lib/manager-destinations";
+import {historyPeriod} from "@/lib/history/contracts";
+import {DraftFieldGroup, TaskDraftScope, useDraftField, useDraftState, useDraftSubmit, useTodayOffline} from "@/components/today/offline-context";
+
+type Row = Record<string, unknown>;
+type SubmitState = {tone: "success" | "error"; text: string} | null;
+
+const inputClass = "min-h-12 rounded-xl border border-sand-300 bg-white px-3 text-base text-forest-900 focus:border-forest-700 focus:outline-none focus:ring-2 focus:ring-forest-200";
+const primaryClass = "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-forest-900 px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50";
+const secondaryClass = "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-sand-300 bg-white px-4 text-sm font-semibold text-forest-900";
+
+function number(value: FormDataEntryValue | null) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function text(value: FormDataEntryValue | null) {
+  return String(value ?? "").trim();
+}
+
+function rows(value: unknown): Row[] {
+  return Array.isArray(value) ? value as Row[] : [];
+}
+
+function stateLabel(task: TodayTask, t: ReturnType<typeof useTranslations>) {
+  if (task.state === "complete") return t("states.complete");
+  if (task.state === "draft_on_tablet") return t("states.draft");
+  if (task.state === "waiting_to_sync") return t("states.waiting");
+  if (task.state === "needs_attention") return t("states.needsAttention");
+  return t("states.notStarted");
+}
+
+function TaskMessage({message}: {message: SubmitState}) {
+  if (!message) return null;
+  return <p role={message.tone === "error" ? "alert" : "status"} className={`rounded-xl p-3 text-sm ${message.tone === "error" ? "bg-red-50 text-red-800" : "bg-leaf-500/10 text-leaf-700"}`}>{message.text}</p>;
+}
+
+function Field({label, name, type = "text", defaultValue, required = false, step, min, readOnly = false}: {label: string; name: string; type?: string; defaultValue?: string | number | null; required?: boolean; step?: string; min?: string; readOnly?: boolean}) {
+  const [value,setValue]=useDraftField(name,String(defaultValue??""));
+  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<input name={name} type={type} required={required} step={step} min={min} readOnly={readOnly} value={value} onChange={event=>setValue(event.target.value)} inputMode={type === "number" ? "decimal" : undefined} className={inputClass}/></label>;
+}
+
+function SelectField({label, name, children, required = false, defaultValue}: {label: string; name: string; children: React.ReactNode; required?: boolean; defaultValue?: string}) {
+  const [value,setValue]=useDraftField(name,defaultValue);
+  return <label className="grid gap-1.5 text-xs font-semibold text-forest-700">{label}<select name={name} required={required} value={value} onChange={event=>setValue(event.target.value)} className={inputClass}>{children}</select></label>;
+}
+
+function useTaskSubmit() {
+  const errors = useTranslations("Errors");
+  const offlineText=useTranslations("Today.offline");
+  const send=useDraftSubmit();
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<SubmitState>(null);
+  async function submit(command: Parameters<typeof sendTodayCommand>[0], success: string, onApplied: () => void) {
+    setSaving(true); setMessage(null);
+    try {
+      const result = await send(command);
+      if(result.status === "queued") {setMessage({tone:"success",text:offlineText("waiting")});onApplied();return result;}
+      if (result.status !== "applied") {
+        setMessage({tone: "error", text: errors(result.error_code ? todayErrorMessageKeys[result.error_code] : "unknown")});
+        return result;
+      }
+      setMessage({tone: "success", text: success});
+      onApplied();
+      return result;
+    } catch (error) {
+      setMessage({tone: "error", text: error instanceof Error && error.message === "RESOURCE_PENDING" ? offlineText("resourcePending") : errors("unknown")});
+      return null;
+    } finally { setSaving(false); }
+  }
+  return {saving, message, submit};
+}
+
+function EggsWaterForm({detail, flock, onSaved}: {detail: TodayTaskDetail; flock: TodayFlockContext; onSaved: () => void}) {
+  const t = useTranslations("Today.embedded");
+  const {saving, message, submit} = useTaskSubmit();
+  const daily = (detail.data.dailyRecord ?? {}) as Row;
+  const hasEggs = ["layer", "parent_stock"].includes(String(detail.data.flockType));
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = new FormData(event.currentTarget);
+    const normal = number(form.get("normal_eggs")); const broken = number(form.get("broken_eggs")); const dirty = number(form.get("dirty_eggs"));
+    await submit({schema_version: 1, command_id: crypto.randomUUID(), type: "save_daily_record", farm_id: detail.farmId, flock_id: flock.id, work_date: detail.workDate, expected_resource_revision: detail.resourceRevision, payload: {daily_record_id: daily.id ? String(daily.id) : null, record: {record_date: detail.workDate, water_consumed_liters: number(form.get("water")), ...(hasEggs ? {normal_eggs: normal, broken_eggs: broken, dirty_eggs: dirty, total_eggs: normal + broken + dirty, average_egg_weight_g: number(form.get("egg_weight")) || null} : {})}, usages: null}}, t("saved"), onSaved);
+  }
+  return <form onSubmit={save} className="grid gap-4"><div className="grid gap-3 sm:grid-cols-2"><Field label={t("waterLiters")} name="water" type="number" min="0" step="0.1" required defaultValue={daily.water_consumed_liters as number}/>{hasEggs ? <><Field label={t("normalEggs")} name="normal_eggs" type="number" min="0" step="1" required defaultValue={daily.normal_eggs as number}/><Field label={t("brokenEggs")} name="broken_eggs" type="number" min="0" step="1" required defaultValue={daily.broken_eggs as number}/><Field label={t("dirtyEggs")} name="dirty_eggs" type="number" min="0" step="1" required defaultValue={daily.dirty_eggs as number}/><Field label={t("eggWeight")} name="egg_weight" type="number" min="0" step="0.1" defaultValue={daily.average_egg_weight_g as number}/></> : null}</div><TaskMessage message={message}/><div className="flex justify-end"><button disabled={saving} className={primaryClass}><Save className="h-4 w-4"/>{saving ? t("saving") : t("saveContinue")}</button></div></form>;
+}
+
+function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDetail; flock: TodayFlockContext; onChanged: () => void; onSaved: () => void}) {
+  const t = useTranslations("Today.embedded");
+  const {saving, message, submit} = useTaskSubmit();
+  const queued=useTodayOffline().queue.filter(row=>row.command.farm_id===detail.farmId&&row.command.flock_id===flock.id&&row.command.work_date===detail.workDate);
+  const sessions=rows(detail.data.sessions).map(row=>({...row}));
+  for(const row of queued.filter(row=>row.command.type==="save_feed_session")){
+    const session=(row.command.payload as {session:Row}).session;
+    const existing=sessions.findIndex(row=>row.session_name===session.session_name);
+    const value={...session,id:`pending:${row.command.command_id}`,_queued:true};
+    if(existing<0)sessions.push(value);else sessions[existing]=value;
+  }
+  const closeQueued=queued.some(row=>row.command.type==="close_feed_day");
+  const closed = detail.data.closed === true;
+  const [editingId, setEditingId] = useDraftState<string | null>("feeding.editingId",null);
+  const session = sessions.find((row) => String(row.id) === editingId) ?? {};
+  const feedItems = detail.inventory.filter((item) => item.category === "feed");
+  const [status, setStatus] = useDraftState<"completed" | "missed">("feeding.status","completed");
+  const [revision, setRevision] = useState(detail.resourceRevision);
+  const [sessionDependencies, setSessionDependencies] = useState<string[]>([]);
+  const mayClose = sessions.length > 0 && sessions.every((row) => row.status === "completed" || row.status === "missed") && editingId === null;
+  function editSession(row: Row) {
+    setEditingId(String(row.id));
+    setStatus(row.status === "missed" ? "missed" : "completed");
+  }
+  function addSession() {
+    setEditingId(crypto.randomUUID());
+    setStatus("completed");
+  }
+  async function saveSession(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const commandId = crypto.randomUUID();
+    const result = await submit({
+      schema_version: 1, command_id: commandId, type: "save_feed_session",
+      farm_id: detail.farmId, flock_id: flock.id, work_date: detail.workDate,
+      expected_resource_revision: revision,
+      payload: {session_id: session.id ? String(session.id) : null, session: {
+        session_name: text(form.get("session_name")),
+        session_time: text(form.get("session_time")) || null,
+        feeders_count: number(form.get("feeders")),
+        planned_feed_kg: number(form.get("planned")),
+        actual_feed_kg: status === "completed" ? number(form.get("actual")) : null,
+        feed_item_id: status === "completed" ? text(form.get("feed_item")) || null : null,
+        warehouse_id: status === "completed" ? text(form.get("warehouse")) || null : null,
+        feed_type: text(form.get("feed_type")) as "starter_feed" | "grower_pullet_feed" | "layer_feed" | "broiler_feed" | "medicated_feed",
+        status, notes: text(form.get("notes")) || null,
+      }},
+    }, t("sessionSaved"), () => {});
+    if (result?.status === "applied" || result?.status === "queued") {
+      setEditingId(null);
+      if(result.status==="applied")setRevision(result.resource_revision ?? revision);
+      setSessionDependencies((current) => [...new Set([...current, commandId])]);
+      onChanged();
+    }
+  }
+  async function closeDay() {
+    if (!revision || !mayClose) return;
+    await submit({schema_version: 1, command_id: crypto.randomUUID(), type: "close_feed_day", farm_id: detail.farmId, flock_id: flock.id, work_date: detail.workDate, expected_resource_revision: revision, depends_on: sessionDependencies.length ? sessionDependencies : undefined, payload: {}}, t("feedClosed"), onSaved);
+  }
+  if (closed) return <div className="rounded-xl bg-leaf-500/10 p-4 text-sm font-semibold text-leaf-700"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{t("feedAlreadyClosed")}</div>;
+  if(closeQueued)return <p role="status">{t("reviewUnsynced")}</p>;
+  return <div className="grid gap-4">
+    <div className="grid gap-2" aria-label={t("feedingSessions")}>
+      {sessions.map((row, index) => <div key={String(row.id)} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-sand-200 px-3 py-2 text-sm">
+        <span><span className="font-semibold">{String(row.session_name || t("feedingNumber", {number: index + 1}))}</span><span className="ml-2 text-forest-600">{String(row.session_time ?? "").slice(0, 5)} · {row.status === "completed" ? t("done") : row.status === "missed" ? t("missed") : t("pending")}</span></span>
+        <button type="button" disabled={row._queued===true} onClick={() => editSession(row)} className="min-h-11 rounded-lg px-3 font-semibold text-forest-800 underline disabled:opacity-50">{t("editFeeding")}</button>
+      </div>)}
+    </div>
+    <button type="button" onClick={addSession} className={`${secondaryClass} w-fit`}><Plus className="h-5 w-5"/>{t("addFeeding")}</button>
+    {editingId ? <DraftFieldGroup name={`feeding:${editingId}`}><form key={editingId} onSubmit={saveSession} className="grid gap-4 rounded-xl border border-sand-200 p-4">
+      <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-semibold text-forest-900">{t("feedingResult")}</legend>
+        {(["completed", "missed"] as const).map((choice) => <label key={choice} className="flex min-h-12 items-center gap-3 text-sm text-forest-900">
+          <input type="checkbox" checked={status === choice} onChange={() => setStatus(choice)} className="h-5 w-5 accent-forest-900"/>
+          <span>{t(choice)}</span>
+          <span tabIndex={0} title={t(choice === "completed" ? "fedHelp" : "missedHelp")} aria-label={t(choice === "completed" ? "fedHelp" : "missedHelp")} className="cursor-help text-forest-600"><Info className="h-4 w-4"/></span>
+        </label>)}
+      </fieldset>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label={t("sessionName")} name="session_name" required readOnly={Boolean(session.id)} defaultValue={String(session.session_name ?? t("feedingNumber", {number: sessions.length + 1}))}/>
+        <Field label={t("sessionTime")} name="session_time" type="time" required defaultValue={String(session.session_time ?? "").slice(0, 5)}/>
+        <Field label={t("feeders")} name="feeders" type="number" min="1" step="1" required defaultValue={Number(session.feeders_count ?? 1)}/>
+        <Field label={t("plannedKg")} name="planned" type="number" min="0.01" step="0.01" required defaultValue={session.planned_feed_kg as number | null}/>
+        {status === "completed" ? <>
+          <Field label={t("actualKg")} name="actual" type="number" min="0" step="0.01" required defaultValue={(session.actual_feed_kg ?? session.planned_feed_kg) as number | null}/>
+          <SelectField label={t("feedItem")} name="feed_item" required defaultValue={String(session.feed_item_id ?? "")}><option value="">{t("choose")}</option>{feedItems.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</SelectField>
+          <SelectField label={t("warehouse")} name="warehouse" required defaultValue={String(session.warehouse_id ?? "")}><option value="">{t("choose")}</option>{detail.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectField>
+        </> : null}
+        <SelectField label={t("feedType")} name="feed_type" required defaultValue={String(session.feed_type ?? detail.data.scheduledFeedType ?? "layer_feed")}><option value="starter_feed">{t("feedTypes.starter")}</option><option value="grower_pullet_feed">{t("feedTypes.grower")}</option><option value="layer_feed">{t("feedTypes.layer")}</option><option value="broiler_feed">{t("feedTypes.broiler")}</option><option value="medicated_feed">{t("feedTypes.medicated")}</option></SelectField>
+      </div>
+      <Field label={status === "missed" ? t("missedReason") : t("notes")} name="notes" required={status === "missed"} defaultValue={String(session.notes ?? "")}/>
+      <TaskMessage message={message}/>
+      <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setEditingId(null)} className={secondaryClass}>{t("cancelFeeding")}</button><button disabled={saving} className={primaryClass}><Save className="h-4 w-4"/>{t("saveSession")}</button></div>
+    </form></DraftFieldGroup> : null}
+    {!editingId ? <div className="flex justify-end"><button type="button" disabled={saving || !mayClose} onClick={() => void closeDay()} className={primaryClass}>{t("closeFeedDay")}</button></div> : null}
+    <TaskMessage message={message}/>
+  </div>;
+}
+
+
+
+function SuppliesForm({detail, flock, task, onSaved}: {detail: TodayTaskDetail; flock: TodayFlockContext; task: TodayTask; onSaved: () => void}) {
+  const t = useTranslations("Today.embedded");
+  const {saving, message, submit} = useTaskSubmit();
+  const [checked, setChecked] = useDraftState("supplies.checked",false);
+  const [supplyRows, setSupplyRows] = useDraftState("supplies.rows",[0]);
+  const eligible = detail.inventory.filter((item) => ["vitamin", "supplement", "equipment", "spare_parts", "packaging", "miscellaneous"].includes(item.category));
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!checked) {
+      await submit({schema_version: 1, command_id: crypto.randomUUID(), type: "confirm_no_activity", farm_id: detail.farmId, flock_id: flock.id, work_date: detail.workDate, payload: {task_code: "routine_supplies", source_fingerprint: String(task.sourceFingerprint ?? "")}}, t("confirmedNone"), onSaved);
+      return;
+    }
+    const form = new FormData(event.currentTarget);
+    const usages = supplyRows.map((row) => ({item_id: text(form.get(`item_${row}`)), warehouse_id: text(form.get(`warehouse_${row}`)), quantity: number(form.get(`quantity_${row}`))}));
+    await submit({schema_version: 1, command_id: crypto.randomUUID(), type: "save_daily_record", farm_id: detail.farmId, flock_id: flock.id, work_date: detail.workDate, expected_resource_revision: detail.resourceRevision, payload: {daily_record_id: String(((detail.data.dailyRecord as Row | null)?.id) ?? "") || null, record: {record_date: detail.workDate}, usages}}, t("suppliesSaved"), onSaved);
+  }
+  return <form onSubmit={save} className="grid gap-4"><label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border border-sand-300 bg-white px-4 py-3 text-sm font-semibold text-forest-900"><input type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} className="h-5 w-5 accent-forest-900"/>{t("recordSupply")}</label>{checked ? <div className="grid gap-3">{supplyRows.map((row, index) => <div key={row} className="grid gap-3 rounded-xl border border-sand-200 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]"><SelectField label={t("item")} name={`item_${row}`} required><option value="">{t("choose")}</option>{eligible.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</SelectField><SelectField label={t("warehouse")} name={`warehouse_${row}`} required><option value="">{t("choose")}</option>{detail.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectField><Field label={t("quantity")} name={`quantity_${row}`} type="number" min="0.01" step="0.01" required/>{index > 0 ? <button type="button" onClick={() => setSupplyRows((current) => current.filter((value) => value !== row))} className={secondaryClass}>{t("remove")}</button> : <span/>}</div>)}<button type="button" onClick={() => setSupplyRows((current) => [...current, Math.max(...current) + 1])} className={secondaryClass}>{t("addSupply")}</button></div> : null}<TaskMessage message={message}/><div className="flex justify-end"><button disabled={saving} className={primaryClass}><Save className="h-4 w-4"/>{checked ? t("saveContinue") : t("confirmNothing")}</button></div></form>;
+}
+
+function SimpleFarmForm({detail, task, onChanged, onSaved, dayRevision, reviewTasks = [], finishIssues = [], online = true, canFinish = false}: {detail: TodayTaskDetail; task: TodayTask; onChanged: () => void; onSaved: () => void; dayRevision?: string; reviewTasks?: ReviewTask[]; finishIssues?: FinishIssue[]; online?: boolean; canFinish?: boolean}) {
+  const t = useTranslations("Today.embedded");
+  const taskNames = useTranslations("Today.tasks");
+  const errorMessages = useTranslations("Errors");
+  const {saving, message, submit} = useTaskSubmit();
+  const query = useSearchParams();
+  const requestedWarehouse = query.get("warehouse_id") ?? "";
+  const initialWarehouse = detail.warehouses.some((row) => row.id === requestedWarehouse) ? requestedWarehouse : "";
+  const [stockMode, setStockMode] = useDraftState<"receipt" | "count">("stock.mode",query.get("stock_mode") === "count" ? "count" : "receipt");
+  const [countWarehouse, setCountWarehouse] = useDraftState("stock.warehouse",initialWarehouse);
+  const [saleCategory, setSaleCategory] = useDraftState("sales.category", "egg");
+  const [saleSourceRows, setSaleSourceRows] = useDraftState<number[]>("sales.sources", [0]);
+  const saleCommandId = useRef(crypto.randomUUID());
+  const finishCommandId = useRef(crypto.randomUUID());
+  const dueWarehouses = new Set(Array.isArray(detail.data.countDueWarehouseIds) ? detail.data.countDueWarehouseIds.map(String) : []);
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (task.code === "stock") {
+      const items = detail.inventory.filter((item) => item.balances.some((balance) => balance.warehouseId === countWarehouse));
+      await submit({schema_version: 1, command_id: crypto.randomUUID(), type: "record_stock_count", farm_id: detail.farmId, work_date: detail.workDate, payload: {warehouse_id: countWarehouse, rows: items.map((item) => ({item_id: item.id, counted_quantity: number(form.get(`count_${item.id}`))})), notes: text(form.get("notes")) || null}}, t("stockCountSaved"), onSaved);
+      return;
+    }
+    if (task.code === "sales") {
+      const category = text(form.get("category")) as "egg" | "bird" | "training" | "equipment_medicine" | "consultancy" | "package";
+      const result = await submit({schema_version: 1, command_id: saleCommandId.current, type: "record_sale", farm_id: detail.farmId, flock_id: category === "egg" ? undefined : detail.flockId ?? undefined, work_date: detail.workDate, payload: {product_category: category, product_label: text(form.get("label")), quantity: number(form.get("quantity")), unit_price: number(form.get("unit_price")), paid_amount: number(form.get("paid")), unit: text(form.get("unit")), ...(category === "egg" ? {egg_sources: saleSourceRows.map(row => ({flock_id: text(form.get(`source_flock_${row}`)), egg_quantity: number(form.get(`source_eggs_${row}`))}))} : {})}}, t("saleSaved"), onSaved);
+      if (result) saleCommandId.current = crypto.randomUUID();
+      return;
+    }
+    if (task.code === "review_finish") {
+      const result = await submit({schema_version: 1, command_id: finishCommandId.current, type: "finish_operating_day", farm_id: detail.farmId, work_date: detail.workDate, expected_resource_revision: dayRevision ?? "", payload: {}}, t("dayFinished"), onSaved);
+      if (result?.status === "applied") finishCommandId.current = crypto.randomUUID();
+    }
+  }
+  if(task.code==="review_finish"){
+    const review=buildFinishReview(reviewTasks,finishIssues);
+    const label=(code:TodayTask["code"])=>taskNames(({birds:"birds",feeding:"feeding",eggs_water:"eggsWater",health_deaths:"healthDeaths",routine_supplies:"supplies",review_finish:"review",stock:"stock",sales:"sales",expenses:"expenses",assigned_fixes:"assignedFixes",scheduled_work:"scheduledWork"} as const)[code]);
+    const group=(title:string,items:ReviewTask[],tone:string)=><div className={`rounded-xl border p-4 ${tone}`}><p className="text-xs font-semibold uppercase tracking-wider">{title} · {items.length}</p>{items.length?<ul className="mt-2 grid gap-1 text-sm">{items.map((item,index)=><li key={`${item.contextLabel??"farm"}:${item.code}:${index}`}>• {item.contextLabel?<span className="font-semibold">{item.contextLabel}: </span>:null}{label(item.code)}</li>)}</ul>:<p className="mt-2 text-sm">{t("reviewNone")}</p>}</div>;
+    const issueGroup=(title:string,items:FinishIssue[],tone:string)=><div className={`rounded-xl border p-4 ${tone}`}><p className="text-xs font-semibold uppercase tracking-wider">{title} · {items.length}</p>{items.length?<ul className="mt-2 grid gap-1 text-sm">{items.map((item)=><li key={item.commandId}>• {item.errorCode?errorMessages(todayErrorMessageKeys[item.errorCode]):t("issueUnknown")}</li>)}</ul>:<p className="mt-2 text-sm">{t("reviewNone")}</p>}</div>;
+    const closed=detail.data.status==="closed"||task.state==="complete";
+    if(closed)return <div role="status" className="rounded-xl border border-leaf-200 bg-leaf-500/10 p-5 text-sm font-semibold text-leaf-800"><CheckCircle2 className="mr-2 inline h-5 w-5"/>{t("alreadyFinished")}</div>;
+    const blocked=review.missing.length+review.queued.length+review.attention.length+review.conflicts.length+review.rejected.length>0;
+    return <form onSubmit={save} className="grid gap-4"><p className="rounded-xl bg-sand-50 p-4 text-sm text-forest-700">{t("finishHelp")}</p><div className="grid gap-3 sm:grid-cols-2">{group(t("reviewCompleted"),review.completed,"border-leaf-200 bg-leaf-500/5 text-leaf-800")}{group(t("reviewMissing"),review.missing,"border-amber-200 bg-amber-50 text-amber-900")}{group(t("reviewUnsynced"),review.queued,"border-sky-200 bg-sky-50 text-sky-900")}{group(t("reviewProblems"),review.attention,"border-red-200 bg-red-50 text-red-900")}{issueGroup(t("reviewConflicts"),review.conflicts,"border-red-200 bg-red-50 text-red-900")}{issueGroup(t("reviewRejected"),review.rejected,"border-red-200 bg-red-50 text-red-900")}</div>{!online?<p role="alert" className="rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-900">{t("connectToFinish")}</p>:null}<TaskMessage message={message}/><div className="flex flex-wrap justify-end gap-2">{blocked?<button type="button" onClick={onChanged} className={secondaryClass}>{t("refreshReview")}</button>:null}<button disabled={saving||!online||!canFinish||blocked} className={primaryClass}>{saving?t("finishing"):t("finishDay")}</button></div></form>;
+  }
+  if(task.code==="expenses")return <ExpenseEntryForm date={detail.workDate} warehouses={detail.warehouses} initialWarehouse={initialWarehouse} templates={(detail.data.templates??[]) as ExpenseTemplate[]} onSave={async(payload,id)=>{
+    const result=await submit({schema_version:1,command_id:id,type:"record_expense",farm_id:detail.farmId,flock_id:payload.entry_kind==='monthly'?undefined:detail.flockId??undefined,work_date:detail.workDate,payload},t("expenseSaved"),onSaved);
+    return result?.status==='queued'?'queued':result?.status==='applied';
+  }}/>;
+  if(task.code==="stock"&&stockMode==="receipt")return <div className="grid gap-4"><button type="button" className={secondaryClass} onClick={()=>setStockMode('count')}>{t('countStock')}</button><PurchaseEntryForm date={detail.workDate} warehouses={detail.warehouses} inventory={detail.inventory} initialWarehouse={initialWarehouse} onSave={async(payload,id)=>{
+    const result=await submit({schema_version:1,command_id:id,type:"record_stock_receipt",farm_id:detail.farmId,work_date:detail.workDate,payload},t("stockSaved"),onSaved);
+    return result?.status==='queued'?'queued':result?.status==='applied';
+  }}/></div>;
+  if (task.code === "stock") {
+    const countItems = detail.inventory.filter((item) => item.balances.some((balance) => balance.warehouseId === countWarehouse));
+    return <form onSubmit={save} className="grid gap-4"><button type="button" onClick={()=>setStockMode("receipt")} className={secondaryClass}>{t("receiveStock")}</button><div className="grid gap-4"><label className="grid gap-1.5 text-xs font-semibold text-forest-700">{t("warehouse")}<select name="count_warehouse" required value={countWarehouse} onChange={(event) => setCountWarehouse(event.target.value)} className={inputClass}><option value="">{t("choose")}</option>{detail.warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}{dueWarehouses.has(w.id) ? ` · ${t("countDue")}` : ""}</option>)}</select></label><div className="grid gap-3">{countWarehouse ? countItems.map((item) => {const balance = item.balances.find((row) => row.warehouseId === countWarehouse)?.quantity ?? 0; return <Field key={item.id} label={`${item.name} (${item.unit})`} name={`count_${item.id}`} type="number" min="0" step="0.01" required defaultValue={balance}/>;}) : <p className="rounded-xl bg-sand-50 p-4 text-sm text-forest-700">{t("chooseWarehouseToCount")}</p>}</div><Field label={t("notes")} name="notes"/></div><TaskMessage message={message}/><div className="flex justify-end"><button disabled={saving||!countWarehouse||countItems.length===0} className={primaryClass}>{t("saveStockCount")}</button></div></form>;
+  }
+  if(task.code==="sales")return <form onSubmit={save} className="grid gap-4"><div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">{t("category")}<select name="category" value={saleCategory} onChange={event => setSaleCategory(event.target.value)} className={inputClass}><option value="egg">{t("eggs")}</option><option value="bird">{t("birds")}</option><option value="training">{t("training")}</option><option value="equipment_medicine">{t("equipmentMedicine")}</option><option value="consultancy">{t("consultancy")}</option><option value="package">{t("package")}</option></select></label><Field label={t("product")} name="label" required/><Field label={t("quantity")} name="quantity" type="number" min="0.01" step="0.01" required/>{saleCategory === "egg" ? <SelectField label={t("unit")} name="unit" required><option value="">{t("choose")}</option>{rows(detail.data.eggUnits).map(unit => <option key={String(unit.unit)} value={String(unit.unit)}>{String(unit.unit)} · {t("eggsPerUnit", {count: Number(unit.multiplier)})}</option>)}</SelectField> : <Field label={t("unit")} name="unit" required/>}<Field label={t("unitPrice")} name="unit_price" type="number" min="0" step="0.01" required/><Field label={t("paid")} name="paid" type="number" min="0" step="0.01" required/></div>{saleCategory === "egg" ? <fieldset className="grid gap-3"><legend className="mb-2 font-semibold">{t("eggSources")}</legend><p className="text-sm text-forest-600">{t("eggSourcesHelp")}</p>{saleSourceRows.map((row,index) => <div key={row} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]"><SelectField label={t("sourceFlock")} name={`source_flock_${row}`} required defaultValue={detail.flockId ?? undefined}><option value="">{t("choose")}</option>{rows(detail.data.sourceFlocks).map(flock => <option key={String(flock.id)} value={String(flock.id)}>{String(flock.flock_code)}</option>)}</SelectField><Field label={t("sourceEggs")} name={`source_eggs_${row}`} type="number" min="1" step="1" required/>{index > 0 ? <button type="button" className={secondaryClass} onClick={() => setSaleSourceRows(current => current.filter(value => value !== row))}>{t("remove")}</button> : null}</div>)}<button type="button" className={secondaryClass} disabled={saleSourceRows.length >= 100} onClick={() => setSaleSourceRows(current => [...current, Math.max(...current)+1])}><Plus className="h-4 w-4"/>{t("addSourceFlock")}</button></fieldset> : null}<TaskMessage message={message}/><div className="flex justify-end"><button disabled={saving} className={primaryClass}>{t("recordSale")}</button></div></form>;
+  return null;
+}
+
+function AssignedFixes({detail, onChanged, onSaved}: {detail: TodayTaskDetail; onChanged: () => void; onSaved: () => void}) {
+  // Recovered offline Today has no FarmScopeProvider; its authorized workspace is manager-only.
+  const destination = (route: string) => managerDestination(route, {role: "farm_manager", todayWorkspaceEnabled: true, today: historyPeriod(1).to});
+  const t = useTranslations("Today.embedded");
+  const notifications = useTranslations("Notifications");
+  const common = useTranslations("Common");
+  const {saving, message, submit} = useTaskSubmit();
+  const actions = rows(detail.data.actions).map((action): Row => ({...action, source_route: action.source_route ? destination(String(action.source_route)) : null}));
+  async function update(action: Row, eventType: "acknowledged" | "started" | "completion_submitted") {
+    const note = eventType === "completion_submitted" ? window.prompt(t("completionNote"))?.trim() : t(eventType === "acknowledged" ? "acknowledgedNote" : "startedNote");
+    if (!note) return;
+    await submit({schema_version: 1, command_id: crypto.randomUUID(), type: "update_assigned_action", expected_resource_revision: String(action.revision), farm_id: detail.farmId, work_date: detail.workDate, payload: {action_id: String(action.id), event_type: eventType, note}}, t("fixUpdated"), eventType === "completion_submitted" ? onSaved : onChanged);
+  }
+  if (!actions.length) return <p className="rounded-xl bg-leaf-500/10 p-4 text-sm text-leaf-700">{t("noAssignedFixes")}</p>;
+  return <div className="grid gap-3">{actions.map((action) => <article key={String(action.id)} className="rounded-xl border border-sand-200 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h4 className="font-semibold text-forest-900">{String(action.title)}</h4><p className="mt-1 text-sm text-forest-600">{String(action.context)}</p></div><span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">{actionStatuses.includes(action.status as ActionStatus) ? notifications(`status.${action.status as ActionStatus}`) : common("notAvailable")}</span></div><div className="mt-3 flex flex-wrap gap-2"><button disabled={saving} onClick={() => void update(action, "acknowledged")} className={secondaryClass}>{t("acknowledge")}</button><button disabled={saving} onClick={() => void update(action, "started")} className={secondaryClass}>{t("start")}</button><button disabled={saving} onClick={() => void update(action, "completion_submitted")} className={primaryClass}>{t("submitCompletion")}</button>{action.source_route ? <Link href={String(action.source_route)} className={secondaryClass}>{t("openEvidence")}<ExternalLink className="h-4 w-4"/></Link> : null}</div></article>)}<TaskMessage message={message}/></div>;
+}
+
+export function EmbeddedTaskCard({task,flock,farmId,workDate,expanded,onToggle,onChanged,onSaved,dayRevision,reviewTasks,finishIssues,online,canFinish}:{task:TodayTask;flock?:TodayFlockContext;farmId:string;workDate:string;expanded:boolean;onToggle:()=>void;onChanged:()=>void;onSaved:()=>void;dayRevision?:string;reviewTasks?:ReviewTask[];finishIssues?:FinishIssue[];online?:boolean;canFinish?:boolean}){
+  const offline=useTodayOffline();
+  const t=useTranslations("Today");const [detail,setDetail]=useState<TodayTaskDetail|null>(null);const [loading,setLoading]=useState(false);const [loadError,setLoadError]=useState(false);
+  const flockId=["feeding","eggs_water","health_deaths","routine_supplies","scheduled_work"].includes(task.code)?flock?.id:undefined;
+  const readOnly=flock?.canRecord===false&&["feeding","eggs_water","health_deaths","routine_supplies","scheduled_work"].includes(task.code);
+  useEffect(()=>{if(!expanded||readOnly)return;const controller=new AbortController();const params=new URLSearchParams({farm_id:farmId,date:workDate});if(flockId)params.set("flock_id",flockId);const load=async()=>{setLoading(true);setLoadError(false);try{
+    const next=await readPreparedDetail<TodayTaskDetail>(navigator.onLine,()=>fetch(`/api/farm-manager/today/tasks/${task.code}?${params}`,{cache:"no-store",signal:controller.signal}),async()=>offline.runtime?.readDetail({farmId,flockId,workDate},task.code),controller.signal);await offline.runtime?.rememberDetail(next);if(!controller.signal.aborted)setDetail(next);
+  }catch(error:unknown){if(error instanceof DOMException&&error.name==="AbortError")return;setLoadError(true)}finally{if(!controller.signal.aborted)setLoading(false)}};void load();return()=>controller.abort()},[expanded,readOnly,farmId,flockId,task.code,task.resourceRevision,workDate,offline.runtime]);
+  const title=t(({birds:"tasks.birds",feeding:"tasks.feeding",eggs_water:"tasks.eggsWater",health_deaths:"tasks.healthDeaths",routine_supplies:"tasks.supplies",review_finish:"tasks.review",stock:"tasks.stock",sales:"tasks.sales",expenses:"tasks.expenses",assigned_fixes:"tasks.assignedFixes",scheduled_work:"tasks.scheduledWork"} as const)[task.code]);
+  const exampleKey=({birds:"embedded.examples.birds",feeding:"embedded.examples.feeding",eggs_water:"embedded.examples.eggsWater",health_deaths:"embedded.examples.healthDeaths",routine_supplies:"embedded.examples.supplies",review_finish:"embedded.examples.review",stock:"embedded.examples.stock",sales:"embedded.examples.sales",expenses:"embedded.examples.expenses",assigned_fixes:"embedded.examples.assignedFixes",scheduled_work:"embedded.examples.scheduledWork"} as const)[task.code];
+  const summary=useMemo(()=>{
+    if(task.state==="needs_attention") return t("embedded.attentionSummary");
+    if(task.state!=="complete") return t("embedded.readySummary");
+    if(task.code==="feeding"&&flock?.feedActualKg!=null) return t("embedded.feedSummary",{amount:flock.feedActualKg});
+    if(task.code==="eggs_water"&&flock) return t("embedded.eggsWaterSummary",{water:flock.eggsWaterSummary.waterLiters??0,eggs:flock.eggsWaterSummary.totalEggs??0});
+    if(task.code==="health_deaths"&&flock) return flock.healthSummary.confirmedNone?t("embedded.healthNoneSummary"):t("embedded.healthRecordedSummary");
+    if(task.code==="routine_supplies"&&flock) return flock.suppliesSummary.confirmedNone?t("embedded.suppliesNoneSummary"):t("embedded.suppliesRecordedSummary");
+    return t("embedded.completedSummary");
+  },[flock,t,task.code,task.state]);
+  if (readOnly) {
+    return <article id={`today-task-${task.code}`} className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><button type="button" onClick={onToggle} aria-expanded={expanded} className="flex min-h-16 w-full items-center justify-between gap-3 p-4 text-left"><span><span className="font-semibold text-forest-900">{title}</span><span className="mt-1 block text-xs text-forest-600">{summary}</span></span><span className="text-xs text-forest-700">{stateLabel(task,t)}</span></button>{expanded?<p className="border-t border-sand-200 p-4 text-sm text-forest-700">{t("closedFlockReadOnly")}</p>:null}</article>;
+  }
+  return <article id={`today-task-${task.code}`} tabIndex={-1} className="overflow-hidden rounded-2xl border border-sand-200 bg-white shadow-sm"><button type="button" onClick={onToggle} aria-expanded={expanded} className="flex min-h-16 w-full items-center justify-between gap-3 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-forest-700"><span><span className="font-semibold text-forest-900">{title}</span><span className="mt-1 block text-xs text-forest-600">{summary}</span></span><span className="flex items-center gap-2"><span className="rounded-full bg-sand-100 px-2.5 py-1 text-[11px] font-semibold text-forest-700">{stateLabel(task,t)}</span>{expanded?<ChevronUp className="h-5 w-5"/>:<ChevronDown className="h-5 w-5"/>}</span></button>{expanded?<div className="border-t border-sand-200 p-4">{loading?<p role="status" className="py-6 text-sm text-forest-600">{t("loading")}</p>:loadError?<div role="alert" className="flex items-center gap-2 rounded-xl bg-red-50 p-4 text-sm text-red-800"><AlertCircle className="h-4 w-4"/>{t("loadFailed")}</div>:detail?<TaskDraftScope key={`${farmId}:${flockId??"farm"}:${workDate}:${task.code}`} selection={{farmId,flockId:["stock","sales","expenses","review_finish","assigned_fixes"].includes(task.code)?undefined:flockId,workDate}} task={task.code} revision={detail.resourceRevision??task.sourceFingerprint??undefined}><div className="grid gap-4"><p className="rounded-xl bg-sand-50 p-3 text-sm text-forest-600">{t(exampleKey)}</p>{task.code==="feeding"&&flock?<FeedingForm key={detail.resourceRevision??"new"} detail={detail} flock={flock} onChanged={onChanged} onSaved={onSaved}/>:null}{task.code==="eggs_water"&&flock?<EggsWaterForm detail={detail} flock={flock} onSaved={onSaved}/>:null}{task.code==="health_deaths"&&flock?<HealthTaskForm detail={detail} flock={flock} onChanged={onChanged} onSaved={onSaved}/>:null}{task.code==="routine_supplies"&&flock?<SuppliesForm detail={detail} flock={flock} task={task} onSaved={onSaved}/>:null}{["stock","sales","expenses","review_finish"].includes(task.code)?<SimpleFarmForm detail={detail} task={task} onChanged={onChanged} onSaved={onSaved} dayRevision={dayRevision} reviewTasks={reviewTasks} finishIssues={finishIssues} online={online} canFinish={canFinish}/>:null}{task.code==="scheduled_work"?<ScheduledWorkForm detail={detail} onSaved={onChanged}/>:null}{task.code==="assigned_fixes"?<AssignedFixes detail={detail} onChanged={onChanged} onSaved={onSaved}/>:null}</div></TaskDraftScope>:null}</div>:null}</article>;
+}

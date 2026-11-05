@@ -3,6 +3,8 @@ import { NextRequest } from "next/server";
 
 import { calculateProduction, previousPeriod, round, summarizeSales, type ExecutiveDailyRow } from "@/lib/executive-dashboard";
 import { getAccessContext,isAccessResponse } from "@/lib/access-context";
+import {projectEggSales} from "@/lib/egg-sale-sources";
+import type {DailySalesRecord} from "@/lib/sales";
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "https://unconfigured.invalid",
@@ -48,8 +50,8 @@ export async function GET(request: NextRequest) {
       allRows<ExecutiveDailyRow>((a,b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", profile.org_id).is("voided_at",null).gte("record_date",previous.dateFrom).lte("record_date",previous.dateTo).range(a,b)),
       allRows<ExecutiveDailyRow>((a,b) => admin.from("daily_farm_records").select("record_date,flock_id,opening_birds,closing_birds,deaths,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", profile.org_id).is("voided_at",null).eq("record_date",today).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("feed_day_closures").select("flock_id,batch_id,record_date,status").eq("org_id", profile.org_id).eq("record_date",today).range(a,b)),
-      allRows<Record<string, unknown>>((a,b) => admin.from("daily_sales_records").select("sale_date,gross_amount,paid_amount,balance_due,product_category,branch_id,farm_id,house_id,flock_id,batch_id").eq("org_id", profile.org_id).is("voided_at",null).gte("sale_date",dateFrom).lte("sale_date",dateTo).range(a,b)),
-      allRows<Record<string, unknown>>((a,b) => admin.from("daily_sales_records").select("sale_date,gross_amount,paid_amount,balance_due,product_category,branch_id,farm_id,house_id,flock_id,batch_id").eq("org_id", profile.org_id).is("voided_at",null).gte("sale_date",previous.dateFrom).lte("sale_date",previous.dateTo).range(a,b)),
+      allRows<DailySalesRecord>((a,b) => admin.from("daily_sales_records").select("*").eq("org_id", profile.org_id).is("voided_at",null).gte("sale_date",dateFrom).lte("sale_date",dateTo).range(a,b)),
+      allRows<DailySalesRecord>((a,b) => admin.from("daily_sales_records").select("*").eq("org_id", profile.org_id).is("voided_at",null).gte("sale_date",previous.dateFrom).lte("sale_date",previous.dateTo).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("stock_ledger").select("item_id,quantity,transaction_type,unit_cost,transaction_date,branch_id,farm_id,house_id,flock_id,batch_id,expiry_date").eq("org_id",profile.org_id).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("inventory_items").select("id,name,category,reorder_level,unit").eq("org_id",profile.org_id).range(a,b)),
       allRows<Record<string, unknown>>((a,b) => admin.from("cost_entries").select("amount,entry_date,branch_id,farm_id,house_id,flock_id,batch_id").eq("org_id",profile.org_id).gte("entry_date",dateFrom).lte("entry_date",dateTo).range(a,b)),
@@ -70,8 +72,8 @@ export async function GET(request: NextRequest) {
     const comparisonDaily = priorDaily.filter(row => flockIds.has(row.flock_id));
     const production = calculateProduction(currentDaily);
     const priorProduction = calculateProduction(comparisonDaily);
-    const scopedSales = sales.filter(row => matches(row as never, scope));
-    const scopedPriorSales = priorSales.filter(row => matches(row as never, scope));
+    const scopedSales = projectEggSales(sales).filter(row => matches(row as never, scope));
+    const scopedPriorSales = projectEggSales(priorSales).filter(row => matches(row as never, scope));
     const financials = summarizeSales(scopedSales as never);
     const priorFinancials = summarizeSales(scopedPriorSales as never);
     const scopedStock = stock.filter(row => matches(row as never, scope));

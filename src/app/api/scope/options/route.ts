@@ -13,9 +13,22 @@ const supabaseAdmin = createClient(
   }
 );
 
+function privateJson(body: unknown, status = 200) {
+  return Response.json(body, {
+    status,
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
+function privateAccessResponse(response: Response) {
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "private, no-store");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 export async function GET() {
   try {
-    const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return access;const orgId=access.orgId;
+    const access=await getAccessContext({tenant:true});if(isAccessResponse(access))return privateAccessResponse(access);const orgId=access.orgId;
     const now = new Date().toISOString();
     let allowedFarmIds: string[] | null = null;
 
@@ -28,7 +41,7 @@ export async function GET() {
         .is("revoked_at", null)
         .lte("starts_at", now)
         .or(`expires_at.is.null,expires_at.gt.${now}`);
-      if (assignmentError) return new Response(JSON.stringify({ error: assignmentError.message }), { status: 500 });
+      if (assignmentError) return privateJson({ error: assignmentError.message }, 500);
       allowedFarmIds = (assignments ?? []).map((row) => String(row.farm_id));
     }
 
@@ -57,27 +70,26 @@ export async function GET() {
 
     const firstError = farmsRes.error ?? housesRes.error ?? flocksRes.error ?? batchesRes.error;
     if (firstError) {
-      return new Response(JSON.stringify({ error: firstError.message }), { status: 500 });
+      return privateJson({ error: firstError.message }, 500);
     }
 
     const branchIds = Array.from(new Set((farmsRes.data ?? []).map((farm) => farm.branch_id).filter(Boolean)));
     const branchesRes = branchIds.length
       ? await supabaseAdmin.from("branches").select("id, name").eq("org_id", orgId).in("id", branchIds).order("name")
       : { data: [], error: null };
-    if (branchesRes.error) return new Response(JSON.stringify({ error: branchesRes.error.message }), { status: 500 });
+    if (branchesRes.error) return privateJson({ error: branchesRes.error.message }, 500);
 
-    return new Response(
-      JSON.stringify({
+    return privateJson(
+      {
         branches: branchesRes.data ?? [],
         farms: farmsRes.data ?? [],
         houses: housesRes.data ?? [],
         flocks: flocksRes.data ?? [],
         batches: batchesRes.data ?? [],
-      }),
-      { status: 200 }
+      }
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: message }), { status: 500 });
+    return privateJson({ error: message }, 500);
   }
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import en from "../messages/en.json" with {type: "json"};
 
 const migration = await readFile(new URL("../supabase/migrations/20260814000000_governed_warehouse_setup.sql", import.meta.url), "utf8");
 const management = await readFile(new URL("../src/lib/warehouse-management.ts", import.meta.url), "utf8");
@@ -31,10 +32,24 @@ test("CEO setup can assign an active farm manager and emits an audit event", () 
 });
 
 test("inventory presents warehouse-specific balances and setup", () => {
-  assert.match(page, /Working warehouse/);
-  assert.match(page, /Enter everything currently on the shelf/);
-  assert.match(page, /create and assign a warehouse/i);
+  assert.equal(en.Inventory.selector.warehouse, "Working warehouse");
+  assert.equal(en.Inventory.opening.title, "Enter everything currently on the shelf");
+  assert.match(en.Inventory.noWarehouse.copy, /create and assign a warehouse/i);
+  assert.match(page, /t\("selector\.warehouse"\)/);
+  assert.match(page, /t\("opening\.title"\)/);
+  assert.match(page, /t\("noWarehouse\.copy"\)/);
   assert.match(page,/usePageFilter<string>\("warehouseId", ""\)/);
+});
+
+test("CEO can create the first or another warehouse from Inventory", () => {
+  assert.equal(en.Inventory.warehouseSetup.title, "Create a warehouse");
+  assert.match(page, /data\?\.meta\.canManage&&warehouseSetupOptions/);
+  assert.match(page, /jsonRequest\("\/api\/inventory\/warehouses",\{method:"POST"/);
+  assert.match(page, /name="branchId"/);
+  assert.match(page, /name="farmId"/);
+  assert.match(page, /name="managerId"/);
+  assert.match(page, /result\.warehouse\.id/);
+  assert.doesNotMatch(page, /noWarehouse\.action/);
 });
 
 test("CEO can discover the access page and load assignable farm managers through the governed API", () => {
@@ -46,7 +61,7 @@ test("CEO can discover the access page and load assignable farm managers through
   assert.match(usersPage, /profile\.role==="farm_manager"&&profile\.is_active/);
   assert.match(usersPage, /now has active access to/);
   assert.match(usersPage, /if \(!response\.ok\)[\s\S]*setError[\s\S]*return/);
-  assert.match(assignmentsRoute, /assignment_status:"Active"/);
+  assert.match(assignmentsRoute, /assignment_status:Date\.parse\(startsAt\)>Date\.now\(\)\?"Scheduled":"Active"/);
   assert.match(assignmentsRoute, /Access can only be granted to an active warehouse/);
   assert.doesNotMatch(usersPage, /\.from\("profiles"\)/);
 });

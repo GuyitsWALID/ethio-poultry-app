@@ -1,3 +1,4 @@
+import {warehouseAssignmentScope} from "@/lib/warehouse-access";
 import {accessJson,getAccessContext,governanceAdmin,isAccessResponse} from "@/lib/access-context";
 import {auditChanges,describeAuditEvent} from "@/lib/audit-ledger-contract";
 
@@ -26,7 +27,7 @@ export async function GET(request:Request){
     const now=new Date().toISOString();
     const [farmAccess,warehouseAccess]=await Promise.all([
       governanceAdmin.from("user_farm_access").select("farm_id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`),
-      governanceAdmin.from("user_warehouse_access").select("warehouse_id").eq("org_id",ctx.orgId).eq("profile_id",ctx.userId).is("revoked_at",null).lte("starts_at",now).or(`expires_at.is.null,expires_at.gt.${now}`),
+      warehouseAssignmentScope(ctx),
     ]);
     const scope=[`actor_id.eq.${ctx.userId}`];
     const farms=(farmAccess.data??[]).map(row=>String(row.farm_id));

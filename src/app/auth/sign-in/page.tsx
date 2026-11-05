@@ -12,11 +12,11 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { normalizeRole, routeForRole } from "@/lib/roles";
 import { createClient } from "@/utils/supabase/client";
+import {retainOfflineIdentity} from "@/lib/today-workspace/offline-store";
 
 const workdaySteps = [
   { icon: Building2, label: "Assigned operation", detail: "See only the farms and stores you manage" },
@@ -25,10 +25,18 @@ const workdaySteps = [
 ];
 
 export default function SignInPage() {
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const destinationForRole = async (role: ReturnType<typeof normalizeRole>) => {
+    const response = await fetch("/api/me/context", {cache: "no-store"});
+    if (!response.ok) throw Error("Your workspace could not be confirmed. Reconnect and try again.");
+    const context = await response.json();
+    await retainOfflineIdentity(context.role==="farm_manager"?{tenantId:context.orgId,userId:context.userId}:null);
+    if (role !== "farm_manager") return routeForRole(role);
+    return context?.todayWorkspaceEnabled ? "/app/today" : routeForRole(role);
+  };
 
   useEffect(() => {
     const checkSession = async () => {
@@ -38,6 +46,7 @@ export default function SignInPage() {
       } = await supabase.auth.getUser();
 
       if (!user) return;
+      await retainOfflineIdentity({userId:user.id});
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -46,11 +55,11 @@ export default function SignInPage() {
         .maybeSingle();
 
       const resolvedRole = profile?.role ?? user.app_metadata?.role ?? user.user_metadata?.role;
-      router.replace(routeForRole(normalizeRole(resolvedRole)));
+      window.location.replace(await destinationForRole(normalizeRole(resolvedRole)));
     };
 
-    void checkSession();
-  }, [router]);
+    void checkSession().catch(()=>setError("Your workspace could not be confirmed. Reconnect and try again."));
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -79,6 +88,8 @@ export default function SignInPage() {
       setIsLoading(false);
       return;
     }
+    try{await retainOfflineIdentity({userId:user.id});}
+    catch{setError("Your saved work could not be secured. Close other app tabs and try again.");setIsLoading(false);return;}
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -96,7 +107,8 @@ export default function SignInPage() {
       return;
     }
 
-    router.replace(routeForRole(normalizedRole));
+    try{window.location.replace(await destinationForRole(normalizedRole));}
+    catch{setError("Your saved work could not be secured. Close other app tabs and try again.");setIsLoading(false);}
   };
 
   return (

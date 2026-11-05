@@ -66,6 +66,12 @@ export function validateEnvironment(env = process.env) {
   if (cloudflareBuild && environment === "local") {
     errors.push("APP_ENVIRONMENT must be explicitly set for a Cloudflare build.");
   }
+  if (cloudflareBuild && environment === "staging" && env.WORKERS_CI_BRANCH !== "notmain") {
+    errors.push("Cloudflare staging deployments must be built from the notmain branch.");
+  }
+  if (cloudflareBuild && environment === "production" && env.WORKERS_CI_BRANCH !== "master") {
+    errors.push("Cloudflare production deployments must be built from the master branch.");
+  }
   if (reconciliationAi && !["true", "false"].includes(reconciliationAi)) {
     errors.push("RECONCILIATION_AI_ENABLED must be true or false when set.");
   }

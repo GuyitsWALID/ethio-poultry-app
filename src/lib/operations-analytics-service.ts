@@ -1,4 +1,5 @@
 import "server-only";
+import type {ReportReadSession} from "@/lib/report-read-session.server";
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -15,17 +16,23 @@ import {
   previousPeriod,
   round,
   summarizePeriod,
+  type AnalyticsText,
   type AnalyticsDailyRow,
   type AnalyticsFlock,
   type OperationsAnalyticsResponse,
   type PeriodSummary,
 } from "@/lib/operational-analytics";
 import type { AccessContext } from "@/lib/access-context";
+import {effectiveWarehouseIds} from "@/lib/warehouse-access";
+import {reportConsumptionCost, reportOperatingDate, reportWarehouseAllowed, validReportDate} from "@/lib/report-safety";
+import {selectEvidenceScope, ReportEvidenceError} from "@/lib/report-evidence";
+import {reportResources, type ReportResources} from "@/lib/report-snapshot";
+import {projectLocationFlocks, reportRowInLocations, selectReportLocations, type ReportLocation} from "@/lib/report-locations";
 
 type DbError = { message: string } | null;
 type Row = Record<string, unknown>;
 
-const json = (value: unknown, status = 200) => Response.json(value, { status });
+const json = (value: unknown, status = 200) => Response.json(value, { status, headers: {"Cache-Control": "private, no-store"} });
 
 async function allRows<T>(load: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: DbError }>) {
   const rows: T[] = [];
@@ -34,6 +41,7 @@ async function allRows<T>(load: (from: number, to: number) => PromiseLike<{ data
     if (error) throw new Error(error.message);
     const page = data ?? [];
     rows.push(...page);
+    if (rows.length > 100000) throw new Error("REPORT_TOO_LARGE");
     if (page.length < 1000) return rows;
   }
 }
@@ -47,10 +55,6 @@ function addisDate(now = new Date()) {
   }).formatToParts(now);
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
-}
-
-function validDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime());
 }
 
 function emptyPeriod(expectedRecords = 0): PeriodSummary {
@@ -81,7 +85,8 @@ function emptyResponse(input: {
   previousTo: string;
   days: number;
   scopeLabel: string;
-}): OperationsAnalyticsResponse {
+}, translate?: AnalyticsText): OperationsAnalyticsResponse {
+  const say = (key: string, fallback: string, values?: Record<string, string | number>) => translate?.(key, values) ?? fallback;
   const current = emptyPeriod();
   const previous = emptyPeriod();
   return {
@@ -106,14 +111,14 @@ function emptyResponse(input: {
         feedKg: compareMetric(null, null),
       },
     },
-    targets: { hdep: null, hdepLower: null, feedPerBirdGrams: null, feedLower: null, feedUpper: null, mortalityPct: null, mortalityPer1000BirdDays: null, coveragePct: 0, hdepCoveragePct: 0, feedCoveragePct: 0, mortalityCoveragePct: 0, sourceLabel: "Breed/week standards unavailable" },
+    targets: { hdep: null, hdepLower: null, feedPerBirdGrams: null, feedLower: null, feedUpper: null, mortalityPct: null, mortalityPer1000BirdDays: null, coveragePct: 0, hdepCoveragePct: 0, feedCoveragePct: 0, mortalityCoveragePct: 0, sourceLabel: say("standardsUnavailable", "Breed/week standards unavailable") },
     trends: [],
     flocks: [],
     farms: [],
     breakdowns: { eggQuality: [], mortalityCauses: [], feedTypes: [] },
     economics: { feedCost: null, feedCostPerEgg: null, feedCostPerBirdDay: null, lowStockCount: 0, confidence: "unavailable" },
-    insights: [{ id: "no-flocks", severity: "info", title: "No active flocks in this scope", detail: "Choose another scope or activate a flock before running operational comparisons.", route: "/app/flocks" }],
-    dataTrust: { recordCoveragePct: null, targetCoveragePct: 0, feedDataCoveragePct: null, mortalityCauseCoveragePct: null, latestRecordAt: null, notes: ["No active flocks are available for this analysis."] },
+    insights: [{ id: "no-flocks", severity: "info", title: say("noFlocksTitle", "No active flocks in this scope"), detail: say("noFlocksDetail", "Choose another scope or activate a flock before running operational comparisons."), route: "/app/flocks" }],
+    dataTrust: { recordCoveragePct: null, targetCoveragePct: 0, feedDataCoveragePct: null, mortalityCauseCoveragePct: null, latestRecordAt: null, notes: [say("noFlocksNote", "No active flocks are available for this analysis.")] },
     recentRecords: [],
   };
 }
@@ -128,26 +133,30 @@ function flockType(value: unknown): FlockType {
   return ["layer", "parent_stock", "broiler", "rearing"].includes(String(value)) ? String(value) as FlockType : "rearing";
 }
 
-export async function loadOperationsAnalytics(access: AccessContext, params: URLSearchParams) {
+export async function loadOperationsAnalytics(access: AccessContext, params: URLSearchParams, captureResources?: (resources: ReportResources) => void, reads?: ReportReadSession, translate?: AnalyticsText) {
+  const say = (key: string, fallback: string, values?: Record<string, string | number>) => translate?.(key, values) ?? fallback;
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !serviceKey) return json({ error: "Supabase server configuration is missing." }, 500);
+    if (!supabaseUrl || !serviceKey) return json({ error: say("configuration", "Supabase server configuration is missing.") }, 500);
     const db = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
 
-    const role=access.role;if(role!=="ceo"&&role!=="farm_manager"&&!access.supportSessionId)return json({error:"Management analytics access required."},403);const orgId=access.orgId;const user={id:access.userId};
+    const role=access.role;if(role!=="ceo"&&role!=="farm_manager"&&!access.supportSessionId)return json({error:say("access", "Management analytics access required.")},403);const orgId=access.orgId;const user={id:access.userId};
 
     const dateTo = params.get("date_to") || addisDate();
+    if(!validReportDate(dateTo))return json({error:say("finalDate", "Choose a valid final report date.")},400);
     const dateFrom = params.get("date_from") || addDays(dateTo, -29);
-    if (!validDate(dateFrom) || !validDate(dateTo) || dateFrom > dateTo) return json({ error: "Choose a valid date range." }, 400);
+    if (!validReportDate(dateFrom) || !validReportDate(dateTo) || dateFrom > dateTo) return json({ error: say("dateRange", "Choose a valid date range.") }, 400);
     const prior = previousPeriod(dateFrom, dateTo);
-    if (prior.days > 366) return json({ error: "Analytics ranges are limited to 366 days." }, 400);
+    reads?.assert(access, {dateFrom, dateTo, branchId: params.get("branch_id") ?? undefined, farmId: params.get("farm_id") ?? undefined, houseId: params.get("house_id") ?? undefined, flockId: params.get("flock_id") ?? undefined, batchId: params.get("batch_id") ?? undefined});
+    if (prior.days > 366) return json({ error: say("rangeLimit", "Analytics ranges are limited to 366 days.") }, 400);
+    const warehouseIds = role === "farm_manager" && !access.supportSessionId ? new Set(reads ? (await reads.rows("warehouseAccess")).map(row => String(row.id)) : await effectiveWarehouseIds(access)) : null;
 
     const [farms, houses, flockRows, farmAccess] = await Promise.all([
-      allRows<Row>((from, to) => db.from("farms").select("id,name,branch_id").eq("org_id", orgId).range(from, to)),
-      allRows<Row>((from, to) => db.from("houses").select("id,name,farm_id").eq("org_id", orgId).range(from, to)),
-      allRows<Row>((from, to) => db.from("flocks").select("id,flock_code,flock_type,farm_id,house_id,batch_id,current_count,status,placement_date,age_at_placement_days,breed_id").eq("org_id", orgId).range(from, to)),
-      role === "farm_manager" ? allRows<{ farm_id: string }>((from, to) => db.from("user_farm_access").select("farm_id").eq("profile_id", user.id).is("revoked_at",null).lte("starts_at",new Date().toISOString()).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).range(from, to)) : Promise.resolve([]),
+      (reads ? reads.rows<Row>("farms") : allRows<Row>((from, to) => db.from("farms").select("id,org_id,name,branch_id").eq("org_id", orgId).order("id").range(from, to))),
+      (reads ? reads.rows<Row>("houses") : allRows<Row>((from, to) => db.from("houses").select("id,org_id,name,farm_id").eq("org_id", orgId).order("id").range(from, to))),
+      (reads ? reads.rows<Row>("flocks") : allRows<Row>((from, to) => db.from("flocks").select("id,org_id,flock_code,flock_type,farm_id,house_id,batch_id,current_count,status,placement_date,age_at_placement_days,breed_id").eq("org_id", orgId).order("id").range(from, to))),
+      role === "farm_manager" ? reads ? reads.rows<{farm_id: string}>("farmAccess") : allRows<{ farm_id: string }>((from, to) => db.from("user_farm_access").select("farm_id").eq("org_id", orgId).eq("profile_id", user.id).is("revoked_at",null).lte("starts_at",new Date().toISOString()).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).order("id").range(from, to)) : Promise.resolve([]),
     ]);
 
     const allFarmIds = new Set(farms.map((farm) => String(farm.id)));
@@ -159,61 +168,89 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
     const requestedHouse = params.get("house_id") ?? "";
     const requestedFlock = params.get("flock_id") ?? "";
     const requestedBatch = params.get("batch_id") ?? "";
-    if (requestedFarm && !permittedFarmIds.has(requestedFarm)) return json({ error: "The selected farm is outside your assigned scope." }, 403);
+    if (requestedFarm && !permittedFarmIds.has(requestedFarm)) return json({ error: say("outsideFarm", "The selected farm is outside your assigned scope.") }, 403);
+    const batches = requestedBatch ? reads ? (await reads.rows<Row>("batches")).filter(row => row.id === requestedBatch) : await allRows<Row>((from, to) => db.from("batches").select("id,org_id,farm_id,house_id").eq("org_id", orgId).eq("id", requestedBatch).order("id").range(from, to)) : undefined;
+    const locations = reads ? await reads.rows<ReportLocation>("locations") : await allRows<ReportLocation>((from,to) => db.rpc("report_flock_locations", {p_org: orgId}).order("flock_id").order("from_at").order("house_id").range(from,to));
+    const filter = {branchId: requestedBranch, farmId: requestedFarm, houseId: requestedHouse, flockId: requestedFlock, batchId: requestedBatch};
+    const authorizedFarms = farms.filter(row => permittedFarmIds.has(String(row.id)));
+    const selectedLocations = selectReportLocations(locations, flockRows, authorizedFarms, filter);
+    const selectedScope = selectEvidenceScope(orgId, role === "farm_manager", authorizedFarms, projectLocationFlocks(flockRows, selectReportLocations(locations.filter(row=>row.verified),flockRows,authorizedFarms,{})),
+      {dateFrom, dateTo, branchId: requestedBranch, farmId: requestedFarm, houseId: requestedHouse, flockId: requestedFlock, batchId: requestedBatch}, {houses, batches});
 
     const farmById = new Map(farms.map((farm) => [String(farm.id), farm]));
     const houseById = new Map(houses.map((house) => [String(house.id), house]));
+    const [clearances, closures] = await Promise.all([
+      (reads ? reads.rows<Row>("effective_cycle_clearances") : allRows<Row>((from, to) => db.from("effective_cycle_clearances").select("flock_id,closure_id").eq("org_id", orgId).order("flock_id").range(from, to))),
+      (reads ? reads.rows<Row>("batch_cycle_closures") : allRows<Row>((from, to) => db.from("batch_cycle_closures").select("id,completed_at").eq("org_id", orgId).order("id").range(from, to))),
+    ]);
+    const closureById = new Map(closures.map(row => [String(row.id), reportOperatingDate(String(row.completed_at))]));
+    const completionByFlock = new Map(clearances.map(row => [String(row.flock_id), closureById.get(String(row.closure_id)) ?? null]));
     const scopedFlocks: AnalyticsFlock[] = flockRows.filter((row) => {
-      const farm = farmById.get(String(row.farm_id));
-      if (!farm || String(row.status) !== "active" || !permittedFarmIds.has(String(row.farm_id))) return false;
-      if (requestedBranch && String(farm.branch_id) !== requestedBranch) return false;
-      if (requestedFarm && String(row.farm_id) !== requestedFarm) return false;
-      if (requestedHouse && String(row.house_id) !== requestedHouse) return false;
+      if (!selectedLocations.some(location => location.flock_id === row.id && location.from_date <= dateTo && (!location.to_date || location.to_date >= prior.previousFrom)) || String(row.placement_date) > dateTo) return false;
+      const completion = completionByFlock.get(String(row.id));
+      if (completion && completion < prior.previousFrom) return false;
       if (requestedFlock && String(row.id) !== requestedFlock) return false;
       if (requestedBatch && String(row.batch_id ?? "") !== requestedBatch) return false;
       return true;
-    }).map((row) => ({
+    }).map((row) => {
+      const periods = selectedLocations.filter(location => location.flock_id === row.id);
+      const location = periods.at(-1)!;
+      return ({
       id: String(row.id),
       code: String(row.flock_code),
       type: flockType(row.flock_type),
-      farmId: String(row.farm_id),
-      farmName: String(farmById.get(String(row.farm_id))?.name ?? "Unknown farm"),
-      houseId: String(row.house_id),
-      houseName: String(houseById.get(String(row.house_id))?.name ?? "Unknown house"),
+      farmId: location.farm_id,
+      farmName: String(farmById.get(location.farm_id)?.name ?? say("unknownFarm", "Unknown farm")),
+      houseId: location.house_id,
+      houseName: String(houseById.get(location.house_id)?.name ?? say("unknownHouse", "Unknown house")),
       placementDate: String(row.placement_date),
+      completionDate: completionByFlock.get(String(row.id)) ?? null,
+      scopePeriods: periods.map(period => ({from: period.from_date, to: period.to_date})),
       ageAtPlacementDays: row.age_at_placement_days === null ? null : Number(row.age_at_placement_days),
-      currentBirds: Number(row.current_count ?? 0),
+      currentBirds: completionByFlock.has(String(row.id)) || row.house_id !== location.house_id ? 0 : Number(row.current_count ?? 0),
       breedId: row.breed_id ? String(row.breed_id) : null,
-    }));
+    });});
 
-    const selectedFarmIds = new Set(scopedFlocks.map((flock) => flock.farmId));
+    const selectedFarmIds = new Set(selectedLocations.filter(location => scopedFlocks.some(flock => flock.id === location.flock_id)).map(location => location.farm_id));
     const scopeLabel = requestedFlock
-      ? scopedFlocks[0]?.code ?? "Selected flock"
+      ? scopedFlocks[0]?.code ?? say("selectedFlock", "Selected flock")
       : requestedFarm
-        ? String(farmById.get(requestedFarm)?.name ?? "Selected farm")
+        ? String(farmById.get(requestedFarm)?.name ?? say("selectedFarm", "Selected farm"))
         : selectedFarmIds.size === 1
-          ? String(farmById.get([...selectedFarmIds][0])?.name ?? "Assigned farm")
-          : `${selectedFarmIds.size} farms`;
-    if (!scopedFlocks.length) return json(emptyResponse({ dateFrom, dateTo, previousFrom: prior.previousFrom, previousTo: prior.previousTo, days: prior.days, scopeLabel }));
+          ? String(farmById.get([...selectedFarmIds][0])?.name ?? say("assignedFarm", "Assigned farm"))
+          : say("farms", `${selectedFarmIds.size} farms`, {count: selectedFarmIds.size});
+    if (!scopedFlocks.length) {
+      captureResources?.(reportResources(selectedScope.farmIds, []));
+      return json(emptyResponse({ dateFrom, dateTo, previousFrom: prior.previousFrom, previousTo: prior.previousTo, days: prior.days, scopeLabel }, translate));
+    }
 
     const flockIds = scopedFlocks.map((flock) => flock.id);
+    const unverifiedArchives = flockRows.filter(row => flockIds.includes(String(row.id)) && !["active", "quarantined"].includes(String(row.status)) && !completionByFlock.get(String(row.id)));
     const breedIds = [...new Set(scopedFlocks.map((flock) => flock.breedId).filter((value): value is string => Boolean(value)))];
-    const [allDailyRows, weightRows, standardRows, settingsResult, inventoryRows, stockRows] = await Promise.all([
-      allRows<AnalyticsDailyRow>((from, to) => db.from("daily_farm_records").select("id,record_date,flock_id,opening_birds,closing_birds,deaths,deaths_cause,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_type,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", orgId).is("voided_at",null).in("flock_id", flockIds).gte("record_date", prior.previousFrom).lte("record_date", dateTo).order("record_date").range(from, to)),
-      allRows<Row>((from, to) => db.from("weight_records").select("flock_id,record_date,average_weight_g,uniformity_pct").eq("org_id", orgId).in("flock_id", flockIds).lte("record_date", dateTo).order("record_date", { ascending: false }).range(from, to)),
-      breedIds.length ? allRows<Row>((from, to) => db.from("breed_standards").select("breed_id,week_number,target_hdep_pct,target_mortality_pct,target_feed_g,target_weight_g,breeds(name,breeder)").eq("org_id", orgId).in("breed_id", breedIds).range(from, to)) : Promise.resolve([]),
+    const [allDailyRows, weightRows, standardRows, settingsResult, inventoryRows, stockRows, warehouseRows] = await Promise.all([
+      (reads ? reads.rows<AnalyticsDailyRow>("daily_farm_records").then(rows => rows.filter(row => flockIds.includes(row.flock_id))) : allRows<AnalyticsDailyRow>((from, to) => db.from("daily_farm_records").select("id,record_date,flock_id,opening_birds,closing_birds,deaths,culls,deaths_cause,total_eggs,normal_eggs,broken_eggs,dirty_eggs,feed_intake_grams,feed_type,feed_leftover_grams,average_egg_weight_g,water_consumed_liters,updated_at").eq("org_id", orgId).is("voided_at",null).in("flock_id", flockIds).gte("record_date", prior.previousFrom).lte("record_date", dateTo).order("record_date").order("id").range(from, to))),
+      (reads ? reads.rows<Row>("weight_records").then(rows => rows.filter(row => flockIds.includes(String(row.flock_id)))) : allRows<Row>((from, to) => db.from("weight_records").select("flock_id,record_date,average_weight_g,uniformity_pct").eq("org_id", orgId).in("flock_id", flockIds).lte("record_date", dateTo).order("record_date", { ascending: false }).order("id").range(from, to))),
+      breedIds.length ? allRows<Row>((from, to) => db.from("breed_standards").select("breed_id,week_number,target_hdep_pct,target_mortality_pct,target_feed_g,target_weight_g,breeds(name,breeder)").eq("org_id", orgId).in("breed_id", breedIds).order("id").range(from, to)) : Promise.resolve([]),
       db.from("feed_control_settings").select("warning_variance_pct,critical_variance_pct").eq("org_id", orgId).maybeSingle(),
-      allRows<Row>((from, to) => db.from("inventory_items").select("id,name,category,reorder_level,unit").eq("org_id", orgId).range(from, to)),
-      allRows<Row>((from, to) => db.from("stock_ledger").select("item_id,quantity,transaction_type,unit_cost,transaction_date,branch_id,farm_id,flock_id").eq("org_id", orgId).range(from, to)),
+      (reads ? reads.rows<Row>("inventory_items") : allRows<Row>((from, to) => db.from("inventory_items").select("id,name,category,reorder_level,unit").eq("org_id", orgId).order("id").range(from, to))),
+      (reads ? reads.rows<Row>("stock_ledger") : allRows<Row>((from, to) => db.from("stock_ledger").select("item_id,quantity,transaction_type,unit_cost,transaction_date,branch_id,farm_id,flock_id,warehouse_id").eq("org_id", orgId).order("id").range(from, to))),
+      (reads ? reads.rows<Row>("warehouses") : allRows<Row>((from,to)=>db.from("warehouses").select("id,farm_id,branch_id,status").eq("org_id",orgId).order("id").range(from,to))),
     ]);
 
-    const currentRows = allDailyRows.filter((row) => row.record_date >= dateFrom && row.record_date <= dateTo);
-    const previousRows = allDailyRows.filter((row) => row.record_date >= prior.previousFrom && row.record_date <= prior.previousTo);
+    const lifecycleByFlock = new Map(scopedFlocks.map(flock => [flock.id, flock]));
+    for (const row of allDailyRows) {
+      const flock = lifecycleByFlock.get(row.flock_id)!;
+      if (row.record_date < flock.placementDate || flock.completionDate && row.record_date > flock.completionDate) throw new ReportEvidenceError("REPORT_LIFECYCLE_EVIDENCE_CONFLICT", 409);
+    }
+    const currentRows = allDailyRows.filter((row) => reportRowInLocations(row,selectedLocations) && row.record_date >= dateFrom && row.record_date <= dateTo);
+    const previousRows = allDailyRows.filter((row) => reportRowInLocations(row,selectedLocations) && row.record_date >= prior.previousFrom && row.record_date <= prior.previousTo);
     const layerIds = new Set(scopedFlocks.filter((flock) => flock.type === "layer" || flock.type === "parent_stock").map((flock) => flock.id));
     const currentExpected = expectedRecordsForPeriod(scopedFlocks, dateFrom, dateTo);
     const previousExpected = expectedRecordsForPeriod(scopedFlocks, prior.previousFrom, prior.previousTo);
     const current = summarizePeriod(currentRows, layerIds, currentExpected);
     const previous = summarizePeriod(previousRows, layerIds, previousExpected);
+    // Legacy archives without verified completion have unknown expected coverage.
+    if (unverifiedArchives.length) { current.recordCoveragePct = null; previous.recordCoveragePct = null; }
 
     const standardsByBreed = new Map<string, BreedTarget[]>();
     for (const row of standardRows) {
@@ -230,6 +267,7 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
     }
     const weightsByFlock = new Map<string, WeightSample[]>();
     for (const row of weightRows) {
+      if (!reportRowInLocations(row,selectedLocations)) continue;
       const flockId = String(row.flock_id);
       weightsByFlock.set(flockId, [...(weightsByFlock.get(flockId) ?? []), {
         record_date: String(row.record_date),
@@ -250,7 +288,13 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
       dateTo,
       warningVariancePct,
       criticalVariancePct,
+      translate,
     })).sort((a, b) => b.attentionScore - a.attentionScore || a.code.localeCompare(b.code));
+    for (const flock of flockAnalytics) if (unverifiedArchives.some(row => row.id === flock.id)) {
+      flock.recordCoveragePct = null;
+      flock.status = "insufficient";
+      flock.statusReason = say("unverified", "Verified cycle completion is missing; historical coverage cannot be established.");
+    }
 
     const targetFlocks = flockAnalytics.filter((flock) => flock.target !== null);
     const layerFlocks = flockAnalytics.filter((flock) => flock.type === "layer" || flock.type === "parent_stock");
@@ -259,7 +303,7 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
       const breed = row.breeds as Row | null;
       return [breed?.breeder, breed?.name].filter(Boolean).map(String).join(" · ");
     }).filter(Boolean))];
-    const sourceLabel = breedSources.length ? `Configured breed/week standards · ${breedSources.join(", ")}` : "Configured breed/week standards";
+    const sourceLabel = breedSources.length ? `${say("standards", "Configured breed/week standards")} · ${breedSources.join(", ")}` : say("standards", "Configured breed/week standards");
     const hdepTarget = weightedAverage(layerFlocks.map((flock) => ({ value: flock.target, weight: flock.liveBirds })));
     const feedTarget = weightedAverage(flockAnalytics.map((flock) => ({ value: flock.feedTargetGrams, weight: flock.liveBirds })));
     const targets = {
@@ -278,13 +322,15 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
     };
 
     const farmsAnalytics = [...selectedFarmIds].map((farmId) => {
-      const farmFlocks = scopedFlocks.filter((flock) => flock.farmId === farmId);
+      const farmLocations = selectedLocations.filter(location => location.farm_id === farmId);
+      const farmFlocks = scopedFlocks.filter((flock) => farmLocations.some(location => location.flock_id === flock.id)).map(flock => ({...flock, scopePeriods: farmLocations.filter(location => location.flock_id === flock.id).map(location => ({from:location.from_date,to:location.to_date}))}));
       const farmFlockIds = new Set(farmFlocks.map((flock) => flock.id));
-      const rows = currentRows.filter((row) => farmFlockIds.has(row.flock_id));
+      const rows = currentRows.filter((row) => reportRowInLocations(row,farmLocations));
       const summary = summarizePeriod(rows, new Set([...layerIds].filter((id) => farmFlockIds.has(id))), expectedRecordsForPeriod(farmFlocks, dateFrom, dateTo));
+      if (unverifiedArchives.some(row => row.farm_id === farmId)) summary.recordCoveragePct = null;
       return {
         id: farmId,
-        name: String(farmById.get(farmId)?.name ?? "Unknown farm"),
+        name: String(farmById.get(farmId)?.name ?? say("unknownFarm", "Unknown farm")),
         liveBirds: farmFlocks.reduce((sum, flock) => sum + flock.currentBirds, 0),
         flocks: farmFlocks.length,
         hdep: summary.hdep,
@@ -297,37 +343,48 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
 
     const selectedBranchIds = new Set([...selectedFarmIds].map((farmId) => String(farmById.get(farmId)?.branch_id ?? "")));
     const scopedStock = stockRows.filter((row) => {
-      if (row.flock_id && flockIds.includes(String(row.flock_id))) return true;
-      if (row.farm_id && selectedFarmIds.has(String(row.farm_id))) return true;
-      return Boolean(row.branch_id && selectedBranchIds.has(String(row.branch_id)));
+      if (!reportWarehouseAllowed(row.warehouse_id, warehouseIds)) return false;
+      if (row.flock_id) return reportRowInLocations({...row,record_date:reportOperatingDate(String(row.transaction_date))},selectedLocations);
+      if (requestedFlock || requestedHouse || requestedBatch) return false;
+      if (row.farm_id) return selectedFarmIds.has(String(row.farm_id));
+      return Boolean(!requestedFarm && row.branch_id && selectedBranchIds.has(String(row.branch_id)));
     });
     const feedItemIds = new Set(inventoryRows.filter((row) => String(row.category) === "feed").map((row) => String(row.id)));
-    const periodFeedIssues = scopedStock.filter((row) => feedItemIds.has(String(row.item_id)) && ["issue", "transfer_out"].includes(String(row.transaction_type)) && String(row.transaction_date) >= dateFrom && String(row.transaction_date) <= dateTo);
-    const costedFeedIssues = periodFeedIssues.filter((row) => Number(row.unit_cost ?? 0) > 0);
-    const feedCost = costedFeedIssues.length ? round(costedFeedIssues.reduce((sum, row) => sum + Math.abs(Number(row.quantity ?? 0)) * Number(row.unit_cost ?? 0), 0)) : null;
+    const balanceStoreIds=new Set(warehouseRows.filter(row=>row.status==="active"&&reportWarehouseAllowed(row.id,warehouseIds)&&
+      (row.farm_id?selectedFarmIds.has(String(row.farm_id)):Boolean(row.branch_id&&selectedBranchIds.has(String(row.branch_id))))).map(row=>String(row.id)));
+    const balanceStock=stockRows.filter(row=>balanceStoreIds.has(String(row.warehouse_id))&&Date.parse(String(row.transaction_date))<=Date.now());
+    captureResources?.(reportResources(selectedScope.farmIds, [...scopedStock,...balanceStock]));
+    const periodFeedIssues = scopedStock.filter((row) => {
+      const date = reportOperatingDate(String(row.transaction_date));
+      return feedItemIds.has(String(row.item_id)) && date !== null && date >= dateFrom && date <= dateTo;
+    });
+    const consumptionCost = reportConsumptionCost(periodFeedIssues);
+    const feedCost = consumptionCost === null ? null : round(consumptionCost);
     const balanceByItem = new Map<string, number>();
-    for (const row of scopedStock) {
+    for (const row of balanceStock) {
       const quantity = Number(row.quantity ?? 0);
       const transactionType = String(row.transaction_type);
       const delta = ["issue", "transfer_out"].includes(transactionType) ? -Math.abs(quantity) : transactionType === "adjustment" ? quantity : Math.abs(quantity);
-      balanceByItem.set(String(row.item_id), (balanceByItem.get(String(row.item_id)) ?? 0) + delta);
+      const key=`${row.warehouse_id}:${row.item_id}`;
+      balanceByItem.set(key, (balanceByItem.get(key) ?? 0) + delta);
     }
-    const lowStockCount = inventoryRows.filter((row) => row.reorder_level !== null && (balanceByItem.get(String(row.id)) ?? 0) <= Number(row.reorder_level)).length;
+    const lowStockCount = [...balanceByItem].filter(([key,balance])=>{const item=inventoryRows.find(row=>key.endsWith(`:${row.id}`));return item?.reorder_level!==null&&item?.reorder_level!==undefined&&balance<=Number(item.reorder_level);}).length;
 
     const deathCount = currentRows.reduce((sum, row) => sum + (row.deaths ?? 0), 0);
     const deathsWithCause = currentRows.reduce((sum, row) => sum + (row.deaths_cause?.trim() ? row.deaths ?? 0 : 0), 0);
     const feedRows = currentRows.filter((row) => row.feed_intake_grams !== null).length;
     const insights: OperationsAnalyticsResponse["insights"] = [];
-    if ((current.recordCoveragePct ?? 0) < 90) insights.push({ id: "coverage", severity: (current.recordCoveragePct ?? 0) < 70 ? "critical" : "watch", title: "Analysis is constrained by missing flock-days", detail: `${round(current.recordCoveragePct ?? 0)}% of expected Daily Records are present. Close the gaps before treating movements as final.`, route: "/app/daily-records" });
+    if(current.recordCoveragePct===null)insights.push({id:"coverage-unavailable",severity:"watch",title:say("coverageMissing", "Record coverage is unavailable"),detail:say("coverageMissingDetail", "Verified lifecycle evidence is missing. Recorded figures are visible, but completeness cannot be established."),route:"/app/flocks"});
+    else if (current.recordCoveragePct < 90) insights.push({ id: "coverage", severity: current.recordCoveragePct < 70 ? "critical" : "watch", title: say("coverageTitle", "Analysis is constrained by missing flock-days"), detail: say("coverageDetail", `${round(current.recordCoveragePct)}% of expected Daily Records are present. Close the gaps before treating movements as final.`, {percent: round(current.recordCoveragePct)}), route: "/app/daily-records" });
     const criticalFlock = flockAnalytics.find((flock) => flock.status === "critical");
-    if (criticalFlock) insights.push({ id: `critical-${criticalFlock.id}`, severity: "critical", title: `${criticalFlock.code} needs the first review`, detail: `${criticalFlock.farmName} · ${criticalFlock.statusReason}`, route: criticalFlock.mortalityTargetPct !== null && (criticalFlock.cumulativeMortalityPct ?? 0) > criticalFlock.mortalityTargetPct ? "/app/mortality" : "/app/flocks" });
+    if (criticalFlock) insights.push({ id: `critical-${criticalFlock.id}`, severity: "critical", title: say("firstReview", `${criticalFlock.code} needs the first review`, {flock: criticalFlock.code}), detail: `${criticalFlock.farmName} · ${criticalFlock.statusReason}`, route: criticalFlock.mortalityTargetPct !== null && (criticalFlock.cumulativeMortalityPct ?? 0) > criticalFlock.mortalityTargetPct ? "/app/mortality" : "/app/flocks" });
     const productionComparison = compareMetric(current.hdep, previous.hdep);
-    if (productionComparison.direction === "down" && (productionComparison.deltaPct ?? 0) <= -3) insights.push({ id: "production-down", severity: "watch", title: "HDEP moved below the previous period", detail: `Production declined ${Math.abs(productionComparison.deltaPct ?? 0)}% period over period. Compare flock rows with feed and mortality timing.`, route: "/app/daily-records" });
+    if (productionComparison.direction === "down" && (productionComparison.deltaPct ?? 0) <= -3) insights.push({ id: "production-down", severity: "watch", title: say("productionDown", "HDEP moved below the previous period"), detail: say("productionDetail", `Production declined ${Math.abs(productionComparison.deltaPct ?? 0)}% period over period. Compare flock rows with feed and mortality timing.`, {percent: Math.abs(productionComparison.deltaPct ?? 0)}), route: "/app/daily-records" });
     const mortalityComparison = compareMetric(current.mortalityPer1000BirdDays, previous.mortalityPer1000BirdDays);
-    if (mortalityComparison.direction === "up" && (mortalityComparison.deltaPct ?? 0) >= 10) insights.push({ id: "mortality-up", severity: "critical", title: "Mortality intensity increased", detail: `Deaths per 1,000 bird-days increased ${mortalityComparison.deltaPct}% from the previous period.`, route: "/app/mortality" });
-    if (current.marketableRate !== null && current.marketableRate < 95) insights.push({ id: "quality", severity: "watch", title: "Egg quality is reducing marketable output", detail: `${round(100 - current.marketableRate)}% of quality-classified eggs were broken or dirty.`, route: "/app/daily-records" });
-    if (!insights.some((item) => item.severity === "critical" || item.severity === "watch") && current.records > 0) insights.push({ id: "stable", severity: "positive", title: "No major exception is visible in this period", detail: "Performance and data coverage are within the available comparison bands. Continue monitoring flock-level movement.", route: "/app/flocks" });
-    if (targets.coveragePct < 100) insights.push({ id: "targets", severity: "info", title: "Some comparisons use period baselines", detail: `Breed/week targets are available for ${round(targets.coveragePct)}% of active flocks. Missing targets are shown as unavailable.`, route: "/app/flocks" });
+    if (mortalityComparison.direction === "up" && (mortalityComparison.deltaPct ?? 0) >= 10) insights.push({ id: "mortality-up", severity: "critical", title: say("mortalityUp", "Mortality intensity increased"), detail: say("mortalityDetail", `Deaths per 1,000 bird-days increased ${mortalityComparison.deltaPct}% from the previous period.`, {percent: mortalityComparison.deltaPct ?? 0}), route: "/app/mortality" });
+    if (current.marketableRate !== null && current.marketableRate < 95) insights.push({ id: "quality", severity: "watch", title: say("qualityTitle", "Egg quality is reducing marketable output"), detail: say("qualityDetail", `${round(100 - current.marketableRate)}% of quality-classified eggs were broken or dirty.`, {percent: round(100 - current.marketableRate)}), route: "/app/daily-records" });
+    if (!insights.some((item) => item.severity === "critical" || item.severity === "watch") && current.records > 0) insights.push({ id: "stable", severity: "positive", title: say("stableTitle", "No major exception is visible in this period"), detail: say("stableDetail", "Performance and data coverage are within the available comparison bands. Continue monitoring flock-level movement."), route: "/app/flocks" });
+    if (targets.coveragePct < 100) insights.push({ id: "targets", severity: "info", title: say("targetsTitle", "Some comparisons use period baselines"), detail: say("targetsDetail", `Breed/week targets are available for ${round(targets.coveragePct)}% of active flocks. Missing targets are shown as unavailable.`, {percent: round(targets.coveragePct)}), route: "/app/flocks" });
 
     const flockById = new Map(scopedFlocks.map((flock) => [flock.id, flock]));
     const recentRecords = [...currentRows].sort((a, b) => b.record_date.localeCompare(a.record_date) || b.updated_at.localeCompare(a.updated_at)).slice(0, 12).map((row) => {
@@ -338,7 +395,7 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
         id: row.id,
         date: row.record_date,
         flock: flock?.code ?? row.flock_id,
-        farm: flock?.farmName ?? "Unknown farm",
+        farm: String(farmById.get(String((row as AnalyticsDailyRow & {farm_id?:string}).farm_id))?.name??flock?.farmName??say("unknownFarm", "Unknown farm")),
         birds,
         eggs: row.total_eggs,
         hdep: row.total_eggs !== null && birds !== null && birds > 0 && layerIds.has(row.flock_id) ? percent(row.total_eggs, birds) : null,
@@ -351,7 +408,7 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
 
     const latestRecordAt = currentRows.map((row) => row.updated_at).sort().at(-1) ?? null;
     const response: OperationsAnalyticsResponse = {
-      meta: { dateFrom, dateTo, previousFrom: prior.previousFrom, previousTo: prior.previousTo, timezone: "Africa/Addis_Ababa", scopeLabel, refreshedAt: new Date().toISOString(), latestRecordAt, activeFlocks: scopedFlocks.length, days: prior.days },
+      meta: { dateFrom, dateTo, previousFrom: prior.previousFrom, previousTo: prior.previousTo, timezone: "Africa/Addis_Ababa", scopeLabel, farmCount: selectedFarmIds.size, refreshedAt: new Date().toISOString(), latestRecordAt, activeFlocks: scopedFlocks.length, days: prior.days },
       summary: {
         liveBirds: scopedFlocks.reduce((sum, flock) => sum + flock.currentBirds, 0),
         activeFlocks: scopedFlocks.length,
@@ -370,10 +427,10 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
       trends: buildDailySeries(currentRows, scopedFlocks, dateFrom, dateTo, standardsByBreed, warningVariancePct),
       flocks: flockAnalytics,
       farms: farmsAnalytics,
-      breakdowns: { eggQuality: eggQualityBreakdown(currentRows), mortalityCauses: mortalityCausePareto(currentRows), feedTypes: feedTypeBreakdown(currentRows) },
+      breakdowns: { eggQuality: eggQualityBreakdown(currentRows).map(row => ({...row, label: row.label === "Marketable" ? say("marketable", row.label) : row.label === "Broken" ? say("broken", row.label) : say("dirty", row.label)})), mortalityCauses: mortalityCausePareto(currentRows), feedTypes: feedTypeBreakdown(currentRows) },
       economics: {
         feedCost,
-        feedCostPerEgg: feedCost !== null && (current.eggs ?? 0) > 0 ? round(feedCost / (current.eggs ?? 1), 4) : null,
+        feedCostPerEgg: feedCost !== null && scopedFlocks.every(flock=>layerIds.has(flock.id)) && (current.eggs ?? 0) > 0 ? round(feedCost / (current.eggs ?? 1), 4) : null,
         feedCostPerBirdDay: feedCost !== null && current.birdDays > 0 ? round(feedCost / current.birdDays, 4) : null,
         lowStockCount,
         confidence: feedCost !== null ? "actual" : "unavailable",
@@ -386,18 +443,21 @@ export async function loadOperationsAnalytics(access: AccessContext, params: URL
         mortalityCauseCoveragePct: deathCount > 0 ? percent(deathsWithCause, deathCount) : null,
         latestRecordAt,
         notes: [
-          ...(current.records === 0 ? ["No Daily Records were found for the selected period."] : []),
-          ...((current.recordCoveragePct ?? 100) < 100 ? [`${currentExpected - current.records} expected flock-day record(s) are missing.`] : []),
-          ...(feedRows < current.records ? [`${current.records - feedRows} record(s) do not contain synchronized feed totals.`] : []),
-          ...(deathCount > deathsWithCause ? [`${deathCount - deathsWithCause} death(s) do not have a recorded cause.`] : []),
-          ...(targets.coveragePct < 100 ? ["Target gaps are unavailable where breed/week standards have not been configured."] : []),
+          ...(unverifiedArchives.length ? [say("archivedNote", "Some archived flocks lack verified completion evidence. Their recorded results are included, but record coverage is unavailable.")] : []),
+          ...(current.records === 0 ? [say("noPeriodRecords", "No Daily Records were found for the selected period.")] : []),
+          ...((current.recordCoveragePct ?? 100) < 100 ? [say("missingDays", `${currentExpected - current.records} expected flock-day record(s) are missing.`, {count: currentExpected - current.records})] : []),
+          ...(feedRows < current.records ? [say("missingFeed", `${current.records - feedRows} record(s) do not contain synchronized feed totals.`, {count: current.records - feedRows})] : []),
+          ...(deathCount > deathsWithCause ? [say("missingCauses", `${deathCount - deathsWithCause} death(s) do not have a recorded cause.`, {count: deathCount - deathsWithCause})] : []),
+          ...(targets.coveragePct < 100 ? [say("missingTargets", "Target gaps are unavailable where breed/week standards have not been configured.")] : []),
         ],
       },
       recentRecords,
     };
-    if (!response.dataTrust.notes.length) response.dataTrust.notes.push("Records, feed values, causes, and targets are complete for the selected scope.");
+    if(selectedLocations.some(row=>row.starts_with_move))response.dataTrust.notes.push(say("movementNote", "On transfer dates, locationless evidence without an actual event time is excluded; locations are not guessed from today's flock address."));
+    if (!response.dataTrust.notes.length) response.dataTrust.notes.push(say("completeNote", "Records, feed values, causes, and targets are complete for the selected scope."));
     return json(response);
   } catch (error: unknown) {
-    return json({ error: error instanceof Error ? error.message : "Could not load Operations Analytics." }, 500);
+    if (error instanceof ReportEvidenceError) return json({error: error.code}, error.status);
+    return json({ error: error instanceof Error ? error.message : say("loadFailed", "Could not load Operations Analytics.") }, 500);
   }
 }

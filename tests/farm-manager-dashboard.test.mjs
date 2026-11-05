@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { authorizedFarmIds, buildFlockComparison, summarizeDaily } from "../src/lib/farm-manager-dashboard.ts";
+import { authorizedFarmIds, buildFlockComparison, sortFlocksByTargetAlignment, summarizeDaily } from "../src/lib/farm-manager-dashboard.ts";
 
 const daily = (overrides = {}) => ({
   record_date: "2026-07-21", flock_id: "flock-1", opening_birds: 1000, closing_birds: 999,
@@ -28,6 +28,28 @@ test("today is excluded from the seven-day baseline", () => {
   assert.equal(result.actual, 90);
   assert.equal(result.baseline, 70);
   assert.equal(result.trend, "up");
+});
+
+test("selected reporting horizon controls the recent-form baseline", () => {
+  const result = buildFlockComparison({
+    flock: { id: "flock-1", code: "L-01", type: "layer", farmId: "farm-1", farmName: "Farm One", houseId: "house-1", houseName: "House One", placementDate: "2026-01-01", ageAtPlacementDays: 0, liveBirds: 999 },
+    asOf: "2026-07-21",
+    baselineFrom: "2026-07-01",
+    baselineTo: "2026-07-20",
+    dailyRows: [daily(), daily({ record_date: "2026-07-20", total_eggs: 700, deaths: 0 }), daily({ record_date: "2026-07-01", total_eggs: 500, deaths: 0 })],
+    targets: [{ week_number: 28, target_hdep_pct: 92, target_mortality_pct: 0.2, target_feed_g: 110, target_weight_g: 1800 }],
+    weights: [], feedClosed: true, warningVariancePct: 5, criticalVariancePct: 10,
+  });
+  assert.equal(result.actual, 90);
+  assert.equal(result.baseline, 60);
+});
+
+test("target-alignment order rewards closeness rather than the highest percentage", () => {
+  const row = (code, targetAttainment, dataStatus = "complete") => ({ code, targetAttainment, dataStatus });
+  const sorted = sortFlocksByTargetAlignment([
+    row("OVER", 112), row("ON-TARGET", 100), row("UNDER", 94), row("NO-TARGET", null, "partial"),
+  ]);
+  assert.deepEqual(sorted.map((item) => item.code), ["ON-TARGET", "UNDER", "OVER", "NO-TARGET"]);
 });
 
 test("growing flocks use weight attainment and sample trend", () => {

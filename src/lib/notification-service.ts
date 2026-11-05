@@ -99,7 +99,8 @@ export async function publishActionEventNotifications(input: { action: Row; even
 }
 
 async function loadPreference(ctx: AccessContext): Promise<NotificationPreference> {
-  const { data } = await db.from("notification_preferences").select("in_app_minimum_severity,email_enabled,email_minimum_severity").eq("profile_id", ctx.userId).eq("org_id", ctx.orgId).maybeSingle();
+  const { data, error } = await db.from("notification_preferences").select("in_app_minimum_severity,email_enabled,email_minimum_severity").eq("profile_id", ctx.userId).eq("org_id", ctx.orgId).maybeSingle();
+  if (error) throw new Error("Notification settings could not be checked.");
   if (!data) return defaultPreference;
   return {
     inAppMinimumSeverity: text(data.in_app_minimum_severity) as InAppThreshold,
@@ -130,16 +131,20 @@ function item(row: Row): NotificationItem {
 }
 
 export async function loadNotificationCenter(ctx: AccessContext): Promise<NotificationCenter> {
-  const [preferences, notificationResult] = await Promise.all([
-    loadPreference(ctx),
-    db.from("notifications").select("id,action_id,event_type,severity,title,message,route,read_at,created_at,action:operational_actions!notifications_action_id_fkey(title,context,status,source_resolved_at,due_at),action_event:operational_action_events!notifications_action_event_id_fkey(actor_name_snapshot,actor_role_snapshot)").eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).order("created_at", { ascending: false }).limit(50),
+  const preferences = await loadPreference(ctx);
+  const optional = preferences.inAppMinimumSeverity === "off" ? [] : Object.keys(severityRank).filter(severity => allows(preferences.inAppMinimumSeverity, severity as NotificationSeverity));
+  const allowed = `event_type.in.(assigned,resolution_submitted)${optional.length ? `,severity.in.(${optional.join(",")})` : ""}`;
+  const [notificationResult, unread] = await Promise.all([
+    db.from("notifications").select("id,action_id,event_type,severity,title,message,route,read_at,created_at,action:operational_actions!notifications_action_id_fkey(title,context,status,source_resolved_at,due_at),action_event:operational_action_events!notifications_action_event_id_fkey(actor_name_snapshot,actor_role_snapshot)").eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).or(allowed).order("created_at", { ascending: false }).order("id", {ascending: false}).limit(50),
+    db.from("notifications").select("id", {count: "exact", head: true}).eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).is("read_at", null).or(allowed),
   ]);
   if (notificationResult.error) throw new Error(notificationResult.error.message);
+  if (unread.error) throw new Error("Unread notifications could not be counted.");
   const notifications = (notificationResult.data ?? []).map(item).filter((notification: NotificationItem) => ["assigned", "resolution_submitted"].includes(notification.eventType) || allows(preferences.inAppMinimumSeverity, notification.severity));
   const readiness = emailDeliveryReadiness();
   return {
     notifications,
-    unreadCount: notifications.filter((notification: NotificationItem) => !notification.readAt).length,
+    unreadCount: unread.count ?? 0,
     preferences,
     email: { available: readiness.available, enabled: preferences.emailEnabled, reason: readiness.reason },
   };

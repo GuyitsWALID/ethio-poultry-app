@@ -1,4 +1,7 @@
+import {warehouseAssignmentScope} from "@/lib/warehouse-access";
 import "server-only";
+import {eggSaleSources} from "@/lib/egg-sale-sources";
+import {allAlertRows} from "./alert-pagination.ts";
 
 import {
   canAccessFarm,
@@ -184,6 +187,7 @@ export async function ensureFreshReconciliation(
       operatingDayRows,
       correctionRows,
       openingBalanceRows,
+      recordingStartRows,
     ] = await Promise.all([
       allRows<Row>((a, b) =>
         governanceAdmin
@@ -288,6 +292,7 @@ export async function ensureFreshReconciliation(
           .eq("org_id", ctx.orgId)
           .range(a, b),
       ),
+      allRows<Row>((a,b)=>governanceAdmin.from("flock_recording_starts").select("flock_id,effective_date,live_birds").eq("org_id",ctx.orgId).lte("effective_date",asOf).order("flock_id").range(a,b)),
     ]);
     const flocks: FlockInput[] = flockRows.map((row) => ({
       id: String(row.id),
@@ -369,7 +374,7 @@ export async function ensureFreshReconciliation(
         governanceAdmin
           .from("daily_sales_records")
           .select(
-            "id,flock_id,farm_id,sale_date,product_category,product_label,quantity,unit,gross_amount,customer_name,created_at,recorded_by",
+            "id,flock_id,farm_id,sale_date,product_category,product_label,quantity,unit,gross_amount,customer_name,created_at,recorded_by,egg_sources,egg_source_version",
           )
           .eq("org_id", ctx.orgId)
           .is("voided_at", null)
@@ -399,8 +404,21 @@ export async function ensureFreshReconciliation(
         updatedAt: String(row.updated_at),
         recordedBy: text(row.recorded_by),
       }));
+    // The database compares full current rows with exact, immutable approved
+    // snapshots. No client/source-ID whitelist can authorize a later edit.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const exactCorrections = await (governanceAdmin as any).rpc("exact_lifecycle_corrections", {p_org: ctx.orgId});
+    if (exactCorrections.error || !exactCorrections.data || exactCorrections.data.length > 10000) throw new Error("Lifecycle correction evidence could not be verified.");
+    // Verify the complete immutable movement chain on the server, never trust
+    // a location-mismatch exemption submitted by the browser.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const movements = await (governanceAdmin as any).rpc("verified_flock_movements", {p_org: ctx.orgId});
+    if (movements.error || !movements.data || movements.data.length > 10000) throw new Error("Approved flock movements could not be verified.");
+    const verified = new Set((movements.data as Array<{flock_id: string}>).map(row => row.flock_id));
+    for (const flock of flocks) flock.verifiedMovementChain = verified.has(flock.id);
     const drafts = evaluateOperationalReconciliation({
       asOfDate: asOf,
+      recordingStarts: recordingStartRows.map(row=>({flockId:String(row.flock_id),effectiveDate:String(row.effective_date),liveBirds:Number(row.live_birds)})),
       daily,
       flocks,
       farms: farmRows.map(
@@ -490,6 +508,7 @@ export async function ensureFreshReconciliation(
             customer: text(row.customer_name),
             createdAt: String(row.created_at),
             recordedBy: text(row.recorded_by),
+            eggSources: row.egg_source_version ? eggSaleSources(row.egg_sources).map(source => ({flockId: source.flock_id, quantity: Number(source.egg_quantity)})) : undefined,
           }) satisfies SaleInput,
       ),
       conversions: conversionRows.map(
@@ -578,6 +597,7 @@ export async function ensureFreshReconciliation(
       approvedCorrectionSourceIds: new Set(
         correctionRows.map((row) => String(row.source_id)),
       ),
+      exactLifecycleCorrectionSourceIds: new Set((exactCorrections.data as Array<{source_id: string}>).map(row => row.source_id)),
     });
     const { data: existing, error: existingError } = await governanceAdmin
       .from("reconciliation_findings")
@@ -680,14 +700,7 @@ async function scopeIds(ctx: AccessContext) {
       .is("revoked_at", null)
       .lte("starts_at", now)
       .or(`expires_at.is.null,expires_at.gt.${now}`),
-    governanceAdmin
-      .from("user_warehouse_access")
-      .select("warehouse_id")
-      .eq("org_id", ctx.orgId)
-      .eq("profile_id", ctx.userId)
-      .is("revoked_at", null)
-      .lte("starts_at", now)
-      .or(`expires_at.is.null,expires_at.gt.${now}`),
+    warehouseAssignmentScope(ctx),
   ]);
   return {
     farmIds: new Set((farms.data ?? []).map((row) => String(row.farm_id))),
@@ -712,6 +725,7 @@ function visible(
 export async function getReconciliationDashboard(
   ctx: AccessContext,
   force = false,
+  display: {locale?: string; translate?: (key: string, values?: Record<string, string | number>) => string | undefined} = {},
 ) {
   const run = await ensureFreshReconciliation(ctx, force);
   const ids = await scopeIds(ctx);
@@ -795,6 +809,7 @@ export async function getReconciliationDashboard(
       warehouse_name: warehouseName,
       assigned_name: label(profilesRes.data, row.assigned_to, "full_name"),
       evidence_display: userFacingReconciliationEvidence(row.evidence, {
+        ...display,
         farmName: text(farmName),
         houseName: text(houseName),
         flockCode: text(flockCode),
@@ -1057,7 +1072,7 @@ export async function recordPhysicalCount(
 export async function getReconciliationAlerts(ctx: AccessContext) {
   await ensureFreshReconciliation(ctx, false);
   const ids = await scopeIds(ctx);
-  const { data, error } = await governanceAdmin
+  const data = await allAlertRows((from, to) => governanceAdmin
     .from("reconciliation_findings")
     .select(
       "id,rule_code,domain,status,title,severity,explanation,recommended_action,farm_id,warehouse_id,record_date,last_seen_at",
@@ -1065,12 +1080,9 @@ export async function getReconciliationAlerts(ctx: AccessContext) {
     .eq("org_id", ctx.orgId)
     .in("status", activeStatuses)
     .in("severity", ["critical", "high", "medium"])
-    .order("last_seen_at", { ascending: false })
-    .limit(60);
-  if (error) throw new Error(error.message);
+    .order("id").range(from, to));
   return (data ?? [])
     .filter((row) => visible(row, ids))
-    .slice(0, 20)
     .map((row) => {
       const workflow = reconciliationWorkflow(
         {

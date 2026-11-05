@@ -32,14 +32,14 @@ test("the resolver is tenant scoped and returns readable evidence rather than id
   assert.match(resolver, /eq\("org_id", ctx\.orgId\)/);
   assert.match(resolver, /assertFindingAccess/);
   assert.match(resolver, /field !== "id" && field !== "flock_id"/);
-  assert.match(correction, /Exact records used by this check/);
+  assert.match(correction, /ui\("exactRecordsUsedByThisCheck"\)/);
   assert.doesNotMatch(correction, /UUID|database identifier/i);
 });
 
 test("assignment, completion, and CEO verification use the existing Action Desk engine", () => {
-  assert.match(assignment, /Assign and notify/);
-  assert.match(assignment, /Complete and send to CEO/);
-  assert.match(assignment, /Verify and close/);
+  assert.match(assignment, /ui\("assignAndNotify"\)/);
+  assert.match(assignment, /ui\("completeAndSendToCEO"\)/);
+  assert.match(assignment, /ui\("verifyAndClose"\)/);
   assert.match(notifications, /exactRecordCheckRoute/);
   assert.match(notifications, /source_route/);
 });

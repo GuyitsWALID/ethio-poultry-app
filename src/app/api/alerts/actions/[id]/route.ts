@@ -1,4 +1,4 @@
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 
 import { getAccessContext, isAccessResponse } from "@/lib/access-context";
 import { transitionAction } from "@/lib/accountable-actions";
@@ -9,6 +9,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (isAccessResponse(context)) return context;
     const { id } = await params;
     const body = await request.json();
+    z.object({expectedRevision: z.string().regex(/^\d+$/)}).parse(body);
     await transitionAction(context, id, body);
     return Response.json({ ok: true }, { status: 200 });
   } catch (error: unknown) {

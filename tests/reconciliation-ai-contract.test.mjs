@@ -53,5 +53,18 @@ test("instructions embedded in record text remain inside the untrusted evidence 
 
 test("unsupported accusations are rejected before storage", () => {
   assert.throws(() => validateAiSafety({ ...output, summary: "The manager committed theft." }), /unsupported accusation/);
+  assert.throws(() => validateAiSafety({ ...output, summary: "ኃላፊው ሌባ ነው።" }), /unsupported accusation/);
+  assert.doesNotThrow(() => validateAiSafety({...output, summary: "የክምችት መዝገቦች አይስማሙም። ዋናውን ማስረጃ ይመርምሩ።"}));
   assert.doesNotThrow(() => validateAiSafety(output));
+});
+
+test("Amharic guidance is language-scoped without changing frozen English evidence", () => {
+  const packet = {finding: {title: "Stock count", explanation: "Difference", domain: "inventory", priority: "High", status: "Open", scope: "Farm name", date: "2026-10-29"}, comparison: {expected: "10", recorded: "9", variance: "-1"}, evidence: [{id: "E1", label: "Recorded count", value: "9"}], reviewNotes: [], requiredVerification: "Recount"};
+  const frozen = structuredClone(packet);
+  const localized = {...packet, responseLanguage: "am"};
+  assert.notEqual(canonicalAiEvidence(localized), canonicalAiEvidence(packet));
+  assert.match(buildReconciliationAiPrompt(localized), /human-readable guidance in Amharic/);
+  assert.match(buildReconciliationAiPrompt(localized), /enum values and evidence IDs unchanged/);
+  assert.deepEqual(packet, frozen);
+  assert.doesNotMatch(buildReconciliationAiPrompt(packet), /human-readable guidance in Amharic/);
 });

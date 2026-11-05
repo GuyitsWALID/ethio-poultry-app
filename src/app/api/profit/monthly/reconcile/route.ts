@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 
 import { getSalesContext, json, supabaseAdmin } from "@/lib/sales";
 import { round } from "@/lib/profitability";
+import {projectEggSales} from "@/lib/egg-sale-sources";
+import {readReportQuery} from "@/lib/report-pagination";
 
 const INVENTORY_COST_CATEGORIES = ["feed", "medicine", "vaccine", "vitamin", "supplement", "packaging"] as const;
 const INVENTORY_COST_CATEGORY_SET = new Set<string>(INVENTORY_COST_CATEGORIES);
@@ -213,14 +215,14 @@ export async function POST(request: NextRequest) {
         .gte("record_date", periodStart)
         .lte("record_date", periodEnd)
         .limit(10000),
-      supabaseAdmin
+      readReportQuery(() => supabaseAdmin
         .from("daily_sales_records")
-        .select("gross_amount, paid_amount, balance_due, quantity, product_category, branch_id, farm_id, house_id, flock_id, batch_id")
+        .select("*")
         .eq("org_id", ctx.orgId)
         .is("voided_at",null)
         .gte("sale_date", periodStart)
         .lte("sale_date", periodEnd)
-        .limit(10000),
+        .order("sale_date").order("id")),
       supabaseAdmin.from("inventory_items").select("id, category").eq("org_id", ctx.orgId).limit(10000),
       supabaseAdmin
         .from("stock_ledger")
@@ -242,7 +244,7 @@ export async function POST(request: NextRequest) {
     if (firstError) return json({ error: firstError.message }, 500);
 
     const scopedDaily = (dailyRes.data ?? []).filter((row) => matchesScope({ flock_id: row.flock_id }));
-    const scopedSales = (salesRes.data ?? []).filter(matchesScope);
+    const scopedSales = projectEggSales(salesRes.data ?? []).filter(matchesScope);
     const scopedStock = (stockRes.data ?? []).filter(matchesScope);
     const scopedCosts = (costEntryRes.data ?? []).filter(matchesScope);
     const unallocatedCost = (costEntryRes.data ?? [])

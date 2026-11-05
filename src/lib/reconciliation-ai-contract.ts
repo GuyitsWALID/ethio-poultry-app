@@ -33,6 +33,7 @@ export const reconciliationAiOutputSchema = z.object({
 export type ReconciliationAiOutput = z.infer<typeof reconciliationAiOutputSchema>;
 export type ReconciliationAiEvidenceItem = { id: string; label: string; value: string };
 export type ReconciliationAiEvidencePacket = {
+  responseLanguage?: "am";
   finding: {
     title: string;
     explanation: string;
@@ -49,6 +50,7 @@ export type ReconciliationAiEvidencePacket = {
 };
 
 export type ReconciliationAiAnalysis = {
+  language?: "en" | "am";
   id: string;
   status: "completed" | "failed";
   output: ReconciliationAiOutput | null;
@@ -103,6 +105,7 @@ export function buildReconciliationAiPrompt(packet: ReconciliationAiEvidencePack
     "Use cautious language. Separate confirmed evidence from hypotheses. If evidence is weak, say so.",
     "Every evidenceRefs entry must use only an evidence ID present in the packet. Do not invent values or references.",
     "Worth-checking items are unconfirmed leads, not findings. Keep steps practical for a farm manager or CEO.",
+    ...(packet.responseLanguage === "am" ? ["Write all human-readable guidance in Amharic. Keep JSON field names, enum values and evidence IDs unchanged. Preserve quoted names, references and original evidence; do not translate or invent those values."] : []),
     RECONCILIATION_AI_DISCLAIMER,
     "<UNTRUSTED_RECORD_CHECK_EVIDENCE>",
     JSON.stringify(packet),
@@ -110,7 +113,7 @@ export function buildReconciliationAiPrompt(packet: ReconciliationAiEvidencePack
   ].join("\n");
 }
 
-const ACCUSATION_PATTERN = /\b(?:fraud|fraudulent|theft|stole|stolen|stealing|dishonest|culpable|guilty)\b/i;
+const ACCUSATION_PATTERN = /\b(?:fraud|fraudulent|theft|stole|stolen|stealing|dishonest|culpable|guilty)\b|(?:ማጭበርበር|አጭበርባሪ|ስርቆት|ሌባ|ሰረቀ|ጥፋተኛ)/i;
 
 export function validateAiSafety(output: ReconciliationAiOutput) {
   if (ACCUSATION_PATTERN.test(JSON.stringify(output))) {
