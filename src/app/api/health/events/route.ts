@@ -1,6 +1,5 @@
 import {getTranslations} from "next-intl/server";
-import {accessJson,canAccessFarm,getAccessContext,governanceAdmin,isAccessResponse} from "@/lib/access-context";
-import {recordAuditEvent} from "@/lib/audit-ledger";
+import {accessJson,getAccessContext,governanceAdmin,isAccessResponse} from "@/lib/access-context";
 import {FarmOperationError, farmOperationErrorBody,recordHealthEvidence} from "@/lib/farm-operations";
 
 const DATE=/^\d{4}-\d{2}-\d{2}$/;
@@ -41,20 +40,12 @@ export async function POST(request:Request){
 }
 
 export async function PATCH(request:Request){
-  const validation = await getTranslations("OperationValidation");
   const ctx=await getAccessContext({tenant:true});if(isAccessResponse(ctx))return ctx;if(ctx.role!=="farm_manager"&&!ctx.supportSessionId)return accessJson({error:"Only an assigned farm manager can update health schedule evidence."},403);
   const body=await request.json().catch(()=>null) as Record<string,unknown>|null;
   const scheduleId=String(body?.schedule_id??"").trim();const eventDate=String(body?.event_date??"").trim();const flockId=String(body?.flock_id??"").trim();const farmId=String(body?.farm_id??"").trim();const houseId=String(body?.house_id??"").trim();
-  if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(scheduleId)||!DATE.test(eventDate)||!flockId||!farmId)return accessJson({error:"Schedule, date, farm, and flock are required."},400);
-  const {data:flock}=await governanceAdmin.from("flocks").select("farm_id").eq("id",flockId).eq("org_id",ctx.orgId).maybeSingle();
-  if(!flock||!(await canAccessFarm(ctx,String(flock.farm_id))))return accessJson({error:validation("activeFarmAssignmentIsRequired")},403);
-  const beforeResult=await governanceAdmin.from("health_events").select("id,event_date,flock_id,description").eq("org_id",ctx.orgId).or(`description.like.SCHEDULE_TARGET|${scheduleId}|%,description.like.SCHEDULE_STATUS|${scheduleId}|%`);
-  if(beforeResult.error)return accessJson({error:beforeResult.error.message},500);
-  const [targetResult,statusResult]=await Promise.all([
-    governanceAdmin.from("health_events").update({event_date:eventDate,flock_id:flockId,description:`SCHEDULE_TARGET|${scheduleId}|${farmId}|${houseId}|${flockId}`}).eq("org_id",ctx.orgId).like("description",`SCHEDULE_TARGET|${scheduleId}|%`).select("id,event_date,flock_id,description"),
-    governanceAdmin.from("health_events").update({event_date:eventDate,flock_id:flockId}).eq("org_id",ctx.orgId).like("description",`SCHEDULE_STATUS|${scheduleId}|%`).select("id,event_date,flock_id,description"),
-  ]);
-  const error=targetResult.error??statusResult.error;if(error)return accessJson({error:error.message},400);const data=[...(targetResult.data??[]),...(statusResult.data??[])];
-  await recordAuditEvent(ctx,{eventType:"health_schedule.evidence_updated",operation:"update",entityTable:"health_events",entityId:scheduleId,reason:"Updated the schedule date or target flock.",before:beforeResult.data??[],after:data,farmId:String(flock.farm_id),flockId});
-  return accessJson({events:data});
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if(!uuid.test(scheduleId)||!DATE.test(eventDate)||!uuid.test(farmId)||(flockId&&!uuid.test(flockId))||(houseId&&!uuid.test(houseId))||!["vaccination","cleanup"].includes(String(body?.kind))||typeof body?.expected_version!=="string"||!Number.isFinite(Date.parse(body.expected_version)))return accessJson({error:"Refresh the schedule and choose a valid date and location."},400);
+  const rpc=governanceAdmin as unknown as {rpc(name:string,args:Record<string,unknown>):Promise<{data:unknown;error:{message:string;code?:string}|null}>};
+  const {data,error}=await rpc.rpc("edit_legacy_health_schedule",{p_actor:ctx.userId,p_org:ctx.orgId,p_schedule:scheduleId,p_kind:body.kind,p_expected_version:body.expected_version,p_date:eventDate,p_farm:farmId,p_house:houseId||null,p_flock:flockId||null,p_changes:body.changes??{}});
+  return error?accessJson({error:error.message},error.code==="42501"?403:error.code==="40001"?409:error.code==="55000"?423:400):accessJson(data);
 }

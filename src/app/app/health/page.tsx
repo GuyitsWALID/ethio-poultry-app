@@ -35,6 +35,7 @@ import { createClient } from "@/utils/supabase/client";
 
 type ScheduleItem = {
   id: string;
+  revision: string;
   type: "vaccination" | "cleanup" | "weight";
   date: string;
   farmId: string | null;
@@ -242,20 +243,20 @@ async function saveHealthEvent(payload: Record<string, unknown>) {
     const [{ data: vaccineEvents }, { data: cleanupRows }, healthResponse, { data: weightTasks }] = await Promise.all([
       supabase
         .from("vaccination_events")
-        .select("id, event_date, flock_id, vaccine_name, dosage, route, batch_number")
+        .select("id, event_date, flock_id, vaccine_name, dosage, route, batch_number, updated_at")
         .eq("org_id", profile.org_id)
         .order("event_date", { ascending: false })
         .limit(100),
       supabase
         .from("biosecurity_checks")
-        .select("id, checklist_date, farm_id, notes, completed_by")
+        .select("id, checklist_date, farm_id, notes, completed_by, updated_at")
         .eq("org_id", profile.org_id)
         .order("checklist_date", { ascending: false })
         .limit(100),
       fetch("/api/health/events"),
       db
         .from("batch_weight_check_tasks")
-        .select("id, batch_id, flock_id, due_week_number, due_date, status, weight_record_id")
+        .select("id, batch_id, flock_id, due_week_number, due_date, status, weight_record_id, updated_at")
         .eq("org_id", profile.org_id)
         .order("due_date", { ascending: false })
         .limit(200),
@@ -293,6 +294,7 @@ async function saveHealthEvent(payload: Record<string, unknown>) {
       const target = targetBySchedule.get(v.id);
       return {
         id: v.id,
+        revision: v.updated_at,
         type: "vaccination",
         date: v.event_date,
         farmId: target?.farmId ?? null,
@@ -313,6 +315,7 @@ async function saveHealthEvent(payload: Record<string, unknown>) {
       const target = targetBySchedule.get(c.id);
       return {
         id: c.id,
+        revision: c.updated_at,
         type: "cleanup",
         date: c.checklist_date,
         farmId: target?.farmId ?? c.farm_id,
@@ -338,10 +341,12 @@ async function saveHealthEvent(payload: Record<string, unknown>) {
       due_date: string;
       status: "scheduled" | "completed" | "missed";
       weight_record_id: string | null;
+      updated_at: string;
     }>).map((task) => {
       const flock = flockById.get(task.flock_id);
       return {
         id: task.id,
+        revision: task.updated_at,
         type: "weight",
         date: task.due_date,
         farmId: flock?.farm_id ?? null,
@@ -765,49 +770,28 @@ async function saveHealthEvent(payload: Record<string, unknown>) {
     setSuccess(null);
     setSaving(true);
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error(ui("unableToVerifyYourSession"));
-      const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", user.id).single();
-      if (!profile?.org_id) throw new Error(ui("organizationContextNotFound"));
-
       if (!editModal.date) throw new Error(ui("dateIsRequired"));
       if (!editModal.farmId) throw new Error(ui("farmIsRequired"));
       if (editModal.item.type === "vaccination" && (!editModal.houseId || !editModal.flockId)) {
         throw new Error(ui("houseAndFlockAreRequiredForVaccination"));
       }
 
+      let changes: Record<string, string>;
       if (editModal.item.type === "cleanup") {
         if (!editModal.cleanupType.trim()) throw new Error(ui("cleanupTypeIsRequired"));
         const scheduleNotes = `SCHEDULE|${editModal.cleanupType.trim()}${editModal.notes.trim() ? ` | ${editModal.notes.trim()}` : ""}`;
-        const { error: updateError } = await supabase
-          .from("biosecurity_checks")
-          .update({ checklist_date: editModal.date, notes: scheduleNotes, farm_id: editModal.farmId })
-          .eq("id", editModal.item.id);
-        if (updateError) throw new Error(updateError.message);
+        changes = {notes: scheduleNotes};
       } else {
         if (!editModal.vaccineName.trim() || !editModal.dosage.trim()) {
           throw new Error(ui("vaccineNameAndDosageAreRequired"));
         }
-        const { error: updateError } = await supabase
-          .from("vaccination_events")
-          .update({
-            event_date: editModal.date,
-            flock_id: editModal.flockId,
-            vaccine_name: editModal.vaccineName.trim(),
-            dosage: editModal.dosage.trim(),
-            route: editModal.route,
-          })
-          .eq("id", editModal.item.id);
-        if (updateError) throw new Error(updateError.message);
+        changes = {vaccine_name: editModal.vaccineName.trim(), dosage: editModal.dosage.trim(), route: editModal.route};
       }
 
       const evidenceResponse = await fetch("/api/health/events", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schedule_id: editModal.item.id, event_date: editModal.date, farm_id: editModal.farmId, house_id: editModal.houseId, flock_id: editModal.flockId }),
+        body: JSON.stringify({ schedule_id: editModal.item.id, kind: editModal.item.type, expected_version: editModal.item.revision, changes, event_date: editModal.date, farm_id: editModal.farmId, house_id: editModal.houseId, flock_id: editModal.flockId }),
       });
       const evidenceBody = await evidenceResponse.json().catch(() => ({}));
       if (!evidenceResponse.ok) throw new Error(evidenceBody.error ?? ui("scheduleEvidenceCouldNotBeUpdated"));

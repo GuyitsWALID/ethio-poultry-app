@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 102,
-  "latest": "20261104000000_farm_expense_confirmations.sql",
-  "aggregateSha256": "343a256236d2283583678f05bb166aefd2ae6db319d17fb1c07b249d5b3c0095",
+  "count": 103,
+  "latest": "20261108000000_contain_operational_security.sql",
+  "aggregateSha256": "9af1ef5fc6d50f224d7a2250b2d88654bbaf827bdaeba5d784ce168097adc1f1",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -182,6 +182,7 @@
     "20261030001000_governed_recording_start.sql": "876729838f0c565f3cc88e32f947ddef234d5b011b2dbee96dc9da0028081194",
     "20261102000000_traceable_egg_sales.sql": "35555867a81325122cd5ca818dca55886e3d54cd9fcce1e845213f9d119eaaa8",
     "20261103000000_named_flock_scheduler.sql": "85f6b0c213277eeec662c90431577639b0ceca00dddbee4481687fc1a8fa4339",
-    "20261104000000_farm_expense_confirmations.sql": "8855863ea1be43441310be3cfe3c86f8ecba14a05607d7606bf23b866547770f"
+    "20261104000000_farm_expense_confirmations.sql": "8855863ea1be43441310be3cfe3c86f8ecba14a05607d7606bf23b866547770f",
+    "20261108000000_contain_operational_security.sql": "6775a0e73bb7e7ab17ae5912d4ebd2a829a23a29793730bfa45c4e9760cc56c6"
   }
 }
