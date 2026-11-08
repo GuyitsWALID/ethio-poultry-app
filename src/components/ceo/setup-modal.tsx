@@ -204,12 +204,7 @@ export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
   };
 
   const generatePassword = () => {
-    const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-    const length = 14;
-    let nextPassword = "";
-    for (let i = 0; i < length; i += 1) {
-      nextPassword += charset[Math.floor(Math.random() * charset.length)];
-    }
+    const nextPassword = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("") + "Aa1!";
     updateManager("password", nextPassword);
     setCopiedPassword(false);
   };

@@ -135,8 +135,8 @@ export async function loadNotificationCenter(ctx: AccessContext): Promise<Notifi
   const optional = preferences.inAppMinimumSeverity === "off" ? [] : Object.keys(severityRank).filter(severity => allows(preferences.inAppMinimumSeverity, severity as NotificationSeverity));
   const allowed = `event_type.in.(assigned,resolution_submitted)${optional.length ? `,severity.in.(${optional.join(",")})` : ""}`;
   const [notificationResult, unread] = await Promise.all([
-    db.from("notifications").select("id,action_id,event_type,severity,title,message,route,read_at,created_at,action:operational_actions!notifications_action_id_fkey(title,context,status,source_resolved_at,due_at),action_event:operational_action_events!notifications_action_event_id_fkey(actor_name_snapshot,actor_role_snapshot)").eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).or(allowed).order("created_at", { ascending: false }).order("id", {ascending: false}).limit(50),
-    db.from("notifications").select("id", {count: "exact", head: true}).eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).is("read_at", null).or(allowed),
+    db.from("authorized_notifications").select("id,action_id,event_type,severity,title,message,route,read_at,created_at,action:operational_actions!notifications_action_id_fkey(title,context,status,source_resolved_at,due_at),action_event:operational_action_events!notifications_action_event_id_fkey(actor_name_snapshot,actor_role_snapshot)").eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).or(allowed).order("created_at", { ascending: false }).order("id", {ascending: false}).limit(50),
+    db.from("authorized_notifications").select("id", {count: "exact", head: true}).eq("org_id", ctx.orgId).eq("recipient_id", ctx.userId).is("archived_at", null).is("read_at", null).or(allowed),
   ]);
   if (notificationResult.error) throw new Error(notificationResult.error.message);
   if (unread.error) throw new Error("Unread notifications could not be counted.");
@@ -181,7 +181,7 @@ export async function dispatchNotificationOutbox(limit = 25) {
   const recipientIds = (preferences ?? []).map((row: Row) => text(row.profile_id)).filter(Boolean);
   if (!recipientIds.length) return { status: "ready", attempted: 0, sent: 0, failed: 0 };
 
-  const { data: pending, error: notificationError } = await db.from("notifications").select("id,org_id,recipient_id,action_id,event_type,severity,title,message,route,read_at,created_at").in("recipient_id", recipientIds).order("created_at", { ascending: false }).limit(250);
+  const { data: pending, error: notificationError } = await db.from("authorized_notifications").select("id,org_id,recipient_id,action_id,event_type,severity,title,message,route,read_at,created_at").in("recipient_id", recipientIds).is("archived_at", null).order("created_at", { ascending: false }).limit(250);
   if (notificationError) throw new Error(notificationError.message);
   const notificationIds = (pending ?? []).map((row: Row) => text(row.id));
   const { data: attempts, error: attemptError } = notificationIds.length
@@ -208,6 +208,10 @@ export async function dispatchNotificationOutbox(limit = 25) {
     const history = (attempts ?? []).filter((attempt: Row) => text(attempt.notification_id) === text(row.id));
     const attemptNumber = history.length + 1;
     try {
+      // Access may have been revoked after the outbox read.
+      const {data: authorized, error: accessError} = await db.rpc("notification_recipient_has_access", {p_notification: row.id});
+      if (accessError) throw Object.assign(new Error("Recipient access could not be checked."), {code: "RECIPIENT_ACCESS_CHECK_FAILED"});
+      if (authorized !== true) continue;
       const { data: authUser } = await governanceAdmin.auth.admin.getUserById(text(row.recipient_id));
       const email = authUser.user?.email;
       if (!email) throw Object.assign(new Error("Recipient email is unavailable."), { code: "RECIPIENT_EMAIL_MISSING" });

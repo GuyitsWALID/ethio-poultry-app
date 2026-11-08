@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-import { normalizeRole } from "@/lib/roles";
-import { createClient as createAuthedClient } from "@/utils/supabase/server";
+import {getAccessContext, isAccessResponse} from "@/lib/access-context";
 import { passwordPolicyError } from "@/lib/password-policy";
 import {recordAuditEvent} from "@/lib/audit-ledger";
-
-const adminRoles = new Set(["system_admin"]);
 
 type OnboardPayload = {
   organization: {
@@ -26,34 +23,9 @@ type OnboardPayload = {
 };
 
 export async function POST(request: Request) {
-  const supabase = await createAuthedClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-
-  const metadataRole = normalizeRole(user.user_metadata?.role);
-  let normalizedRole = metadataRole;
-
-  if (!metadataRole || !adminRoles.has(metadataRole)) {
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profileError) {
-      return NextResponse.json({ message: profileError.message }, { status: 500 });
-    }
-
-    normalizedRole = normalizeRole(profile?.role);
-  }
-
-  if (!normalizedRole || !adminRoles.has(normalizedRole)) {
+  const access = await getAccessContext();
+  if (isAccessResponse(access)) return access;
+  if (access.role !== "system_admin") {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
@@ -124,7 +96,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: profileError.message }, { status: 400 });
   }
 
-  await recordAuditEvent({orgId:String(organization.id),userId:user.id,role:"system_admin",supportSessionId:null},{eventType:"organization.onboarded",operation:"insert",entityTable:"organizations",entityId:String(organization.id),reason:"Created an organization and its initial CEO account.",after:{organization_name:payload.organization.name,ceo_name:payload.admin.full_name??null,plan:payload.organization.plan??null},metadata:{initial_ceo_user_id:authUser.user.id}});
+  await recordAuditEvent({orgId:String(organization.id),userId:access.userId,role:"system_admin",supportSessionId:null},{eventType:"organization.onboarded",operation:"insert",entityTable:"organizations",entityId:String(organization.id),reason:"Created an organization and its initial CEO account.",after:{organization_name:payload.organization.name,ceo_name:payload.admin.full_name??null,plan:payload.organization.plan??null},metadata:{initial_ceo_user_id:authUser.user.id}});
 
   return NextResponse.json({
     organizationId: organization.id,

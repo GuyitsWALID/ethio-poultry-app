@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { normalizeRole } from "@/lib/roles";
-import { createClient as createAuthedClient } from "@/utils/supabase/server";
+import {getAccessContext, isAccessResponse} from "@/lib/access-context";
+import {passwordPolicyError} from "@/lib/password-policy";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,56 +18,16 @@ export async function POST(req: Request) {
   let createdAuthUserId: string | null = null;
 
   try {
-    const supabase = await createAuthedClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, org_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const metadataRole = normalizeRole(
-      (user.app_metadata?.role as string | undefined) ??
-      (user.user_metadata?.role as string | undefined)
-    );
-
-    let effectiveRole = normalizeRole(profile?.role);
-    let orgId = profile?.org_id ?? null;
-
-    if (!profile || !orgId) {
-      const { data: adminProfile, error: adminProfileError } = await supabaseAdmin
-        .from("profiles")
-        .select("role, org_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (adminProfileError) {
-        throw new Error(`Profile lookup failed: ${adminProfileError.message}`);
-      }
-
-      effectiveRole = normalizeRole(adminProfile?.role ?? effectiveRole);
-      orgId = adminProfile?.org_id ?? orgId;
-    }
-
-    if (effectiveRole !== "ceo" && metadataRole !== "ceo") {
+    const access = await getAccessContext();
+    if (isAccessResponse(access)) return access;
+    if (access.role !== "ceo") {
       return new Response(
         JSON.stringify({ error: "Forbidden: CEO role required" }),
         { status: 403 }
       );
     }
 
-    if (!orgId) {
-      return new Response(JSON.stringify({ error: "Profile is missing org_id" }), {
-        status: 400,
-      });
-    }
+    const orgId = access.orgId;
     const body = await req.json();
     const { branch, intakeBatch, farms, manager } = body;
     const ageAtPlacementDays = Number(intakeBatch?.age_at_placement_days);
@@ -85,6 +45,10 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    const passwordError = typeof manager.password === "string"
+      ? passwordPolicyError(manager.password) : "Password is required.";
+    if (passwordError) return Response.json({error: passwordError}, {status: 400});
 
     if (
       intakeBatch.age_at_placement_days === "" ||
@@ -110,7 +74,7 @@ export async function POST(req: Request) {
         app_metadata: {
           role: "farm_manager",
         },
-        password: manager.password || "TemporaryPassword123!",
+        password: manager.password,
       });
 
     if (userAuthError) {
