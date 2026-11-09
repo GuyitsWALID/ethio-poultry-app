@@ -356,6 +356,9 @@ export type TodayFlockContext = {
   suppliesSummary: {hasUsage: boolean; confirmedNone: boolean};
   birdCheck: {
     dailyRecordId: string | null;
+    recordingStartBlocker?: string | null;
+    previousRecordDate?: string | null;
+    recordingGapDays?: number;
     openingBirds: number | null;
     openingSource: "daily_record" | "previous_close" | "baseline" | "placement" | "flock_current_count" | "missing";
     closingBirds: number | null;

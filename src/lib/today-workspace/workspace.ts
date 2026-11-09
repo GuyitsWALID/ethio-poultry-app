@@ -10,6 +10,7 @@ import {
 import {assessBirdCheck} from "./bird-check.ts";
 import {hasTaskEvidence} from "./task-evidence.ts";
 import {resolveBirdOpening} from "./opening-source.ts";
+import {recordingStartBlocker, type RecordingStartContext} from "../recording-start-contract.ts";
 
 type Row = Record<string, unknown>;
 
@@ -76,6 +77,7 @@ export type TodayWorkspaceData = {
     suppliesAttestationFingerprint: string | null;
   }>;
   assignedActionCount: number;
+  recordingStartBlockers?: Record<string, string | null>;
   scheduledWork?: Array<{flockId:string;pending:number;revision?:string}>;
   farmActivity?: {stockReceipts: number; stockCounts: number; sales: number; expenses: number};
 };
@@ -172,6 +174,9 @@ export function deriveTodayWorkspace(
       },
       birdCheck: {
         dailyRecordId: daily?.id ?? null,
+        recordingStartBlocker: data.recordingStartBlockers?.[flock.id],
+        previousRecordDate: flock.previousRecordDate ?? null,
+        recordingGapDays: flock.previousRecordDate ? Math.max(0, (Date.parse(selection.workDate) - Date.parse(flock.previousRecordDate)) / 86400000 - 1) : 0,
         openingBirds,
         openingSource,
         closingBirds: daily?.closingBirds ?? null,
@@ -420,5 +425,16 @@ export async function loadTodayWorkspace(
   const {dueScheduledWork}=await import("@/lib/scheduler/server");
   const scheduled=await dueScheduledWork(context,selection.farmId,selection.workDate);
   data.scheduledWork=flockIds.map(id=>({flockId:id,pending:scheduled.filter(row=>row.flock_id===id).length,revision:scheduled.filter(row=>row.flock_id===id).map(row=>`${row.id}:${row.revision}`).join("|")}));
+  const missingStarts = data.flocks.filter(flock=>!flock.dailyRecord && !flock.completedAt && resolveBirdOpening({...flock,workDate:selection.workDate}).openingBirds===null);
+  if(missingStarts.length){
+    const {addisOperatingDate}=await import("@/lib/flock-lifecycle/server");
+    const today=addisOperatingDate(new Date());
+    const blockers=await Promise.all(missingStarts.map(async flock=>{
+      const result=await governanceAdmin.rpc("recording_start_context",{p_actor:context.userId,p_flock:flock.id});
+      const start=result.data as (RecordingStartContext & {farm_id:string}) | null;
+      return [flock.id,result.error || !start || start.farm_id!==selection.farmId ? "START_UNAVAILABLE" : recordingStartBlocker(start,selection.workDate,today)] as const;
+    }));
+    data.recordingStartBlockers=Object.fromEntries(blockers);
+  }
   return deriveTodayWorkspace(data, selection, context.role === "farm_manager");
 }

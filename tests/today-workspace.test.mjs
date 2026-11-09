@@ -121,6 +121,24 @@ test("the current flock count is not presented as a historical opening balance",
   assert.equal(workspace.flocks[0].birdCheck.openingSource, "missing");
 });
 
+test("a recording gap reports missing days without treating an old close as today's opening", () => {
+  const source=data([flock({dailyRecord:null,previousRecordDate:"2026-10-01",previousClosingBirds:1472})]);
+  const bird=deriveTodayWorkspace(source,{...selection,workDate:"2026-11-09"},true).flocks[0].birdCheck;
+  assert.equal(bird.previousRecordDate,"2026-10-01");
+  assert.equal(bird.recordingGapDays,38);
+  assert.equal(bird.openingBirds,null);
+  assert.equal(deriveTodayWorkspace(source,{...selection,workDate:"2026-10-02"},true).flocks[0].birdCheck.recordingGapDays,0);
+});
+
+test("starting point eligibility keeps an allowed null distinct from a blocker", () => {
+  const missing = flock({dailyRecord: null, previousClosingBirds: null});
+  const allowed = data([missing]);
+  allowed.recordingStartBlockers = {[missing.id]: null};
+  assert.equal(deriveTodayWorkspace(allowed, selection, true).flocks[0].birdCheck.recordingStartBlocker, null);
+  allowed.recordingStartBlockers[missing.id] = "START_HAS_RECORDS";
+  assert.equal(deriveTodayWorkspace(allowed, selection, true).flocks[0].birdCheck.recordingStartBlocker, "START_HAS_RECORDS");
+});
+
 test("a no-active-flock farm can still finish its operating day", () => {
   const workspace = deriveTodayWorkspace(data([]), selection, true);
   assert.equal(workspace.flocks.length, 0);

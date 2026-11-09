@@ -219,12 +219,12 @@ test('Today tablet controls and Amharic calendar preserve the operational date',
   const savedResponse=page.waitForResponse(response=>response.url().endsWith('/api/farm-manager/today/commands')&&response.request().method()==='POST');
   await context.setOffline(true);
   try{
-    const save=birds.getByRole('button',{name:'Save bird check',exact:true});
+    const save=birds.getByRole('button',{name:'Start bird record',exact:true});
     await expect(save).toBeEnabled();await save.click();
     await expect(birds.getByText('Waiting to sync',{exact:true})).toBeVisible();
     if(await birds.locator('button[aria-expanded=false]').count())await birds.locator('button[aria-expanded]').click();
     await expect(birds.getByText(/Waiting to sync; not complete yet/).first()).toBeVisible();
-    await expect(birds.getByRole('button',{name:'Save bird check',exact:true})).toBeDisabled();
+    await expect(birds.getByRole('button',{name:'Start bird record',exact:true})).toBeDisabled();
   }finally{await context.setOffline(false);}
   const saved=await savedResponse;
   expect(saved.status()).toBe(200);

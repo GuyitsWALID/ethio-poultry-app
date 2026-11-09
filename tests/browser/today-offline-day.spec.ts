@@ -23,7 +23,7 @@ test('Today complete offline day survives reload and browser restart then closes
     try{return await new Promise<QueuedCommand[]>((resolve,reject)=>{const request=db.transaction('outbox').objectStore('outbox').getAll();request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});}finally{db.close();}
   });
   const open=async(code:string)=>{
-    const card=page.locator(`#today-task-${code}`);await expect(card.locator('button[aria-expanded]')).toBeVisible();
+    const card=page.locator(`#today-task-${code}`);await expect(code==='birds'?card:card.locator('button[aria-expanded]')).toBeVisible();
     if(await card.locator('button[aria-expanded=false]').count())await card.locator('button[aria-expanded]').click();
     return card;
   };
@@ -53,7 +53,7 @@ test('Today complete offline day survives reload and browser restart then closes
       try{return await new Promise<number>(resolve=>{const r=db.transaction('drafts').objectStore('drafts').getAllKeys();r.onsuccess=()=>resolve(r.result.filter(key=>String(key).startsWith(`detail:task:${farmId}:`)).length);});}finally{db.close();}
     },id(1)),{timeout:90_000}).toBeGreaterThanOrEqual(8);
     await context.setOffline(true);
-    const birds=await open('birds');await birds.getByRole('button',{name:'Save bird check',exact:true}).click();
+    const birds=await open('birds');await birds.getByRole('button',{name:'Start bird record',exact:true}).click();
     await expect.poll(async()=>(await queue(page)).length).toBe(1);
     await page.reload();await feeding('First','07:00');
     console.log(`${info.project.name}: disconnected reload and first feeding saved`);

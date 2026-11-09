@@ -4,6 +4,7 @@ import Link from "next/link";
 import {useState, type FormEvent} from "react";
 import {useLocale, useTranslations} from "next-intl";
 import {formatOperationDate} from "@/i18n/formats";
+import {ChevronDown} from "lucide-react";
 
 export function RecordingStartForm({farmId, flockId, workDate, eggProducing, online, findingId}: {
   farmId: string; flockId: string; workDate: string; eggProducing: boolean; online: boolean; findingId?: string;
@@ -33,8 +34,8 @@ export function RecordingStartForm({farmId, flockId, workDate, eggProducing, onl
     finally {setBusy(false);}
   }
   const control = "min-h-12 min-w-0 w-full rounded-xl border border-sand-300 bg-white px-3 text-base";
-  return <details className="rounded-xl border border-sand-300 bg-white p-4">
-    <summary className="flex min-h-12 cursor-pointer items-center font-semibold">{t("title")}</summary>
+  return <details className="group rounded-xl border border-amber-300 bg-amber-50/40 p-4">
+    <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 font-semibold text-forest-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-700 [&::-webkit-details-marker]:hidden">{t("title")}<ChevronDown className="h-5 w-5 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true"/></summary>
     <p className="my-3 text-sm text-forest-700">{t("help")}</p>
     {findingId ? <p className="mb-3 text-sm text-forest-700">{t("recordCheckHelp")}</p> : null}
     <p className="mb-3 text-sm">{t("date")}: {formatOperationDate(workDate, locale)}</p>

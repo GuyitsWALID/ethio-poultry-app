@@ -8,6 +8,7 @@ import {DraftFieldGroup, useDraftField, useDraftState, useDraftSubmit,useTodayOf
 
 import type {TodayFlockContext, TodayTaskDetail} from "@/lib/today-workspace/contracts";
 import {sendTodayCommand} from "@/lib/today-workspace/sync";
+import {BirdOpeningGap} from "@/components/today/bird-opening-gap";
 
 type Choice = "none" | "death" | "cull" | "health" | "vaccination";
 type Row = Record<string, unknown>;
@@ -71,7 +72,7 @@ export function HealthTaskForm({detail, flock, onChanged, onSaved}: {detail: Tod
   async function saveLoss(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if ((!flock.birdCheck.dailyRecordId || !flock.birdCheck.resourceRevision)&&!pendingDaily) {
-      setMessage({error: true, text: t("startBirdCheckFirst")});
+      setMessage({error: true, text: t(flock.birdCheck.openingBirds === null ? "openingRequiredForLosses" : "startBirdCheckFirst")});
       return;
     }
     const form = new FormData(event.currentTarget);
@@ -126,7 +127,7 @@ export function HealthTaskForm({detail, flock, onChanged, onSaved}: {detail: Tod
     <p className="rounded-xl bg-sand-50 p-3 text-sm text-forest-700">{t("recordedLosses", {deaths: flock.birdCheck.deaths, culls: flock.birdCheck.culls})}</p>
     {selected.includes("none") ? <div className="flex justify-end"><button type="button" onClick={() => void confirmNone()} disabled={saving || saved.includes("none")} className={saveClass}><Save className="h-4 w-4"/>{t("confirmNone")}</button></div> : null}
     {lossChosen && !["death", "cull"].filter((choice) => selected.includes(choice as Choice)).every((choice) => saved.includes(choice as Choice)) ? <DraftFieldGroup name="loss"><form onSubmit={saveLoss} className="grid gap-3 rounded-xl border border-sand-200 p-4">
-      {!flock.birdCheck.dailyRecordId&&!pendingDaily ? <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{t("startBirdCheckFirst")}</p> : null}
+      {!flock.birdCheck.dailyRecordId&&!pendingDaily ? <div role="alert" className="grid gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900"><BirdOpeningGap flock={flock}/><p>{t(flock.birdCheck.openingBirds === null ? "openingRequiredForLosses" : "startBirdCheckFirst")}</p><a href="#today-task-birds" className="inline-flex min-h-11 items-center font-semibold underline">{t("openBirdRecord")}</a></div> : null}
       <div className="grid gap-3 sm:grid-cols-2">{selected.includes("death") ? <><Field label={t("deathCount")} name="death_count" type="number" min="1" required/><Select label={t("cause")} name="cause" required><option value="">{t("choose")}</option><option value="Natural">{t("deathCauses.natural")}</option><option value="Illness">{t("deathCauses.illness")}</option><option value="Unknown">{t("deathCauses.unknown")}</option></Select><Field label={t("time")} name="time" type="time"/><Field label={t("diagnosis")} name="diagnosis"/><Field label={t("notes")} name="notes"/></> : null}{selected.includes("cull") ? <><Field label={t("cullCount")} name="cull_count" type="number" min="1" required/><Field label={t("cullReason")} name="cull_reason" required/></> : null}</div>
       <div className="flex justify-end"><button disabled={saving || (!flock.birdCheck.dailyRecordId&&!pendingDaily)} className={saveClass}><Save className="h-4 w-4"/>{t("saveLoss")}</button></div>
     </form></DraftFieldGroup> : null}

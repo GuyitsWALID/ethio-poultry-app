@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useState} from "react";
+import {useCallback,useEffect,useState} from "react";
 import {useLocale,useTranslations} from "next-intl";
 import {recoverOfflineStore} from "@/lib/today-workspace/offline-store";
 import {verifyRecoveryIdentity} from "@/lib/today-workspace/offline-policy";
@@ -36,16 +36,18 @@ function RecoveredWorkspace({workspaces:initialWorkspaces}:{workspaces:TodayWork
   const [flockId,setFlockId]=useState(workspace.flocks[0]?.id??"");
   const [open,setOpen]=useState<string|null>(null);
   const [online,setOnline]=useState(false);
+  const [refreshing,setRefreshing]=useState(false);
   useEffect(()=>{const update=()=>setOnline(navigator.onLine);update();window.addEventListener("online",update);window.addEventListener("offline",update);return()=>{window.removeEventListener("online",update);window.removeEventListener("offline",update);};},[]);
   const flock=workspace.flocks.find(row=>row.id===flockId&&row.houseLabel===house);
   const refresh=()=>{void offline.refresh().catch(offline.fail);};
   const {acceptWorkspace,fail}=offline;
-  useEffect(()=>{const update=()=>{if(!navigator.onLine)return;void(async()=>{
+  const refreshCount=useCallback(async()=>{if(!navigator.onLine)return;setRefreshing(true);try{
     const response=await fetch(`/api/farm-manager/today?${new URLSearchParams({farm_id:workspace.farm.id,date:workspace.workDate})}`,{cache:"no-store"});
     if(!response.ok)throw Error("ACCESS_CHANGED");
     const next=await response.json() as TodayWorkspace;await acceptWorkspace(next);
     setWorkspaces(current=>current.map(row=>row.farm.id===next.farm.id&&row.workDate===next.workDate?next:row));
-  })().catch(fail);};window.addEventListener("ethiopoultry:today-synced",update);return()=>window.removeEventListener("ethiopoultry:today-synced",update);},[workspace.farm.id,workspace.workDate,acceptWorkspace,fail]);
+  }catch(error){fail(error);}finally{setRefreshing(false);}},[workspace.farm.id,workspace.workDate,acceptWorkspace,fail]);
+  useEffect(()=>{const update=()=>{void refreshCount();};window.addEventListener("ethiopoultry:today-synced",update);return()=>window.removeEventListener("ethiopoultry:today-synced",update);},[refreshCount]);
   const changeWorkspace=(index:number)=>{const next=workspaces[index];setSelected(index);setHouse(next.flocks[0]?.houseLabel??"");setFlockId(next.flocks[0]?.id??"");setOpen(null);};
   const taskProps=(code:string)=>({expanded:open===code,onToggle:()=>setOpen(current=>current===code?null:code),onSaved:()=>{const index=flock?.tasks.findIndex(task=>task.code===code)??-1;setOpen(flock?.tasks.slice(index+1).find(task=>task.required&&task.applicable&&task.state!=="complete")?.code??null);refresh();}});
   const reviewTasks=[...workspace.flocks.flatMap(row=>row.tasks.filter(task=>task.required&&task.applicable).map(task=>({...task,state:offline.stateFor({farmId:workspace.farm.id,flockId:row.id,workDate:workspace.workDate},task),contextLabel:row.code}))),...workspace.farmTasks.filter(task=>task.required&&task.applicable&&task.code!=="review_finish")];
@@ -60,7 +62,7 @@ function RecoveredWorkspace({workspaces:initialWorkspaces}:{workspaces:TodayWork
       <label>{t("flock")}<select className="block min-h-12 w-full rounded-xl border px-3" value={flockId} onChange={event=>{setFlockId(event.target.value);setOpen(null);}}>{workspace.flocks.filter(row=>row.houseLabel===house).map(row=><option key={row.id} value={row.id}>{row.code}</option>)}</select></label>
       {online?<a className="inline-flex min-h-12 items-center underline" href={`/app/today?farm_id=${workspace.farm.id}&flock_id=${flockId}&date=${workspace.workDate}`}>{t("refresh")}</a>:null}
     </section>
-    {flock?.tasks.filter(task=>task.applicable).map(task=>{const state={...task,state:offline.stateFor({farmId:workspace.farm.id,flockId:flock.id,workDate:workspace.workDate},task)};return task.code==="birds"?<BirdCheckCard key={task.code} flock={flock} task={state} farmId={workspace.farm.id} workDate={workspace.workDate} online={online} {...taskProps(task.code)}/>:<EmbeddedTaskCard key={`${flock.id}:${task.code}`} task={state} flock={flock} farmId={workspace.farm.id} workDate={workspace.workDate} onChanged={refresh} {...taskProps(task.code)}/>;})}
+    {flock?.tasks.filter(task=>task.applicable).map(task=>{const state={...task,state:offline.stateFor({farmId:workspace.farm.id,flockId:flock.id,workDate:workspace.workDate},task)};return task.code==="birds"?<BirdCheckCard key={task.code} flock={flock} task={state} farmId={workspace.farm.id} workDate={workspace.workDate} online={online} refreshing={refreshing} onRefresh={()=>void refreshCount()} {...taskProps(task.code)}/>:<EmbeddedTaskCard key={`${flock.id}:${task.code}`} task={state} flock={flock} farmId={workspace.farm.id} workDate={workspace.workDate} onChanged={refresh} {...taskProps(task.code)}/>;})}
     {workspace.farmTasks.filter(task=>task.applicable).map(task=><EmbeddedTaskCard key={task.code} task={{...task,state:offline.stateFor({farmId:workspace.farm.id,workDate:workspace.workDate},task)}} flock={flock} farmId={workspace.farm.id} workDate={workspace.workDate} onChanged={refresh} online={online} dayRevision={workspace.operatingDay.revision} reviewTasks={reviewTasks} canFinish={online&&workspace.capabilities.canFinish&&!offline.queue.length&&!offline.drafts.length&&!offline.problem} {...taskProps(task.code)}/>)}
     <p>{t("embedded.connectToFinish")}</p>
   </main>;

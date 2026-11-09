@@ -81,7 +81,7 @@ test('governed physical start preserves historical coverage, bilingual context a
     await page.context().setOffline(true);
     const birds=page.locator('#today-task-birds');
     if(await birds.locator('button[aria-expanded=false]').count())await birds.locator('button[aria-expanded]').click();
-    await birds.getByRole('button',{name:'Save bird check',exact:true}).click();
+    await birds.getByRole('button',{name:'Start bird record',exact:true}).click();
     await expect.poll(async()=>(await outbox(page)).length).toBe(1);
     const queued=(await outbox(page))[0];
     expect(queued.command.type).toBe('save_daily_record');
