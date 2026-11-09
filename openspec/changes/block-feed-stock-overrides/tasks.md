@@ -1,0 +1,5 @@
+- [x] 1 Remove insufficient-stock reason bypass in the authoritative feed-close function.
+- [x] 2 Remove override UI/API forwarding; preserve queued-command compatibility and localized guidance.
+- [x] 3 Test manager/CEO shortage rejection, rollback, genuine receipt/retry and one-time deductions together with finding 8.
+- [ ] 4 Run combined unit/database/static/build and CI checks.
+- [ ] 5 Verify backup, review historical candidates, migrate production, merge master and verify deployment.
