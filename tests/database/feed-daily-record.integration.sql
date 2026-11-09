@@ -201,9 +201,37 @@ begin
 
   -- Feed Control claims the day and synchronizes its total without replacing
   -- eggs, mortality, leftovers, water, or Daily Records health usage.
+  -- Voided work must not count, block close, select feed type or require its store.
+  insert into public.warehouses(id,org_id,branch_id,farm_id,name,type,status)
+  values('11000000-0000-4000-8000-000000000012',v_org,'11000000-0000-4000-8000-000000000003',null,'Unassigned voided feed store','central_warehouse','active');
+  insert into public.feeding_session_records(
+    org_id,batch_id,flock_id,record_date,session_name,session_time,feeders_count,
+    planned_feed_kg,actual_feed_kg,feed_item_id,warehouse_id,feed_type,status,
+    recorded_by,voided_at,voided_by,void_reason
+  ) values
+    (v_org,v_batch,v_flock,v_day,'Voided completed',time '18:00',1,400,400,v_feed_item,
+      '11000000-0000-4000-8000-000000000012','broiler_feed','completed',v_manager,now(),v_manager,'Duplicate record'),
+    (v_org,v_batch,v_flock,v_day,'Voided planned',time '19:00',1,1000,null,null,null,
+      'broiler_feed','planned',v_manager,now(),v_manager,'Cancelled plan');
+  -- Only voided sessions cannot establish a feeding day.
+  insert into public.feeding_session_records(org_id,batch_id,flock_id,record_date,session_name,feeders_count,planned_feed_kg,status,recorded_by,voided_at,voided_by,void_reason)
+  values(v_org,v_batch,v_flock,v_day+1,'Voided only',1,1,'planned',v_manager,now(),v_manager,'Cancelled plan');
+  begin
+    perform public.close_feed_day(v_manager,v_flock,v_day+1,null);
+    raise exception 'A day with only voided sessions closed';
+  exception when sqlstate '22023' then
+    if sqlerrm not like 'Add at least one feeding session%' then raise; end if;
+  end;
   perform public.close_feed_day(v_manager, v_flock, v_day, null);
   select feed_intake_grams into v_number from public.daily_farm_records where id = v_daily;
   if v_number <> 14000 then raise exception 'Expected synchronized feed of 14000 g, found %.', v_number; end if;
+  if not exists(select 1 from public.feed_day_closures where org_id=v_org and flock_id=v_flock and record_date=v_day
+    and planned_feed_kg=17 and actual_feed_kg=14 and variance_kg=-3) then raise exception 'Voided sessions affected closure totals'; end if;
+  if (select feed_type from public.daily_farm_records where id=v_daily)<>'layer_feed' then raise exception 'Voided session selected the feed type'; end if;
+  if not exists(select 1 from public.stock_ledger where org_id=v_org and source_kind='feed_day_close'
+    and source_key=v_flock::text||':'||v_day::text and quantity=14 and warehouse_id=v_warehouse)
+    or exists(select 1 from public.stock_ledger where org_id=v_org and source_kind='feed_day_close' and warehouse_id='11000000-0000-4000-8000-000000000012') then
+    raise exception 'Voided session posted inventory'; end if;
   if not exists (
     select 1 from public.daily_farm_records
     where id = v_daily and synced and total_eggs = 865 and deaths = 2
@@ -267,7 +295,60 @@ begin
   where org_id = v_org and source_kind = 'feed_day_close' and source_key = v_flock::text || ':' || v_day::text;
   if v_count <> 1 then raise exception 'Reclose did not restore exactly one feed issue.'; end if;
 
-  raise notice 'Feed close/reopen and Daily Record synchronization integration checks passed.';
+  -- A later authorized reopen/void/reclose replaces, rather than duplicates, stock.
+  perform public.reopen_feed_day(v_manager,v_flock,v_day,'Remove duplicated third feeding');
+  update public.feeding_session_records set voided_at=now(),voided_by=v_manager,void_reason='Duplicated third feeding'
+  where org_id=v_org and flock_id=v_flock and record_date=v_day and session_name='Third feeding';
+  insert into public.feeding_session_records(org_id,batch_id,flock_id,record_date,session_name,feeders_count,planned_feed_kg,status,recorded_by)
+  values(v_org,v_batch,v_flock,v_day,'Unfinished active session',1,1,'planned',v_manager);
+  begin
+    perform public.close_feed_day(v_manager,v_flock,v_day,null);
+    raise exception 'An active unfinished session did not block close';
+  exception when sqlstate '22023' then
+    if sqlerrm not like 'Complete each feeding%' then raise; end if;
+  end;
+  if exists(select 1 from public.stock_ledger where org_id=v_org and source_kind='feed_day_close' and source_key=v_flock::text||':'||v_day::text)
+    or exists(select 1 from public.daily_farm_records where id=v_daily and feed_intake_grams is not null) then raise exception 'Failed close left partial evidence'; end if;
+  update public.feeding_session_records set voided_at=now(),voided_by=v_manager,void_reason='Cancelled plan'
+  where org_id=v_org and flock_id=v_flock and record_date=v_day and session_name='Unfinished active session';
+  perform public.close_feed_day(v_manager,v_flock,v_day,null);
+  perform public.close_feed_day(v_manager,v_flock,v_day,null);
+  if not exists(select 1 from public.daily_farm_records where id=v_daily and feed_intake_grams=12000 and total_eggs=865 and deaths=2)
+    or not exists(select 1 from public.feed_day_closures where org_id=v_org and flock_id=v_flock and record_date=v_day and planned_feed_kg=15 and actual_feed_kg=12)
+    or (select count(*) from public.stock_ledger where org_id=v_org and source_kind='feed_day_close' and source_key=v_flock::text||':'||v_day::text and quantity=12)<>1 then
+    raise exception 'Void/reclose did not synchronize exactly one corrected issue'; end if;
+
+  -- Neither a manager note nor a CEO actor can authorize a stock deficit.
+  perform public.reopen_feed_day(v_manager,v_flock,v_day,'Verify insufficient stock guard');
+  update public.feeding_session_records set actual_feed_kg=200
+  where org_id=v_org and flock_id=v_flock and record_date=v_day and session_name='Morning';
+  insert into public.profiles(id,org_id,full_name,role,is_active)
+  values('11000000-0000-4000-8000-000000000013',v_org,'Stock guard CEO','ceo',true);
+  declare actor uuid; reason text; begin
+    foreach actor in array array[v_manager,'11000000-0000-4000-8000-000000000013'::uuid] loop
+      foreach reason in array array[null::text,'Manager approved','CEO approved'] loop
+        begin
+          perform public.close_feed_day(actor,v_flock,v_day,reason);
+          raise exception 'Reason text bypassed insufficient stock';
+        exception when sqlstate '22023' then
+          if sqlerrm not like 'Insufficient feed stock.%' then raise; end if;
+        end;
+      end loop;
+    end loop;
+  end;
+  if exists(select 1 from public.stock_ledger where org_id=v_org and source_kind='feed_day_close' and source_key=v_flock::text||':'||v_day::text)
+    or exists(select 1 from public.daily_farm_records where id=v_daily and feed_intake_grams is not null)
+    or exists(select 1 from public.feed_day_closures where org_id=v_org and flock_id=v_flock and record_date=v_day and status='closed') then
+    raise exception 'Blocked stock close left partial evidence'; end if;
+  perform public.receive_inventory_stock(v_manager,v_warehouse,v_feed_item,null,150,20,v_day,'monthly',
+    'Integration Supplier','FEED-STOCK-GUARD','Genuine receipt fixture','feed-stock-guard-receipt');
+  perform public.close_feed_day(v_manager,v_flock,v_day,'Legacy queued note');
+  perform public.close_feed_day(v_manager,v_flock,v_day,'Legacy queued note');
+  if not exists(select 1 from public.daily_farm_records where id=v_daily and feed_intake_grams=200000 and total_eggs=865 and deaths=2)
+    or (select count(*) from public.stock_ledger where org_id=v_org and source_kind='feed_day_close' and source_key=v_flock::text||':'||v_day::text and quantity=200)<>1 then
+    raise exception 'Receipt/retry failed to synchronize exactly one stock issue'; end if;
+
+  raise notice 'Feed close/reopen, voiding, stock guards and Daily Record synchronization checks passed.';
 end;
 $$;
 

@@ -189,6 +189,7 @@ const commandSchemas = {
     type: z.literal("close_feed_day"),
     flock_id: uuid,
     expected_resource_revision: nonEmpty.optional(),
+    // Retained for queued version-one commands; text never authorizes a stock deficit.
     payload: z.object({override_reason: z.string().trim().max(1000).nullable().optional()}),
   }),
   record_mortality_event: baseCommand.extend({
