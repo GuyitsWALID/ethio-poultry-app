@@ -21,5 +21,7 @@ test('missing target and partial evidence never render invented zero or a defaul
  assert.ok(html.includes(feedPlanCopy.am.missing_population));assert.ok(html.includes(feedPlanCopy.am.unavailable));assert.ok(!html.includes('>0<'));
  const source=await readFile(new URL('../src/components/today/embedded-task-card.tsx',import.meta.url),'utf8');
  assert.ok(!source.includes('scheduledFeedType ?? "layer_feed"'));
+ assert.ok(source.includes('session.feed_type ?? feedPlan?.feedType ?? ""'));
+ assert.ok(!source.includes('detail.data.scheduledFeedType ??'));
  assert.ok(source.includes('<FeedPlanSummary'));
 });
