@@ -8,7 +8,7 @@ const migration = await readFile(new URL("../supabase/migrations/20260929000000_
 
 test("Today returns actual feed sessions without inventing two fixed sessions", () => {
   const feeding = detail.slice(detail.indexOf('if (task === "feeding")'), detail.indexOf('if (["birds"'));
-  assert.match(feeding, /sessions,\s*scheduledFeedType/);
+  assert.match(feeding, /sessions,\s*feedPlan,\s*scheduledFeedType/);
   assert.doesNotMatch(feeding, /session_name: "Morning"|session_name: "Afternoon"/);
 });
 

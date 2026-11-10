@@ -8,6 +8,8 @@ import {AlertCircle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink, Info, P
 
 import type {TodayFlockContext, TodayTask, TodayTaskDetail} from "@/lib/today-workspace/contracts";
 import {todayErrorMessageKeys} from "@/i18n/today-copy";
+import {FeedPlanSummary} from "./feed-plan-summary";
+import type {FeedTemplatePlan} from "@/lib/feed-template-plan";
 import {actionStatuses, type ActionStatus} from "@/lib/action-desk-contract";
 import {buildFinishReview, type FinishIssue, type ReviewTask} from "@/lib/today-workspace/finish-review";
 import {sendTodayCommand} from "@/lib/today-workspace/sync";
@@ -164,6 +166,7 @@ function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDeta
   if (closed) return <div className="rounded-xl bg-leaf-500/10 p-4 text-sm font-semibold text-leaf-700"><CheckCircle2 className="mr-2 inline h-4 w-4"/>{t("feedAlreadyClosed")}</div>;
   if(closeQueued)return <p role="status">{t("reviewUnsynced")}</p>;
   return <div className="grid gap-4">
+    <FeedPlanSummary plan={detail.data.feedPlan as FeedTemplatePlan | undefined} sessions={sessions}/>
     <div className="grid gap-2" aria-label={t("feedingSessions")}>
       {sessions.map((row, index) => <div key={String(row.id)} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-sand-200 px-3 py-2 text-sm">
         <span><span className="font-semibold">{String(row.session_name || t("feedingNumber", {number: index + 1}))}</span><span className="ml-2 text-forest-600">{String(row.session_time ?? "").slice(0, 5)} · {row.status === "completed" ? t("done") : row.status === "missed" ? t("missed") : t("pending")}</span></span>
@@ -189,7 +192,7 @@ function FeedingForm({detail, flock, onChanged, onSaved}: {detail: TodayTaskDeta
           <SelectField label={t("feedItem")} name="feed_item" required defaultValue={String(session.feed_item_id ?? "")}><option value="">{t("choose")}</option>{feedItems.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.unit})</option>)}</SelectField>
           <SelectField label={t("warehouse")} name="warehouse" required defaultValue={String(session.warehouse_id ?? "")}><option value="">{t("choose")}</option>{detail.warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</SelectField>
         </> : null}
-        <SelectField label={t("feedType")} name="feed_type" required defaultValue={String(session.feed_type ?? detail.data.scheduledFeedType ?? "layer_feed")}><option value="starter_feed">{t("feedTypes.starter")}</option><option value="grower_pullet_feed">{t("feedTypes.grower")}</option><option value="layer_feed">{t("feedTypes.layer")}</option><option value="broiler_feed">{t("feedTypes.broiler")}</option><option value="medicated_feed">{t("feedTypes.medicated")}</option></SelectField>
+        <SelectField label={t("feedType")} name="feed_type" required defaultValue={String(session.feed_type ?? detail.data.scheduledFeedType ?? "")}><option value="">{t("choose")}</option><option value="starter_feed">{t("feedTypes.starter")}</option><option value="grower_pullet_feed">{t("feedTypes.grower")}</option><option value="layer_feed">{t("feedTypes.layer")}</option><option value="broiler_feed">{t("feedTypes.broiler")}</option><option value="medicated_feed">{t("feedTypes.medicated")}</option></SelectField>
       </div>
       <Field label={status === "missed" ? t("missedReason") : t("notes")} name="notes" required={status === "missed"} defaultValue={String(session.notes ?? "")}/>
       <TaskMessage message={message}/>

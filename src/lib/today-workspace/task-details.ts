@@ -7,6 +7,7 @@ import {TodayWorkspaceError} from "./workspace";
 import {isTodayWarehouseEligible} from "./warehouse-choices";
 import {effectiveWarehouseIds} from "@/lib/warehouse-access";
 import {readReportQuery} from "@/lib/report-pagination";
+import {loadTemplateFeedPlan} from "@/lib/feed-template-plan.server";
 
 type Row = Record<string, unknown>;
 
@@ -104,7 +105,7 @@ export async function loadTodayTaskDetail(
   let flock: Row | null = null;
   if (input.flockId) {
     const result = await governanceAdmin.from("flocks")
-      .select("id,flock_code,flock_type,batch_id,house_id,farm_id")
+      .select("id,flock_code,flock_type,batch_id,house_id,farm_id,placement_date,age_at_placement_days,initial_count")
       .eq("id", input.flockId).eq("org_id", context.orgId).eq("farm_id", input.farmId).maybeSingle();
     if (result.error) throw new TodayWorkspaceError("INTERNAL_ERROR", result.error.message, 500);
     if (!result.data) throw new TodayWorkspaceError("SOURCE_NOT_FOUND", "The selected flock is unavailable.", 404);
@@ -136,17 +137,18 @@ export async function loadTodayTaskDetail(
     return {...base,data:{templates:await expenseTemplates(context,input.farmId,warehouses.map(w=>String(w.id)))}};
   }
   if (task === "feeding") {
-    const [sessionsResult, closureResult, scheduleResult] = await Promise.all([
+    const [sessionsResult, closureResult, feedPlan] = await Promise.all([
       governanceAdmin.from("feeding_session_records").select("id,session_name,session_time,feeders_count,planned_feed_kg,actual_feed_kg,notes,feed_item_id,warehouse_id,feed_type,status").eq("org_id", context.orgId).eq("flock_id", input.flockId!).eq("record_date", input.workDate).is("voided_at", null).order("session_time"),
       governanceAdmin.from("feed_day_closures").select("id,status,updated_at").eq("org_id", context.orgId).eq("flock_id", input.flockId!).eq("record_date", input.workDate).maybeSingle(),
-      governanceAdmin.from("feeding_schedules").select("feed_type").eq("org_id", context.orgId).eq("batch_id", String(flock!.batch_id)).eq("schedule_date", input.workDate).maybeSingle(),
+      loadTemplateFeedPlan(context, flock!, input.workDate),
     ]);
-    if (closureResult.error || scheduleResult.error) throw new TodayWorkspaceError("INTERNAL_ERROR", closureResult.error?.message ?? scheduleResult.error!.message, 500);
+    if (closureResult.error) throw new TodayWorkspaceError("INTERNAL_ERROR", closureResult.error.message, 500);
     const sessions = rows(sessionsResult, "Feed sessions");
     return {...base, task, resourceRevision: await resourceRevision("feed_day", input.flockId!, input.workDate), data: {
       closed: closureResult.data?.status === "closed",
       sessions,
-      scheduledFeedType: scheduleResult.data?.feed_type ?? "layer_feed",
+      feedPlan,
+      scheduledFeedType: feedPlan.feedType ?? null,
     }};
   }
 

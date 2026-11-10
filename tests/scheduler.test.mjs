@@ -6,7 +6,18 @@ import {parseTodayCommand} from '../src/lib/today-workspace/contracts.ts';
 import {MemoryOfflineStore} from '../src/lib/today-workspace/offline-store.ts';
 import {TodayOfflineRuntime,remainingDraft} from '../src/lib/today-workspace/offline-runtime.ts';
 import {preparationInterrupted} from '../src/lib/today-workspace/offline-policy.ts';
+import {readReportQuery} from '../src/lib/report-pagination.ts';
 const id=n=>`33000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+
+test('template rule history remains complete beyond 500 rules with authorized stable ordering',async()=>{
+ const source=readFileSync('src/lib/scheduler/server.ts','utf8');
+ assert.ok(source.includes("readReportQuery<ScheduledRule>(()=>db.from('scheduled_work_rules')"));
+ assert.ok(source.includes(".eq('org_id',ctx.orgId).in('farm_id',ids).order('created_at',{ascending:false}).order('id')"));
+ assert.ok(!source.includes('rules.data.length>500'));
+ const rows=Array.from({length:1201},(_,index)=>({id:id(index)}));
+ const result=await readReportQuery(()=>({range:async(from,to)=>({data:rows.slice(from,to+1),error:null})}));
+ assert.equal(result.data.length,1201);assert.equal(new Set(result.data.map(row=>row.id)).size,1201);
+});
 test('Interrupted offline preparation preserves cached forms without swallowing authorization or storage failures',()=>{
  assert.equal(preparationInterrupted(Error('OFFLINE_PREPARATION_NETWORK'),false),true);
  assert.equal(preparationInterrupted(Error('OFFLINE_PREPARATION_NETWORK'),true),false);

@@ -10,9 +10,10 @@ export const scheduleRuleSchema=z.object({
 }).refine(value=>!value.end_date||value.end_date>=value.start_date,{message:'Invalid date range',path:['end_date']})
  .refine(value=>!value.id||Boolean(value.revision),{message:'Revision required',path:['revision']});
 export type ScheduleRuleInput=z.infer<typeof scheduleRuleSchema>;
-export type ScheduledRule={id:string;farm_id:string;created_by:string;created_by_role:'ceo'|'farm_manager';kind:typeof schedulerKinds[number];title:string;notes:string;frequency:typeof schedulerFrequencies[number];start_date:string;end_date:string|null;flock_ids:string[];active:boolean;revision:number};
+export type ScheduledRule={id:string;farm_id:string;created_by:string;created_by_role:'ceo'|'farm_manager';kind:typeof schedulerKinds[number];title:string;notes:string;frequency:typeof schedulerFrequencies[number];start_date:string;end_date:string|null;flock_ids:string[];active:boolean;revision:number;feed_template_row_id?:string|null};
 export type ScheduledOccurrence={id:string;rule_id:string;farm_id:string;flock_id:string;due_date:string;title:string;instructions:string;kind:typeof schedulerKinds[number];revision:number;status:'pending'|'completed'|'deferred'|'skipped'|'cancelled';reason:string|null;source_table:string|null;source_id:string|null;deferred_to:string|null};
-export type SchedulerContext={role:'ceo'|'farm_manager';userId:string;today:string;farms:Array<{id:string;name:string}>;flocks:Array<{id:string;farm_id:string;flock_code:string;eligible:boolean}>;rules:ScheduledRule[];occurrences:ScheduledOccurrence[];nextCursor:string|null;legacy?:Array<{kind:string;title:string;due_date:string;flock_label:string|null;route:string;mapping:string}>};
+export type LegacyScheduleReview={kind:string;title:string;due_date:string;flock_label:string|null;route:string;mapping:string;legacy_id?:string|null;revision?:string|null};
+export type SchedulerContext={role:'ceo'|'farm_manager';userId:string;today:string;farms:Array<{id:string;name:string}>;flocks:Array<{id:string;farm_id:string;flock_code:string;eligible:boolean}>;rules:ScheduledRule[];occurrences:ScheduledOccurrence[];nextCursor:string|null;legacy?:LegacyScheduleReview[]};
 export function schedulePreview(rule:Pick<ScheduleRuleInput,'start_date'|'end_date'|'frequency'>,today:string){
  const first=Date.parse(`${rule.start_date}T00:00:00Z`),from=Date.parse(`${today}T00:00:00Z`),end=Math.min(from+89*86400000,rule.end_date?Date.parse(`${rule.end_date}T00:00:00Z`):Infinity);
  if(!Number.isFinite(first)||!Number.isFinite(from))return [];
