@@ -29,6 +29,7 @@ const root=fileURLToPath(new URL("..",import.meta.url));
 const bundle=await build({stdin:{contents:`export {POST as onboard} from "./src/app/api/admin/onboard/route";
 export {POST as setup} from "./src/app/api/ceo/setup/route";
 export {POST as template} from "./src/app/api/feed/templates/route";
+export {POST as legacyWeight} from "./src/app/api/scheduler/legacy-weight/route";
 export {PATCH as health} from "./src/app/api/health/events/route";
 export {loadNotificationCenter,dispatchNotificationOutbox} from "./src/lib/notification-service";`,resolveDir:root},bundle:true,write:false,format:"esm",platform:"node",plugins:[{name:"security-boundaries",setup(b){
   b.onResolve({filter:/^(server-only|next\/server|next-intl\/server|@supabase\/supabase-js|@\/lib\/(access-context|audit-ledger|feed-control|farm-operations|governance-workflow|notification-email))$/},a=>({path:a.path,namespace:"security"}));
@@ -74,6 +75,14 @@ test("CEO setup retires bundled credentials and placement; only structure reache
 test("templates only submit Governance requests; support has no direct apply bypass",async()=>{
   reset();state.feed.supportSessionId=id(8);assert.equal((await api.template(req({batchId:id(3),rows:[{}]}))).status,403);assert.deepEqual(state.calls,[]);
   reset();assert.equal((await api.template(req({batchId:id(3),rows:[{}]}))).status,201);assert.equal(state.calls[0][0],"governance");assert.equal(state.calls[0][1].request_type,"feed_template");
+});
+
+test("legacy template decisions require CEO, exact evidence and trusted actor with readable failures",async()=>{
+ const body={request_id:id(70),legacy_id:id(71),revision:"2026-11-10T08:00:00.123456+00:00",date:"2026-11-10",reason:"Reviewed legacy work"};
+ reset();assert.equal((await api.legacyWeight(req(body))).status,403);assert.deepEqual(state.calls,[]);
+ reset("ceo");assert.equal((await api.legacyWeight(req({...body,date:"2026-02-30"}))).status,400);assert.deepEqual(state.calls,[]);
+ assert.equal((await api.legacyWeight(req(body))).status,201);assert.equal(state.calls[0][1],"reschedule_legacy_template_weight");assert.equal(state.calls[0][2].p_actor,id(1));
+ for(const [code,status] of [["42501",403],["40001",409],["55000",409],["XX000",500]]){reset("ceo");state.rpcError={message:"Operation failed",code};assert.equal((await api.legacyWeight(req(body))).status,status);}
 });
 test("schedule PATCH sends one revision-bound atomic operation and returns permission/conflict/lock errors",async()=>{
   const body={schedule_id:id(3),kind:"vaccination",expected_version:"2026-11-08T10:00:00Z",event_date:"2026-11-09",farm_id:id(4),house_id:id(5),flock_id:id(6),changes:{dosage:"1 ml"}};

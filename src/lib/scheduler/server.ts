@@ -2,6 +2,7 @@ import 'server-only';
 import {canAccessFarm,governanceAdmin,type AccessContext} from '@/lib/access-context';
 import {addisOperatingDate} from '@/lib/flock-lifecycle/server';
 import {allAlertRows} from '@/lib/alert-pagination';
+import {readReportQuery} from '@/lib/report-pagination';
 import {validHistoryDate,historyUuid} from '@/lib/history/contracts';
 import {scheduleRuleSchema,type SchedulerContext,type ScheduledOccurrence,type ScheduledRule} from './contracts';
 
@@ -32,11 +33,11 @@ export async function readScheduler(ctx:AccessContext,options:{farmId?:string;cu
  occurrenceQuery=options.from?occurrenceQuery.gte('due_date',from).lte('due_date',to):occurrenceQuery.or(`and(status.eq.pending,due_date.lt.${today}),and(due_date.gte.${today},due_date.lte.${to})`);
  const [flocks,rules,occurrences,legacy]=await Promise.all([
   allAlertRows<{id:string;farm_id:string;flock_code:string;status:string;completed_at:string|null}>((from,to)=>governanceAdmin.from('flocks').select('id,farm_id,flock_code,status,completed_at').eq('org_id',ctx.orgId).in('farm_id',ids).order('id').range(from,to)).then(data=>({data,error:null})),
-  db.from('scheduled_work_rules').select('*').eq('org_id',ctx.orgId).in('farm_id',ids).order('created_at',{ascending:false}).limit(501),
+  readReportQuery<ScheduledRule>(()=>db.from('scheduled_work_rules').select('*').eq('org_id',ctx.orgId).in('farm_id',ids).order('created_at',{ascending:false}).order('id')),
   occurrenceQuery.order('due_date').order('id').range(offset,offset+50),
   db.rpc('scheduler_legacy_preflight',{p_org:ctx.orgId,p_farms:ids}).order('due_date').limit(501),
  ]);
- if(flocks.error||rules.error||occurrences.error||legacy.error||rules.data.length>500||legacy.data.length>500)throw Error('SCHEDULER_FAILED');
+ if(flocks.error||rules.error||occurrences.error||legacy.error||legacy.data.length>500)throw Error('SCHEDULER_FAILED');
  return {role:ctx.role as 'ceo'|'farm_manager',userId:ctx.userId,today,farms,flocks:flocks.data.map(f=>({id:f.id,farm_id:f.farm_id,flock_code:f.flock_code,eligible:!f.completed_at&&['active','quarantined'].includes(f.status)})),rules:rules.data as ScheduledRule[],
   occurrences:occurrences.data.slice(0,50),nextCursor:occurrences.data.length>50?String(offset+50):null,legacy:legacy.data};
 }
