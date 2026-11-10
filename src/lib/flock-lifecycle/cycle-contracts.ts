@@ -51,6 +51,8 @@ export const archivedCycleCorrectionSchema = z.object({
 });
 export type ArchivedCycleCorrection = z.infer<typeof archivedCycleCorrectionSchema>;
 export type ArchivedCorrectionContext = {
+  nextCursor: string | null;
+  finalRecords: ArchivedCorrectionContext["records"];
   cycle: {id: string; code: string; farmId: string; revision: string};
   records: Array<{id: string; date: string; flock: string; house: string; final: boolean}
     & Record<(typeof archivedBirdFields)[number], number | null>>;

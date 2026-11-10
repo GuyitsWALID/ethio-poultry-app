@@ -18,10 +18,10 @@ export function emailDeliveryReadiness() {
 
 export async function sendNotificationEmail(input: { to: string; notification: NotificationItem }) {
   const readiness = emailDeliveryReadiness();
-  if (!readiness.available) throw Object.assign(new Error(readiness.reason ?? "Email delivery is unavailable."), { code: "EMAIL_NOT_CONFIGURED" });
+  if (!readiness.available) throw Object.assign(new Error(readiness.reason ?? "Email delivery is unavailable."), { code: "EMAIL_NOT_CONFIGURED", definitelyUnsent:true });
   const { env } = await getCloudflareContext({ async: true });
   const workerEnv = env as CloudflareEnv & Env;
-  if (!workerEnv.EMAIL) throw Object.assign(new Error("The Cloudflare email binding is unavailable."), { code: "EMAIL_BINDING_UNAVAILABLE" });
+  if (!workerEnv.EMAIL) throw Object.assign(new Error("The Cloudflare email binding is unavailable."), { code: "EMAIL_BINDING_UNAVAILABLE", definitelyUnsent:true });
 
   const appBaseUrl = process.env.APP_BASE_URL?.replace(/\/$/, "") ?? "";
   const actionUrl = `${appBaseUrl}${input.notification.route.startsWith("/") ? input.notification.route : `/${input.notification.route}`}`;
@@ -34,6 +34,11 @@ export async function sendNotificationEmail(input: { to: string; notification: N
     subject: `${severity}: ${input.notification.title}`,
     text: `${input.notification.title}\n\n${input.notification.message}\n\nOpen the action: ${actionUrl}\n\nThis is an operational notification from EthioPoultry.`,
     html: `<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#17352a"><p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#6b7f75">EthioPoultry · ${severity}</p><h1 style="font-size:24px">${title}</h1><p style="line-height:1.6;color:#49675a">${message}</p><p><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#17352a;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:600">Open assigned action</a></p><p style="margin-top:28px;font-size:12px;color:#71867b">The originating system remains authoritative. Correct the source and complete verification inside EthioPoultry.</p></div>`,
+  }).catch((error:unknown)=>{
+    const code=typeof error==="object"&&error!==null&&"code" in error?String(error.code):"";
+    const rejected=["E_VALIDATION_ERROR","E_FIELD_MISSING","E_TOO_MANY_RECIPIENTS","E_SENDER_NOT_VERIFIED","E_RECIPIENT_NOT_ALLOWED","E_RECIPIENT_SUPPRESSED","E_SENDER_DOMAIN_NOT_AVAILABLE","E_CONTENT_TOO_LARGE","E_RATE_LIMIT_EXCEEDED","E_DAILY_LIMIT_EXCEEDED"];
+    if(rejected.includes(code))throw Object.assign(new Error("Email provider rejected the request."),{code,definitelyUnsent:true});
+    throw error;
   });
   return { providerMessageId: response.messageId };
 }

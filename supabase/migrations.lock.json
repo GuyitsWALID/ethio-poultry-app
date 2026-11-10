@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 110,
-  "latest": "20261110004000_explicit_legacy_weight_rescheduling.sql",
-  "aggregateSha256": "473965eaa882cbe7e3e2e7200630d04b9a002783fd24b292ca740c1c66921b03",
+  "count": 113,
+  "latest": "20261110007000_claim_notification_deliveries.sql",
+  "aggregateSha256": "bd233fc8b68892cc8cef17f976ecb17b708d5a9b4126021ca5a64a2d10d35b0e",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -190,6 +190,9 @@
     "20261110001000_enforce_operating_entry_windows.sql": "0bbb02f95361ec2ffafe3ade4491756634f1b54334c1ee2af23f2e495d464e93",
     "20261110002000_connect_branch_structure_and_assignments.sql": "daa8cba76c1dcd3daee3dbe5e76d19162ac52cd622a9016fe686a5c6dad66f0a",
     "20261110003000_schedule_approved_template_weight_work.sql": "3c2d907d9b54252ddffdb369d6df4bdd33a3a086c3f62d9ef132317fdf8ae6f7",
-    "20261110004000_explicit_legacy_weight_rescheduling.sql": "2f10768992142d8a5d2dc68950e66c2de2541dae105b07bb5bf7d04aca80931d"
+    "20261110004000_explicit_legacy_weight_rescheduling.sql": "2f10768992142d8a5d2dc68950e66c2de2541dae105b07bb5bf7d04aca80931d",
+    "20261110005000_batch_today_resource_reads.sql": "29ed6bbb318d226b62f2e75587c2f8636c753906da4492bfb6a91bf624cbe32d",
+    "20261110006000_isolate_report_schedule_failures.sql": "524d69bc855b9e1a2e6507d3eca883d39ba350281482e21524a1ad9c3a6fbf6e",
+    "20261110007000_claim_notification_deliveries.sql": "3586ffa405f716c14b0eea6275abf620a618e855536ff9da3e605b0a65d98a1b"
   }
 }

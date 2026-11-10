@@ -126,6 +126,7 @@ async function dispatchNotifications() {
   if (!response.ok) throw new Error(`Notification dispatch returned HTTP ${response.status}.`);
   const result = await response.json();
   if (Number(result.failed ?? 0) > 0) throw new Error(`${result.failed} notification deliveries failed.`);
+  if (Number(result.uncertain ?? 0) > 0) throw new Error(`${result.uncertain} notification deliveries need provider reconciliation; automatic resend is blocked.`);
   console.log(result.status === "disabled" ? `Notification email disabled: ${result.reason}` : `Notification delivery complete: ${result.sent ?? 0} sent.`);
 }
 

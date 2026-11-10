@@ -146,7 +146,7 @@ export async function submitGovernanceRequest(ctx:AccessContext,input:Governance
     context.proposedValues.push({field:"member_evidence",label:"Approved final record changes",value:reviewed.members.map(member=>({Flock:member.code,House:member.house,"Historical count preserved":legacy,"Closing birds":legacy?member.finalValues?.closing??null:0,"Other removals":legacy?member.finalValues?.otherRemovals??null:(member.finalValues?.otherRemovals??0)+member.currentBirds,"Deaths unchanged":member.finalValues?.deaths??null,"Culls unchanged":member.finalValues?.culls??null}))});
   }
   if(requestType==="archived_cycle_correction"&&sourceId){
-    const reviewed=await loadArchivedCorrectionContext(ctx,sourceId);
+    const reviewed=await loadArchivedCorrectionContext(ctx,sourceId,{recordIds:(proposed.records as Array<{id:string}>).map(r=>r.id),revision:String(proposed.expected_revision)});
     if(reviewed.cycle.revision!==proposed.expected_revision)throw new Error("CYCLE_SOURCE_CHANGED");
     const corrections=proposed.records as Array<Record<string,unknown>>;
     const readable=(row:Record<string,unknown>)=>{const current=reviewed.records.find(r=>r.id===row.id)!;return {Flock:current.flock,House:current.house,Date:current.date,"Final record":current.final,...Object.fromEntries(Object.entries(row).filter(([key])=>key!=="id"))};};

@@ -18,7 +18,10 @@ class Query {
 }
 state.db = {
   from: table=>new Query(table),
-  rpc: async (name,args)=>{state.calls.push(["rpc",name,args]); return name==="notification_recipient_has_access"?{data:state.access,error:state.accessError??null}:{data:{events:[],revision:"new"},error:state.rpcError??null};},
+  rpc: async (name,args)=>{state.calls.push(["rpc",name,args]);
+    if(name==="claim_notification_emails")return {data:state.rows.authorized_notifications??[],error:null};
+    if(name==="record_notification_email_phase")return {data:args.p_status==="sending"&&!state.access?"cancelled":args.p_status,error:null};
+    return name==="notification_recipient_has_access"?{data:state.access,error:state.accessError??null}:{data:{events:[],revision:"new"},error:state.rpcError??null};},
   auth: {admin: {
     createUser: async data=>{state.calls.push(["createUser",data]);return {data:{user:{id:id(9)}},error:null};},
     deleteUser: async ()=>({error:null}),
@@ -44,12 +47,12 @@ export {loadNotificationCenter,dispatchNotificationOutbox} from "./src/lib/notif
     if(a.path.endsWith("feed-control"))return pre+"export const getFeedContext=async()=>s.feed;export const feedJson=(v,status=200)=>Response.json(v,{status});export const resolveFeedBatch=async()=>({batch:{farm_id:'farm',batch_code:'Batch'}});export const validateTemplateRows=()=>null;";
     if(a.path.endsWith("farm-operations"))return "export class FarmOperationError extends Error{};export const farmOperationErrorBody=()=>{};export const recordHealthEvidence=()=>{};";
     if(a.path.endsWith("governance-workflow"))return pre+"export const submitGovernanceRequest=async(_ctx,input)=>{s.calls.push(['governance',input]);return {id:'request'};};";
-    if(a.path.endsWith("notification-email"))return pre+"export const emailDeliveryReadiness=()=>({available:true});export const sendNotificationEmail=async()=>{s.calls.push(['send']);return {providerMessageId:'test'};};";
+    if(a.path.endsWith("notification-email"))return pre+"export const emailDeliveryReadiness=()=>({available:true});export const sendNotificationEmail=async()=>{s.calls.push(['send']);if(s.sendError)throw s.sendError;return {providerMessageId:'test'};};";
     throw Error(a.path);
   })()}));
 }}]});
 const api=await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
-function reset(role="farm_manager") {state.ctx={role,userId:id(1),orgId:id(2),supportSessionId:null};state.calls=[];state.rows={};state.rpcError=null;state.access=true;state.accessError=null;state.feed={canManage:true,supportSessionId:null};}
+function reset(role="farm_manager") {state.ctx={role,userId:id(1),orgId:id(2),supportSessionId:null};state.calls=[];state.rows={};state.rpcError=null;state.access=true;state.accessError=null;state.sendError=null;state.feed={canManage:true,supportSessionId:null};}
 const req=body=>new Request("http://test.invalid/api",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
 
 test("setup endpoints require active server authority before any business writes",async()=>{
@@ -99,6 +102,18 @@ test("notification lists/counts filter current access before limits; revoked rec
   state.calls=[];state.access=false;const result=await api.dispatchNotificationOutbox();assert.equal(result.sent,0);assert.ok(!state.calls.some(c=>["send","emailLookup"].includes(c[0])));
   state.calls=[];state.access=true;await api.dispatchNotificationOutbox();assert.ok(state.calls.some(c=>c[0]==="send"));
   state.calls=[];state.accessError={message:"DB failed"};assert.equal((await api.dispatchNotificationOutbox()).sent,0);assert.ok(!state.calls.some(c=>c[0]==="send"));
+});
+
+test("email claims precede sending and unknown provider outcomes never request automatic retries",async()=>{
+ for(const definite of [false,true]){
+  reset();state.rows.authorized_notifications=[{id:id(7),recipient_id:id(1),severity:"high",event_type:"assigned",created_at:new Date().toISOString(),claim_token:id(9)}];
+  state.sendError=Object.assign(new Error("Provider failed"),{code:"TEST_FAILURE",definitelyUnsent:definite});
+  const result=await api.dispatchNotificationOutbox();
+  assert.equal(result.uncertain,definite?0:1);assert.equal(result.failed,definite?1:0);
+  const phases=state.calls.filter(c=>c[1]==="record_notification_email_phase");
+  assert.equal(phases[0][2].p_status,"sending");assert.equal(phases[1][2].p_status,definite?"failed":"uncertain");assert.equal(phases[1][2].p_retry,definite);
+  assert(state.calls.findIndex(c=>c[1]==="claim_notification_emails")<state.calls.findIndex(c=>c[0]==="send"));
+ }
 });
 
 test("real access resolver ignores editable role metadata and rejects inactive or missing profiles",async()=>{
