@@ -179,18 +179,12 @@ export async function recordSale(context: SalesContext, input: unknown) {
     if (error) throw new FarmOperationError(error.message, databaseStatus(error.code));
     return data;
   }
-  const {data, error} = await supabaseAdmin.from("daily_sales_records").insert({
-    org_id: context.orgId, ...scope, sale_date: value.sale_date,
-    product_category: value.product_category, product_label: value.product_label,
-    quantity: value.quantity,
-    unit: value.unit ?? (value.product_category === "bird" ? "bird" : "unit"),
-    unit_price: value.unit_price, gross_amount: grossAmount, paid_amount: value.paid_amount,
-    balance_due: Math.round((grossAmount - value.paid_amount) * 100) / 100,
-    payment_method: value.payment_method ?? null, customer_name: value.customer_name ?? null,
-    customer_phone: value.customer_phone ?? null, notes: value.notes ?? null, recorded_by: context.userId,
-  }).select("*").single();
-  if (error) throw new FarmOperationError(error.message, 500);
-  await recordAuditEvent(context, {eventType: "sales_record.recorded", operation: "insert", entityTable: "daily_sales_records", entityId: String(data.id), reason: `Recorded sale of ${value.product_label}.`, after: data, farmId: data.farm_id, houseId: data.house_id, flockId: data.flock_id, batchId: data.batch_id});
+  if (!value.request_id) throw new FarmOperationError("Provide a retry identifier for this sale.");
+  const {data, error} = await (supabaseAdmin as any).rpc("record_operational_sale", {
+    p_actor: context.userId, p_farm: scope.farm_id, p_date: value.sale_date,
+    p_payload: {...value, ...scope}, p_request: value.request_id,
+  });
+  if (error) throw new FarmOperationError(error.message, error.code === "40001" ? 409 : databaseStatus(error.code));
   return data;
 }
 

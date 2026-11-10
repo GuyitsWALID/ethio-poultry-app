@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 105,
-  "latest": "20261109001000_disallow_feed_stock_overrides.sql",
-  "aggregateSha256": "529e787954927ae5794d68ef1515b1147e52721f4fe1f74cf177724171d9b9b9",
+  "count": 107,
+  "latest": "20261110001000_enforce_operating_entry_windows.sql",
+  "aggregateSha256": "d4c6ad1d5d95e7ad79f747858435989861a5fd31a87ef5a94e57b48c8bdeefce",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -185,6 +185,8 @@
     "20261104000000_farm_expense_confirmations.sql": "8855863ea1be43441310be3cfe3c86f8ecba14a05607d7606bf23b866547770f",
     "20261108000000_contain_operational_security.sql": "6775a0e73bb7e7ab17ae5912d4ebd2a829a23a29793730bfa45c4e9760cc56c6",
     "20261109000000_exclude_voided_feed_sessions.sql": "00dc1e9b7dc984e33989602048ac7dee56d6934a14b1aaa6a2a3e35a5a847d08",
-    "20261109001000_disallow_feed_stock_overrides.sql": "db940fbcf0da0428d0a22d8676e2050b96fa5dc4b32be5aa598e7df71ce54631"
+    "20261109001000_disallow_feed_stock_overrides.sql": "db940fbcf0da0428d0a22d8676e2050b96fa5dc4b32be5aa598e7df71ce54631",
+    "20261110000000_retry_safe_operational_sales.sql": "f22bb82fa9c84de8d0afcdbe2922ca44073bde1fe4e3c4628bbfe16f64d8af4d",
+    "20261110001000_enforce_operating_entry_windows.sql": "0bbb02f95361ec2ffafe3ade4491756634f1b54334c1ee2af23f2e495d464e93"
   }
 }

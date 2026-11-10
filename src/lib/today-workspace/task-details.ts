@@ -6,6 +6,7 @@ import type {TodayTaskCode, TodayTaskDetail} from "./contracts";
 import {TodayWorkspaceError} from "./workspace";
 import {isTodayWarehouseEligible} from "./warehouse-choices";
 import {effectiveWarehouseIds} from "@/lib/warehouse-access";
+import {readReportQuery} from "@/lib/report-pagination";
 
 type Row = Record<string, unknown>;
 
@@ -42,12 +43,12 @@ async function assignedWarehouses(context: AccessContext, farmId: string, task: 
   const branchId = farmResult.data.branch_id ? String(farmResult.data.branch_id) : null;
   const assignedIds = new Set(await effectiveWarehouseIds(context));
   if (!assignedIds.size) return [];
-  const result = await governanceAdmin.from("warehouses")
+  const result = await readReportQuery(() => governanceAdmin.from("warehouses")
     .select("id,name,farm_id,branch_id,type")
     .eq("org_id", context.orgId)
     .eq("status", "active")
     .or(`farm_id.eq.${farmId},farm_id.is.null`)
-    .order("name");
+    .order("name").order("id"));
   return rows(result, "Warehouses").filter((warehouse) => isTodayWarehouseEligible(task, farmId, branchId, {
     id: String(warehouse.id),
     farmId: warehouse.farm_id ? String(warehouse.farm_id) : null,
@@ -58,13 +59,21 @@ async function assignedWarehouses(context: AccessContext, farmId: string, task: 
 async function inventoryOptions(context: AccessContext, warehouses: Row[]) {
   const warehouseIds = warehouses.map((row) => String(row.id));
   const [itemsResult, ledgerResult] = await Promise.all([
-    governanceAdmin.from("inventory_items").select("id,name,category,unit,unit_cost,reorder_level").eq("org_id", context.orgId).order("name"),
+    readReportQuery(() => governanceAdmin.from("inventory_items").select("id,name,category,unit,unit_cost,reorder_level").eq("org_id", context.orgId).order("name").order("id")),
     warehouseIds.length
-      ? governanceAdmin.from("stock_ledger").select("item_id,warehouse_id,quantity,transaction_type").eq("org_id", context.orgId).in("warehouse_id", warehouseIds)
+      ? readReportQuery(() => governanceAdmin.from("stock_ledger").select("item_id,warehouse_id,quantity,transaction_type").eq("org_id", context.orgId).in("warehouse_id", warehouseIds).order("id"))
       : Promise.resolve({data: [] as Row[], error: null}),
   ]);
   const items = rows(itemsResult, "Inventory items");
   const ledger = rows(ledgerResult, "Inventory balance");
+  const balances = new Map<string, number>();
+  for (const movement of ledger) {
+    const key = `${movement.item_id}:${movement.warehouse_id}`;
+    const quantity = number(movement.quantity);
+    const delta = ["issue", "transfer_out"].includes(String(movement.transaction_type)) ? -Math.abs(quantity)
+      : String(movement.transaction_type) === "adjustment" ? quantity : Math.abs(quantity);
+    balances.set(key, (balances.get(key) ?? 0) + delta);
+  }
   return items.map((item) => ({
     id: String(item.id),
     name: String(item.name),
@@ -74,12 +83,7 @@ async function inventoryOptions(context: AccessContext, warehouses: Row[]) {
     reorderLevel: number(item.reorder_level),
     balances: warehouses.map((warehouse) => ({
       warehouseId: String(warehouse.id),
-      quantity: ledger.filter((movement) => movement.item_id === item.id && movement.warehouse_id === warehouse.id).reduce((total, movement) => {
-        const quantity = number(movement.quantity);
-        if (["issue", "transfer_out"].includes(String(movement.transaction_type))) return total - Math.abs(quantity);
-        if (String(movement.transaction_type) === "adjustment") return total + quantity;
-        return total + Math.abs(quantity);
-      }, 0),
+      quantity: balances.get(`${item.id}:${warehouse.id}`) ?? 0,
     })),
   }));
 }
@@ -160,13 +164,13 @@ export async function loadTodayTaskDetail(
     const nextMonth = new Date(`${monthStart}T00:00:00Z`);
     nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
     const sessionsResult = warehouseIds.length
-      ? await governanceAdmin.from("inventory_count_sessions")
+      ? await readReportQuery(() => governanceAdmin.from("inventory_count_sessions")
         .select("id,warehouse_id,count_month,counted_on,status,notes")
         .eq("org_id", context.orgId)
         .in("warehouse_id", warehouseIds)
         .gte("counted_on", monthStart)
         .lt("counted_on", nextMonth.toISOString().slice(0, 10))
-        .order("counted_on", {ascending: false})
+        .order("counted_on", {ascending: false}).order("id"))
       : {data: [] as Row[], error: null};
     const sessions = rows(sessionsResult, "Stock count sessions");
     const countedWarehouses = new Set(sessions.map((row) => String(row.warehouse_id)));
