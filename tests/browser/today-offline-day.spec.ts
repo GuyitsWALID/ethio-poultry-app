@@ -43,7 +43,7 @@ test('Today complete offline day survives reload and browser restart then closes
     await page.locator('input[name=password]').fill(process.env.E2E_FARM_MANAGER_PASSWORD!);
     await page.getByRole('button',{name:'Open my workspace',exact:true}).click();await expect(page).toHaveURL(/\/app\//);
     await page.goto(destination);
-    await expect(page.locator('#today-task-birds')).toBeVisible();
+    await expect(page.locator('#today-bird-count')).toBeVisible();
     await expect.poll(()=>page.evaluate(async()=>Boolean(navigator.serviceWorker.controller&&(await caches.keys()).includes('ethiopoultry-static-v3')&&await caches.match('/offline'))),{timeout:90000}).toBe(true);
     console.log(`${info.project.name}: offline shell installed`);
     // Every applicable input form is prepared online, not only the open card.
@@ -53,11 +53,10 @@ test('Today complete offline day survives reload and browser restart then closes
       try{return await new Promise<number>(resolve=>{const r=db.transaction('drafts').objectStore('drafts').getAllKeys();r.onsuccess=()=>resolve(r.result.filter(key=>String(key).startsWith(`detail:task:${farmId}:`)).length);});}finally{db.close();}
     },id(1)),{timeout:90_000}).toBeGreaterThanOrEqual(8);
     await context.setOffline(true);
-    const birds=await open('birds');await birds.getByRole('button',{name:'Start bird record',exact:true}).click();
-    await expect.poll(async()=>(await queue(page)).length).toBe(1);
+    await expect(page.getByRole('button',{name:'Start bird record',exact:true})).toHaveCount(0);
     await page.reload();await feeding('First','07:00');
     console.log(`${info.project.name}: disconnected reload and first feeding saved`);
-    await expect.poll(async()=>(await queue(page)).length).toBe(2);
+    await expect.poll(async()=>(await queue(page)).length).toBe(1);
     const beforeRestart=(await queue(page)).map(row=>row.command.command_id).sort();
     await context.close();
     context=await engine.launchPersistentContext(profile,options);context.setDefaultTimeout(30_000);await context.setOffline(true);

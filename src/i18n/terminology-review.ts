@@ -255,6 +255,8 @@ export const managerTodayMessageKeys = [
   "Today.birdCheck.title",
   "Today.birdCheck.help",
   "Today.birdCheck.current",
+  "Today.birdCheck.lossesRecorded",
+  "Today.birdCheck.lossesNotConfirmed",
   "Today.birdCheck.noSavedCount",
   "Today.birdCheck.refresh",
   "Today.birdCheck.recordTitle",

@@ -121,6 +121,15 @@ test("the current flock count is not presented as a historical opening balance",
   assert.equal(workspace.flocks[0].birdCheck.openingSource, "missing");
 });
 
+test("a verified preceding close needs no manual bird-record task", () => {
+  const source=data([flock({dailyRecord:null,previousRecordDate:"2026-09-19",previousClosingBirds:1000})]);
+  const result=deriveTodayWorkspace(source,selection,true).flocks[0];
+  assert.equal(result.birdCheck.openingBirds,1000);
+  assert.equal(result.birdCheck.dailyRecordId,null);
+  assert.equal(result.tasks.find(task=>task.code==="birds").state,"complete");
+  assert.equal(result.healthSummary.confirmedNone,false);
+});
+
 test("a recording gap reports missing days without treating an old close as today's opening", () => {
   const source=data([flock({dailyRecord:null,previousRecordDate:"2026-10-01",previousClosingBirds:1472})]);
   const bird=deriveTodayWorkspace(source,{...selection,workDate:"2026-11-09"},true).flocks[0].birdCheck;

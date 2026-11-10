@@ -58,10 +58,10 @@ test("Today meets the first tablet interaction and accessibility contract", () =
   assert.doesNotMatch(`${screen}\n${embeddedTasks}`, /<table|overflow-x-auto/);
 });
 
-test("Check birds starts the record and health owns routine losses", () => {
+test("Bird count is a display and health owns routine losses", () => {
   assert.match(screen, /<BirdCheckCard/);
   assert.match(birdCheck, /assessBirdCheck/);
-  assert.match(birdCheck, /usages: null/);
+  assert.doesNotMatch(birdCheck, /startDay|useDraftSubmit/);
   assert.doesNotMatch(birdCheck, /<input type="number"/);
   assert.match(birdCheck, /initial\.deaths/);
   assert.match(birdCheck, /initial\.culls/);

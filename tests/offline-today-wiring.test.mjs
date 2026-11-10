@@ -13,15 +13,24 @@ test('Today owns a tenant-scoped runtime and checks online identity before drain
  assert.match(context,/await active\.enqueue\(command,key\);await refresh\(\)/);
  assert.match(context,/active\.finish\(command,sendTodayCommand,authorize\)/);
 });
-test('all three entry components use queued submit and do not call transport directly',()=>{
- for(const name of ['bird-check-card','embedded-task-card','health-task-form']){
+test('saving components use queued submit; bird count is read-only',()=>{
+ for(const name of ['embedded-task-card','health-task-form']){
   const component=read(`src/components/today/${name}.tsx`);
   assert.match(component,/useDraftSubmit/);
   assert.doesNotMatch(component,/await sendTodayCommand\(/);
   assert.match(component,/result\.status\s*===\s*"queued"/);
  }
+ assert.doesNotMatch(read('src/components/today/bird-check-card.tsx'),/useDraftSubmit|sendTodayCommand\(/);
  assert.match(read('src/components/today/embedded-task-card.tsx'),/readDetail/);
  assert.match(read('src/components/today/embedded-task-card.tsx'),/rememberDetail/);
+});
+
+test('online startup and historical work retain the durable submit path without granting offline access',()=>{
+ assert.doesNotMatch(context,/return sendTodayCommand\(command\)/);
+ assert.match(context,/await acceptWorkspace\(await response\.json\(\) as TodayWorkspace\)/);
+ assert.match(context,/rememberOnlineWorkspace\(workspace\)/);
+ assert.match(context,/if\(!grant\)\{await refresh\(\);return;\}/);
+ assert.match(context,/if\(!runtime\)return;\s+const draft=await runtime\.store\.getDraft/);
 });
 test('draft values, choices and supply rows persist; recovery never drops ambiguous sends',()=>{
  assert.match(context,/await writes\.current/);

@@ -2972,9 +2972,11 @@
     "noActiveFlock": "No active flock work today",
     "noActiveFlockHelp": "You can still record stock, sales, expenses, and finish the farm day.",
     "birdCheck": {
+      "lossesNotConfirmed": "No losses recorded yet. Confirm no deaths or culls in Health, or record what happened.",
+      "lossesRecorded": "Recorded deaths and culls are included in this count.",
       "title": "Bird count",
       "help": "Based on saved records. Refresh to check changes from another device.",
-      "current": "Birds recorded for {date}",
+      "current": "Birds for {date}",
       "noSavedCount": "No bird count has been saved for this day.",
       "refresh": "Refresh count",
       "recordTitle": "Bird record",
@@ -3096,8 +3098,8 @@
       "saveLoss": "Save deaths and culls",
       "lossSaved": "Deaths, culls, and live bird count saved together.",
       "startBirdCheckFirst": "The opening count is available, but this day's bird record has not been started. Select Start bird record in the Bird record card, then save these losses.",
-      "openingRequiredForLosses": "Deaths and culls cannot be saved because this day has no reliable opening count. Open Bird record above. Restore missing daily records where reliable evidence exists, or request a verified recording starting point if eligible. After CEO approval, apply the request, refresh Today, and start the bird record. Your loss entries remain a draft until saved.",
-      "openBirdRecord": "Go to Bird record",
+      "openingRequiredForLosses": "Deaths and culls cannot be saved because this day has no reliable opening count. Use the opening count recovery section above. Restore missing daily records where reliable evidence exists, or request a verified recording starting point if eligible. After CEO approval, apply the request and refresh Today. Then save these losses; your entries remain a draft until saved.",
+      "openBirdRecord": "Go to opening count recovery",
       "deathCauses": {
         "natural": "Natural death",
         "illness": "Illness",
@@ -3194,7 +3196,7 @@
     },
     "tasks": {
       "confirmContext": "Confirm flock and date",
-      "birds": "Check birds",
+      "birds": "Bird count",
       "feeding": "Record feeding",
       "eggsWater": "Record eggs and water",
       "healthDeaths": "Record health and deaths",

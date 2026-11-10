@@ -41,6 +41,7 @@ export function remainingDraft(draft: OfflineDraft, command: TodayCommand): Offl
 
 export class TodayOfflineRuntime {
   private writes: Promise<unknown> = Promise.resolve();
+  private onlineWorkspace?: TodayWorkspace;
   readonly store: OfflineStore;
   readonly identity: OfflineIdentity;
   private online: () => boolean;
@@ -52,6 +53,10 @@ export class TodayOfflineRuntime {
     const result = this.writes.then(write);
     this.writes = result.catch(() => {});
     return result;
+  }
+  rememberOnlineWorkspace(workspace: TodayWorkspace) {
+    // Online evidence is not an offline grant and must not become a cached snapshot.
+    this.onlineWorkspace=workspace;
   }
   async rememberWorkspace(workspace: TodayWorkspace) {
     const grant = workspace.offlineAccess;
@@ -116,6 +121,20 @@ export class TodayOfflineRuntime {
         return existing.result ?? {command_id:command.command_id,status:"queued"};
       }
       const sameScope=queue.filter(row=>row.command.farm_id===command.farm_id&&row.command.flock_id===command.flock_id&&row.command.work_date===command.work_date);
+      if ((command.type === "save_daily_record" && !command.payload.record?._today_opening && !command.payload.daily_record_id || command.type === "close_feed_day") && !sameScope.some(row=>row.command.type === "save_daily_record" || row.command.type === "close_feed_day")) {
+        const current=this.online() && this.onlineWorkspace?.farm.id===command.farm_id && this.onlineWorkspace.workDate===command.work_date ? this.onlineWorkspace : undefined;
+        const snapshot=current??await this.store.getSnapshot(workspaceKey(command.farm_id,command.work_date));
+        const flock=snapshot?.flocks?.find(row=>row.id===command.flock_id);
+        if(!flock)throw Error("OPENING_SOURCE_MISSING");
+        if(flock && !flock.birdCheck.dailyRecordId){
+          const opening=flock.birdCheck.openingBirds;
+          if(opening===null || !Number.isInteger(opening) || opening<0)throw Error("OPENING_SOURCE_MISSING");
+          const start:TodayCommand={schema_version:1,command_id:crypto.randomUUID(),type:"save_daily_record",farm_id:command.farm_id,flock_id:command.flock_id,work_date:command.work_date,payload:{daily_record_id:null,usages:null,record:{record_date:command.work_date,opening_birds:opening,closing_birds:opening,deaths:0,culls:0,transfers_in:0,transfers_out:0,other_removals:0,_today_opening:{source:flock.birdCheck.openingSource,count:opening}}}};
+          const entry={command:start,originalCommand:start,taskKey:taskDraftKey(selectionOf(command),"birds"),resourceKey:commandResourceKey(start),state:"queued" as const,queuedAt:new Date(this.now()).toISOString()};
+          await this.store.putCommand(entry);
+          sameScope.push(entry);queue.push(entry);
+        }
+      }
       // Equal append-only events can be intentional (two identical expenses or
       // feedings). Only repeated mutable/zero-confirmation saves are coalesced.
       const coalescible=["save_daily_record","close_feed_day","confirm_no_activity","complete_scheduled_work"].includes(command.type);

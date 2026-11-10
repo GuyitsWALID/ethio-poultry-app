@@ -97,7 +97,7 @@ export function deriveTodayWorkspace(
     const {openingBirds, source: openingSource} = resolveBirdOpening({...flock, workDate: selection.workDate});
     const birdAssessment = assessBirdCheck({
       openingBirds,
-      closingBirds: daily?.closingBirds ?? null,
+      closingBirds: daily ? daily.closingBirds : openingBirds,
       deaths: daily?.deaths ?? 0,
       culls: daily?.culls ?? 0,
       transfersIn: daily?.transfersIn ?? 0,

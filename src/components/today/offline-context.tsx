@@ -52,9 +52,15 @@ export function TodayOfflineProvider({children,bootstrapRuntime}: {children: Rea
   },[]);
   const acceptWorkspace = useCallback(async(workspace:TodayWorkspace)=>{
     if(offlineWorkerFailed())throw Error("WORKER_FAILED");
-    if(!workspace.offlineAccess)return;
     const grant=workspace.offlineAccess;
-    const identity={tenantId:grant.tenantId,userId:grant.userId,authorizedWorkDate:grant.workDate};
+    let identity=grant?{tenantId:grant.tenantId,userId:grant.userId,authorizedWorkDate:grant.workDate}:runtimeRef.current?.identity;
+    if(!identity){
+      const response=await fetch("/api/me/context",{cache:"no-store"});
+      if(!response.ok)throw Error("AUTH_REQUIRED");
+      const current=await response.json();
+      if(current.role!=="farm_manager" || typeof current.orgId!=="string" || typeof current.userId!=="string")throw Error("AUTH_REQUIRED");
+      identity={tenantId:current.orgId,userId:current.userId,authorizedWorkDate:workspace.workDate};
+    }
     if(runtimeRef.current && identityNamespace(runtimeRef.current.identity)!==identityNamespace(identity)) {
       setProblem("IDENTITY_CHANGED");throw Error("IDENTITY_CHANGED");
     }
@@ -64,6 +70,8 @@ export function TodayOfflineProvider({children,bootstrapRuntime}: {children: Rea
       try{active=await opening.current;}catch(error){opening.current=null;throw error;}
       runtimeRef.current=active;setRuntime(active);
     }
+    runtimeRef.current.rememberOnlineWorkspace(workspace);
+    if(!grant){await refresh();return;}
     await runtimeRef.current.rememberWorkspace(workspace);
     try { await runtimeRef.current.prepareDetails(workspace,async(task,flockId)=>{
       const params=new URLSearchParams({farm_id:workspace.farm.id,date:workspace.workDate});if(flockId)params.set("flock_id",flockId);
@@ -111,9 +119,16 @@ export function TodayOfflineProvider({children,bootstrapRuntime}: {children: Rea
   },[runtime,authorize,refresh,fail]);
   useEffect(()=>{if(bootstrapRuntime)void refresh().catch(fail);},[bootstrapRuntime,refresh,fail]);
   const submit = useCallback(async(command:TodayCommand,key:string):Promise<LocalCommandResult>=>{
-    const active=runtimeRef.current;
+    let active=runtimeRef.current;
     if(problem)throw Error(problem);
-    if(!active){if(!navigator.onLine)throw Error("OFFLINE_NOT_AUTHORIZED");return sendTodayCommand(command);}
+    if(!active){
+      if(!navigator.onLine)throw Error("OFFLINE_NOT_AUTHORIZED");
+      const response=await fetch(`/api/farm-manager/today?${new URLSearchParams({farm_id:command.farm_id,date:command.work_date})}`,{cache:"no-store"});
+      if(!response.ok)throw Error(response.status===401?"AUTH_REQUIRED":"ACCESS_CHANGED");
+      await acceptWorkspace(await response.json() as TodayWorkspace);
+      active=runtimeRef.current;
+      if(!active)throw Error("STORAGE_FAILED");
+    }
     if(command.type==="finish_operating_day")return active.finish(command,sendTodayCommand,authorize);
     try {await active.enqueue(command,key);await refresh();}
     catch(error){if(error instanceof OfflineStorageError)fail(error);throw error;}
@@ -127,7 +142,7 @@ export function TodayOfflineProvider({children,bootstrapRuntime}: {children: Rea
       void requestBackgroundSync().catch(()=>{});
     }
     return results.get(command.command_id) ?? {command_id:command.command_id,status:"queued"};
-  },[authorize,problem,refresh,fail]);
+  },[acceptWorkspace,authorize,problem,refresh,fail]);
   function stateFor(selection:OfflineSelection,task:TodayTask):TodayTask["state"] {
     const key=taskDraftKey(selection,task.code);
     const pending=queue.filter(row=>row.taskKey===key);
@@ -173,7 +188,8 @@ export function TaskDraftScope({selection,task,revision,children}: {selection:Of
   useEffect(()=>{
     let cancelled=false;
     const load=async()=>{
-      const draft=await runtime?.store.getDraft(key);if(cancelled)return;
+      if(!runtime)return;
+      const draft=await runtime.store.getDraft(key);if(cancelled)return;
       const value=draft?.value as DraftValue|undefined;
       current.current=value?.fields??{};setValues(current.current);
       const changed=Boolean(draft&&value?.revision!==revision);

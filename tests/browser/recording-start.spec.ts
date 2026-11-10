@@ -76,20 +76,22 @@ test('governed physical start preserves historical coverage, bilingual context a
     }
     await page.getByRole('group',{name:/Language|ቋንቋ/}).getByRole('button',{name:'EN',exact:true}).click();
     await page.goto(destination);
-    await expect(page.locator('#today-task-birds')).toBeVisible();
+    await expect(page.locator('#today-bird-count')).toBeVisible();
     await expect.poll(()=>page.evaluate(async()=>Boolean(navigator.serviceWorker.controller&&await caches.match('/offline'))),{timeout:90000}).toBe(true);
     await page.context().setOffline(true);
-    const birds=page.locator('#today-task-birds');
-    if(await birds.locator('button[aria-expanded=false]').count())await birds.locator('button[aria-expanded]').click();
-    await birds.getByRole('button',{name:'Start bird record',exact:true}).click();
-    await expect.poll(async()=>(await outbox(page)).length).toBe(1);
-    const queued=(await outbox(page))[0];
+    const eggs=page.locator('#today-task-eggs_water');
+    if(await eggs.locator('button[aria-expanded=false]').count())await eggs.locator('button[aria-expanded]').click();
+    for(const name of ['water','normal_eggs','broken_eggs','dirty_eggs'])await eggs.locator(`input[name=${name}]`).fill('0');
+    await eggs.getByRole('button',{name:'Save and continue',exact:true}).click();
+    await expect.poll(async()=>(await outbox(page)).length).toBe(2);
+    const queued=(await outbox(page)).find(row=>row.command.type==='save_daily_record'&&Boolean(row.command.payload.record?._today_opening));
+    if(!queued)throw Error('Expected the opening prerequisite');
     expect(queued.command.type).toBe('save_daily_record');
     if(queued.command.type!=='save_daily_record')throw Error('Expected a daily start');
     expect(queued.command.payload.record._today_opening).toEqual({source:'baseline',count:98});
     await page.reload();
-    await expect(page.locator('#today-task-birds')).toBeVisible();
-    expect((await outbox(page))[0].command.command_id).toBe(queued.command.command_id);
+    await expect(page.locator('#today-bird-count')).toBeVisible();
+    expect((await outbox(page)).some(row=>row.command.command_id===queued.command.command_id)).toBe(true);
     // Reuse this session's cookies rather than signing in again: environments
     // enforcing one active session correctly revoke the earlier login.
     await otherContext.addCookies(await page.context().cookies());
@@ -109,8 +111,10 @@ test('governed physical start preserves historical coverage, bilingual context a
     // Return from the data-free recovery shell to the authenticated Today
     // workspace, as its Refresh today action instructs. No queued work is reset.
     await page.goto(destination);
-    await expect.poll(async()=>(await outbox(page))[0]?.state,{timeout:90000}).toBe('conflict');
-    expect((await outbox(page))[0].command.command_id).toBe(queued.command.command_id);
+    await expect(page.locator('#today-task-birds').getByRole('alert').first()).toBeVisible();
+    const recovered=(await outbox(page)).map(row=>({id:row.command.command_id,state:row.state,task:row.taskKey}));
+    expect(recovered).toEqual(expect.arrayContaining([expect.objectContaining({id:queued.command.command_id,state:'conflict'})]));
+    expect((await outbox(page)).some(row=>row.command.command_id===queued.command.command_id)).toBe(true);
     const final=await other.request.get(`/api/flocks/${flock}/profile?days=30`);
     const finalProfile=await final.json();expect(finalProfile.flock.currentBirds).toBe(98);
     expect(finalProfile.coverage.records).toBe(1);expect(finalProfile.results.losses).toBe(0);
