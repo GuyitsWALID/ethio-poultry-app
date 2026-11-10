@@ -198,15 +198,14 @@ export async function generateManagementReport(ctx: AccessContext, _origin: stri
 export async function dispatchScheduledManagementReports(origin: string) {
   const cutoff=new Date().toISOString();
   let completed = 0, failed = 0, skipped = 0, due=0;
-  let afterTime:string|null=null, afterId:string|null=null;
-  // Bound each invocation, advancing past invalid and concurrently claimed schedules.
-  for(let page=0;page<5;page++){
-   const {data:schedules,error}:{data:Row[];error:{message:string}|null}=await db.rpc("due_management_report_schedules",{p_cutoff:cutoff,p_after_time:afterTime,p_after_id:afterId});
+  // Bound failed-validation RPCs as well as report work for the Worker request budget.
+   const {data:schedules,error}:{data:Row[];error:{message:string}|null}=await db.rpc("due_management_report_schedules",{p_cutoff:cutoff,p_after_time:null,p_after_id:null});
    if(error)throw new Error(error.message);
    due+=schedules.length;
-   for (const schedule of schedules) {
+   for (const [index,schedule] of schedules.entries()) {
     const ctx: AccessContext = { userId: String(schedule.created_by), homeOrgId: String(schedule.org_id), orgId: String(schedule.org_id), role: "ceo", capabilities: [], supportSessionId: null, supportExpiresAt: null };
     let failureCode="GENERATION_FAILED";
+    let generationStarted=false;
     try {
       // Keep the original due operating period fixed across retries and midnight.
       const period = reportPeriod(schedule.cadence, Number(schedule.lookback_days), new Date(schedule.next_run_at));
@@ -214,19 +213,22 @@ export async function dispatchScheduledManagementReports(origin: string) {
       if(creatorError)throw new Error("Schedule authority could not be checked.");
       if (!creator?.is_active || creator.role !== "ceo") {failureCode="CREATOR_AUTHORITY";throw new Error("Report schedule requires its creator's current CEO authority.");}
       ctx.role = creator.role;
+      // A full report gets a fresh invocation's request budget after failed validations.
+      if(failed>0)return {due,completed,failed,skipped:skipped+schedules.length-index};
+      generationStarted=true;
       await generateManagementReport(ctx, origin, { name: schedule.name, scope: schedule.scope, ...period, recipientIds: schedule.recipient_ids, scheduleId: schedule.id }, { scheduled: true, nextRunAt: nextRun(schedule.cadence, Number(schedule.run_day), Number(schedule.run_hour)), scheduleRevision: schedule.updated_at }); completed += 1;
+      return {due,completed,failed,skipped:skipped+schedules.length-index-1};
     }
     catch (error) {
       if (error instanceof ReportBusyError) skipped += 1;
       else {
         await reportRpc("record_report_schedule_failure",{p_id:schedule.id,p_revision:schedule.updated_at,p_failures:schedule.dispatch_failures,p_code:failureCode});
         failed += 1;
+        if(failed>=20)return {due,completed,failed,skipped:skipped+schedules.length-index-1};
       }
     }
+    if(generationStarted)return {due,completed,failed,skipped:skipped+schedules.length-index-1};
    }
-   if(schedules.length<20)break;
-   const last:Row=schedules[schedules.length-1];afterTime=last.next_run_at;afterId=last.id;
-  }
   return { due, completed, failed, skipped };
 }
 

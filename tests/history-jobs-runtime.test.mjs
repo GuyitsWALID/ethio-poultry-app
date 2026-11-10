@@ -21,7 +21,7 @@ state.db={from:t=>new Query(t),rpc:async(name,args)=>{
  if(name==='archived_cycle_revision')return {data:revision,error:null};
  if(name==='archived_cycle_sale_choices')return {data:[],error:null};
  if(name==='due_management_report_schedules')return {data:state.schedules.filter(s=>!args.p_after_id||s.id>args.p_after_id).slice(0,20),error:null};
- if(name==='record_report_schedule_failure')return {data:true,error:null};
+ if(name==='record_report_schedule_failure'){state.schedules=state.schedules.filter(s=>s.id!==args.p_id);return {data:true,error:null};}
  if(name==='today_farm_resource_tokens')return {data:{operating_revision:'operating',flocks:args.p_flocks.map(f=>({flock_id:f,daily_record_id:null,daily_revision:null,feed_revision:'feed',health_fingerprint:'health',supplies_fingerprint:'supplies',start_context:null}))},error:state.tokenError??null};
  throw Error(name);
 }};
@@ -55,9 +55,10 @@ test('Today request count stays constant for 1, 4, 8 and 12 flocks, including mi
  assert.deepEqual(counts,Array(4).fill(counts[0]));assert(counts[0]<30);
  state.tokenError={message:'Failed'};await assert.rejects(api.loadTodayWorkspace(ctx,{farmId:id(4),workDate:'2026-11-10'}));
 });
-test('21 invalid schedules are isolated, persisted and advanced beyond the first due page',async()=>{
+test('21 invalid schedules are isolated across bounded dispatches and cannot starve the next page',async()=>{
  state.calls=[];state.rows={profiles:[{role:'farm_manager',is_active:true}]};state.schedules=Array.from({length:21},(_,i)=>({id:id(100+i),created_by:id(1),org_id:id(2),cadence:'weekly',lookback_days:30,next_run_at:'2026-11-01T07:00:00Z',updated_at:'2026-11-01T00:00:00Z',dispatch_failures:0}));
- const result=await api.dispatchScheduledManagementReports('https://example.invalid');assert.equal(result.due,21);assert.equal(result.failed,21);
+ const first=await api.dispatchScheduledManagementReports('https://example.invalid');assert.equal(first.due,20);assert.equal(first.failed,20);
+ const result=await api.dispatchScheduledManagementReports('https://example.invalid');assert.equal(result.due,1);assert.equal(result.failed,1);
  assert.equal(state.calls.filter(c=>c[1]==='record_report_schedule_failure').length,21);
  assert.equal(state.calls.filter(c=>c[1]==='due_management_report_schedules').length,2);
 });
