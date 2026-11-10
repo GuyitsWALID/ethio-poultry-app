@@ -1,9 +1,9 @@
 {
   "version": 2,
   "algorithm": "sha256",
-  "count": 107,
-  "latest": "20261110001000_enforce_operating_entry_windows.sql",
-  "aggregateSha256": "d4c6ad1d5d95e7ad79f747858435989861a5fd31a87ef5a94e57b48c8bdeefce",
+  "count": 108,
+  "latest": "20261110002000_connect_branch_structure_and_assignments.sql",
+  "aggregateSha256": "2dc0d53e6d23ed91c521641ac152d9a31e658c0992d0bab0075baeb9fbe95d0b",
   "baseline": {
     "schemaFile": "baselines/20260811000000_production_schema.sql",
     "schemaSha256": "a05316d0b7878aeeac36032e9966b62d98b94dd07d53d28ee0d96c8f2718f424",
@@ -187,6 +187,7 @@
     "20261109000000_exclude_voided_feed_sessions.sql": "00dc1e9b7dc984e33989602048ac7dee56d6934a14b1aaa6a2a3e35a5a847d08",
     "20261109001000_disallow_feed_stock_overrides.sql": "db940fbcf0da0428d0a22d8676e2050b96fa5dc4b32be5aa598e7df71ce54631",
     "20261110000000_retry_safe_operational_sales.sql": "f22bb82fa9c84de8d0afcdbe2922ca44073bde1fe4e3c4628bbfe16f64d8af4d",
-    "20261110001000_enforce_operating_entry_windows.sql": "0bbb02f95361ec2ffafe3ade4491756634f1b54334c1ee2af23f2e495d464e93"
+    "20261110001000_enforce_operating_entry_windows.sql": "0bbb02f95361ec2ffafe3ade4491756634f1b54334c1ee2af23f2e495d464e93",
+    "20261110002000_connect_branch_structure_and_assignments.sql": "daa8cba76c1dcd3daee3dbe5e76d19162ac52cd622a9016fe686a5c6dad66f0a"
   }
 }

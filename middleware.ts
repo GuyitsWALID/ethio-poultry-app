@@ -30,7 +30,7 @@ export async function middleware(request: NextRequest) {
   }
   const { supabase, response } = createClient(request);
   const { pathname } = request.nextUrl;
-  const lockedOrgRoutes = ["/app/crm", "/app/training", "/app/hr", "/app/fleet", "/app/users", "/app/alerts"];
+  const lockedOrgRoutes = ["/app/crm", "/app/training", "/app/hr", "/app/fleet", "/app/users"];
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -59,15 +59,17 @@ test("setup endpoints require active server authority before any business writes
   }
   for(const role of ["farm_manager","veterinarian"]){reset(role);assert.equal((await api.onboard(req({role:"system_admin"}))).status,403);assert.equal((await api.setup(req({role:"ceo"}))).status,403);assert.deepEqual(state.calls,[]);}
 });
-test("CEO setup rejects missing/weak passwords; explicit strong password and trusted org reach RPC",async()=>{
+test("CEO setup retires bundled credentials and placement; only structure reaches the trusted organization RPC",async()=>{
   const body={branch:{name:"Branch"},intakeBatch:{placement_date:"2026-11-01",total_count:10,age_at_placement_days:0},manager:{email:"manager@example.invalid",fullName:"Manager",phone:"123"}};
   for(const password of [undefined,"TemporaryPassword123!".slice(0,5),""]){reset("ceo");assert.equal((await api.setup(req({...body,manager:{...body.manager,password}}))).status,400);assert.deepEqual(state.calls,[]);}
-  reset("ceo");const password="Explicit-Test-Password-47!";
-  assert.equal((await api.setup(req({...body,org_id:id(99),manager:{...body.manager,password}}))).status,200);
-  assert.equal(state.calls.find(c=>c[0]==="createUser")[1].password,password);
-  assert.equal(state.calls.find(c=>c[0]==="rpc")[2].p_org_id,id(2));
-  const ui=await readFile(new URL("../src/components/ceo/setup-modal.tsx",import.meta.url),"utf8");
-  assert.match(ui,/crypto\.getRandomValues/);assert.doesNotMatch(ui,/Math\.random/);
+  reset("ceo");
+  const structure={request_id:id(10),branch:{name:"Branch"},farms:[{name:"Farm",houses:[{name:"House",capacity:100,house_type:"layer"}]}],manager_id:id(11)};
+  assert.equal((await api.setup(req({...structure,org_id:id(99)}))).status,400);
+  assert.deepEqual(state.calls,[]);
+  assert.equal((await api.setup(req(structure))).status,201);
+  assert.equal(state.calls.some(c=>c[0]==="createUser"),false);
+  assert.equal(state.calls.find(c=>c[0]==="rpc")[2].p_org,id(2));
+  assert.equal(state.calls.find(c=>c[0]==="rpc")[1],"create_branch_structure");
 });
 test("templates only submit Governance requests; support has no direct apply bypass",async()=>{
   reset();state.feed.supportSessionId=id(8);assert.equal((await api.template(req({batchId:id(3),rows:[{}]}))).status,403);assert.deepEqual(state.calls,[]);

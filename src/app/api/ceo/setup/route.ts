@@ -1,126 +1,16 @@
-import { createClient } from "@supabase/supabase-js";
+import {accessJson, getAccessContext, governanceAdmin, isAccessResponse} from "@/lib/access-context";
+import {branchStructureInput} from "@/lib/branch-structure-input";
 
-import {getAccessContext, isAccessResponse} from "@/lib/access-context";
-import {passwordPolicyError} from "@/lib/password-policy";
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
-
-export async function POST(req: Request) {
-  let createdAuthUserId: string | null = null;
-
-  try {
-    const access = await getAccessContext();
-    if (isAccessResponse(access)) return access;
-    if (access.role !== "ceo") {
-      return new Response(
-        JSON.stringify({ error: "Forbidden: CEO role required" }),
-        { status: 403 }
-      );
-    }
-
-    const orgId = access.orgId;
-    const body = await req.json();
-    const { branch, intakeBatch, farms, manager } = body;
-    const ageAtPlacementDays = Number(intakeBatch?.age_at_placement_days);
-
-    if (
-      !branch?.name ||
-      !intakeBatch?.placement_date ||
-      !intakeBatch?.total_count ||
-      !manager?.email ||
-      !manager?.fullName ||
-      !manager?.phone
-    ) {
-      return new Response(
-        JSON.stringify({ error: "Missing required setup fields" }),
-        { status: 400 }
-      );
-    }
-
-    const passwordError = typeof manager.password === "string"
-      ? passwordPolicyError(manager.password) : "Password is required.";
-    if (passwordError) return Response.json({error: passwordError}, {status: 400});
-
-    if (
-      intakeBatch.age_at_placement_days === "" ||
-      !Number.isInteger(ageAtPlacementDays) ||
-      ageAtPlacementDays < 0
-    ) {
-      return new Response(
-        JSON.stringify({
-          error: "Age at placement must be a whole number of days, starting from 0",
-        }),
-        { status: 400 }
-      );
-    }
-
-    const { data: userAuthData, error: userAuthError } =
-      await supabaseAdmin.auth.admin.createUser({
-        email: manager.email,
-        email_confirm: true,
-        user_metadata: {
-          role: "farm_manager",
-          full_name: manager.fullName,
-        },
-        app_metadata: {
-          role: "farm_manager",
-        },
-        password: manager.password,
-      });
-
-    if (userAuthError) {
-      throw new Error(`User creation failed: ${userAuthError.message}`);
-    }
-
-    createdAuthUserId = userAuthData.user?.id ?? null;
-    if (!createdAuthUserId) {
-      throw new Error("User ID not returned after creation");
-    }
-
-    const { data: setupResult, error: setupError } = await supabaseAdmin.rpc(
-      "ceo_initialize_branch_hierarchy",
-      {
-        p_org_id: orgId,
-        p_branch: branch,
-        p_intake_batch: {
-          ...intakeBatch,
-          age_at_placement_days: ageAtPlacementDays,
-        },
-        p_farms: farms ?? [],
-        p_manager: {
-          user_id: createdAuthUserId,
-          full_name: manager.fullName,
-          email: manager.email,
-          phone: manager.phone,
-        },
-      }
-    );
-
-    if (setupError) {
-      throw new Error(`Setup transaction failed: ${setupError.message}`);
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        ids: setupResult,
-      }),
-      { status: 200 }
-    );
-  } catch (error: unknown) {
-    if (createdAuthUserId) {
-      await supabaseAdmin.auth.admin.deleteUser(createdAuthUserId);
-    }
-
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown setup error" }), { status: 500 });
-  }
+export async function POST(request: Request) {
+  const context = await getAccessContext({tenant: true});
+  if (isAccessResponse(context)) return context;
+  if (context.role !== "ceo" || context.supportSessionId) return accessJson({error: "Only the CEO can create branch structure."}, 403);
+  const parsed = branchStructureInput.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return accessJson({error: "Choose valid farms, house types and capacities. Placement and account creation must use their separate workflows.", code: "INVALID_STRUCTURE"}, 400);
+  const {request_id, ...structure} = parsed.data;
+  const {data, error} = await (governanceAdmin as unknown as {
+    rpc(name: string, args: Record<string, unknown>): Promise<{data: unknown; error: {message: string; code?: string} | null}>;
+  }).rpc("create_branch_structure", {p_actor: context.userId, p_org: context.orgId, p_request: request_id, p_structure: structure});
+  if (error) return accessJson({error: error.message, code: error.code}, error.code === "42501" ? 403 : ["40001", "23505"].includes(error.code ?? "") ? 409 : ["22023", "22P02", "23514"].includes(error.code ?? "") ? 400 : 500);
+  return accessJson({success: true, ids: data}, 201);
 }

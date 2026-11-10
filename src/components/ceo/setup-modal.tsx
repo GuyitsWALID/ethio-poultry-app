@@ -1,626 +1,78 @@
 "use client";
 
-import {OperationDateInput} from "@/components/operation-date-input";
-import React, { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-import { Loader2, X, Plus, Eye, EyeOff, Copy, RefreshCw, Check } from "lucide-react";
+import Link from "next/link";
+import {useLocale} from "next-intl";
+import {useEffect, useRef, useState} from "react";
+import {branchSetupCopy} from "@/i18n/branch-setup-copy";
 
-interface SetupModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-}
+type House = {name: string; capacity: number; house_type: "layer" | "broiler" | "rearing" | "parent_stock"};
+type Farm = {name: string; houses: House[]};
+const emptyHouse = (): House => ({name: "", capacity: 0, house_type: "layer"});
+const fieldClass = "min-h-12 w-full rounded-xl border border-sand-200 bg-white px-3 py-2 text-forest-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest-700";
+const buttonClass = "min-h-12 rounded-xl border border-sand-200 px-4 py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50";
 
-interface FarmConfig {
-  name: string;
-  houses: Array<{
-    name: string;
-    capacity: number;
-    flocks: Array<Record<string, never>>;
-  }>;
-}
+export function SetupModal({isOpen, onClose, onSuccess}: {isOpen: boolean; onClose: () => void; onSuccess: () => void}) {
+  const locale = useLocale();
+  const t = branchSetupCopy[locale === "am" ? "am" : "en"];
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [requestId] = useState(() => crypto.randomUUID());
+  const [branch, setBranch] = useState({name: "", location: ""});
+  const [farms, setFarms] = useState<Farm[]>([{name: "", houses: [emptyHouse()]}]);
+  const [managerId, setManagerId] = useState("");
+  const [managers, setManagers] = useState<{id: string; full_name: string}[]>([]);
+  const [managerFailure, setManagerFailure] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-interface SetupData {
-  branch: { name: string; location: string };
-  intakeBatch: {
-    source: "internal_transfer" | "external_purchase";
-    supplier_name: string;
-    purchase_date: string;
-    placement_date: string;
-    age_at_placement_days: number | "";
-    total_count: number;
-    purchase_cost_per_bird: number;
-    transport_cost: number;
-    other_cost: number;
-    total_cost: number;
-    notes: string;
-  };
-  farms: FarmConfig[];
-  manager: {
-    email: string;
-    phone: string;
-    fullName: string;
-    password: string;
-  };
-}
-
-const initialData: SetupData = {
-  branch: { name: "", location: "" },
-  intakeBatch: {
-    source: "external_purchase",
-    supplier_name: "",
-    purchase_date: "",
-    placement_date: "",
-    age_at_placement_days: "",
-    total_count: 0,
-    purchase_cost_per_bird: 0,
-    transport_cost: 0,
-    other_cost: 0,
-    total_cost: 0,
-    notes: "",
-  },
-  farms: [],
-  manager: {
-    email: "",
-    phone: "",
-    fullName: "",
-    password: "",
-  },
-};
-
-export function SetupModal({ isOpen, onClose, onSuccess }: SetupModalProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
-  const [copiedPassword, setCopiedPassword] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  const [formData, setFormData] = useState(initialData);
-
+  useEffect(() => {if (isOpen && !dialog.current?.open) dialog.current?.showModal();}, [isOpen]);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
+    if (!isOpen) return;
+    const controller = new AbortController();
+    fetch("/api/governance/assignments", {signal: controller.signal, cache: "no-store"})
+      .then(async response => {if (!response.ok) throw Error(); return response.json();})
+      .then(data => {setManagers((data.profiles ?? []).filter((p: {role: string; is_active: boolean}) => p.role === "farm_manager" && p.is_active)); setManagerFailure(false);})
+      .catch(() => {if (!controller.signal.aborted) setManagerFailure(true);});
+    return () => controller.abort();
+  }, [isOpen, reload]);
 
-  const totalHouseCapacity = useMemo(
-    () =>
-      (formData.farms || []).reduce(
-        (farmAcc, farm) =>
-          farmAcc +
-          (farm.houses || []).reduce(
-            (houseAcc, house) => houseAcc + (Number(house.capacity) || 0),
-            0
-          ),
-        0
-      ),
-    [formData.farms]
-  );
+  const updateFarm = (index: number, update: Partial<Farm>) => setFarms(current => current.map((farm, i) => i === index ? {...farm, ...update} : farm));
+  const updateHouse = (farmIndex: number, houseIndex: number, update: Partial<House>) => setFarms(current => current.map((farm, i) => i === farmIndex ? {...farm, houses: farm.houses.map((house, j) => j === houseIndex ? {...house, ...update} : house)} : farm));
 
-  const intakeTotalCount = Number(formData.intakeBatch?.total_count) || 0;
-  const capacityMatchesBatchTotal = intakeTotalCount > 0 && totalHouseCapacity === intakeTotalCount;
-
-  const updateBranch = <K extends keyof SetupData["branch"]>(field: K, value: SetupData["branch"][K]) => {
-    setFormData(prev => ({ ...prev, branch: { ...prev.branch, [field]: value } }));
-  };
-
-  const updateIntake = (field: keyof SetupData["intakeBatch"], value: string | number) => {
-    setFormData(prev => ({ ...prev, intakeBatch: { ...prev.intakeBatch, [field]: value } as SetupData["intakeBatch"] }));
-  };
-
-  const addFarm = () => {
-    setFormData(prev => ({
-      ...prev,
-      farms: [...(prev.farms || []), { name: "", houses: [] }]
-    }));
-  };
-
-  const removeFarm = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      farms: (prev.farms || []).filter((_, i) => i !== index)
-    }));
-  };
-
-  const updateFarm = (index: number, field: string, value: string) => {
-    setFormData(prev => {
-      const updated = [...(prev.farms || [])];
-      updated[index] = { ...updated[index], [field]: value };
-      return { ...prev, farms: updated };
-    });
-  };
-
-  const addHouseToFarm = (farmIndex: number) => {
-    setFormData(prev => {
-      const farms = (prev.farms || []).map((farm, index) =>
-        index === farmIndex
-          ? {
-              ...farm,
-              houses: [...(farm.houses || []), { name: "", capacity: 0, flocks: [] }],
-            }
-          : farm
-      );
-      return { ...prev, farms };
-    });
-  };
-
-  const removeHouse = (farmIndex: number, houseIndex: number) => {
-    setFormData(prev => {
-      const farms = (prev.farms || []).map((farm, index) =>
-        index === farmIndex
-          ? {
-              ...farm,
-              houses: (farm.houses || []).filter((_, i) => i !== houseIndex),
-            }
-          : farm
-      );
-      return { ...prev, farms };
-    });
-  };
-
-  const updateHouse = (farmIndex: number, houseIndex: number, field: keyof FarmConfig["houses"][number], value: string | number) => {
-    setFormData(prev => {
-      const farms = (prev.farms || []).map((farm, index) => {
-        if (index !== farmIndex) return farm;
-        const houses = (farm.houses || []).map((house, i) =>
-          i === houseIndex ? { ...house, [field]: value } : house
-        );
-        return { ...farm, houses };
-      });
-      return { ...prev, farms };
-    });
-  };
-
-  const addFlockToHouse = (farmIndex: number, houseIndex: number) => {
-    setFormData(prev => {
-      const farms = (prev.farms || []).map((farm, index) => {
-        if (index !== farmIndex) return farm;
-        const houses = (farm.houses || []).map((house, i) =>
-          i === houseIndex ? { ...house, flocks: [...(house.flocks || []), {}] } : house
-        );
-        return { ...farm, houses };
-      });
-      return { ...prev, farms };
-    });
-  };
-
-  const removeFlock = (farmIndex: number, houseIndex: number, flockIndex: number) => {
-    setFormData(prev => {
-      const farms = (prev.farms || []).map((farm, index) => {
-        if (index !== farmIndex) return farm;
-        const houses = (farm.houses || []).map((house, i) =>
-          i === houseIndex
-            ? { ...house, flocks: (house.flocks || []).filter((_, j) => j !== flockIndex) }
-            : house
-        );
-        return { ...farm, houses };
-      });
-      return { ...prev, farms };
-    });
-  };
-
-  const updateManager = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, manager: { ...(prev.manager || {}), [field]: value } }));
-  };
-
-  const generatePassword = () => {
-    const nextPassword = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("") + "Aa1!";
-    updateManager("password", nextPassword);
-    setCopiedPassword(false);
-  };
-
-  const copyPassword = async () => {
-    const password = formData.manager?.password ?? "";
-    if (!password) return;
-    try {
-      await navigator.clipboard.writeText(password);
-      setCopiedPassword(true);
-      setTimeout(() => setCopiedPassword(false), 1500);
-    } catch {
-      setError("Failed to copy password. Please copy manually.");
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    if (!capacityMatchesBatchTotal) {
-      setError(
-        `House capacity total (${totalHouseCapacity}) must equal batch total count (${intakeTotalCount}) before submission.`
-      );
-      return;
-    }
-
-    setIsSubmitting(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/ceo/setup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      const resData = await response.json();
-      if (!response.ok) throw new Error(resData.error || "Setup failed");
-
-      onSuccess();
-      onClose();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Setup failed");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  if (!isOpen || !mounted) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-forest-900/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl border border-sand-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <form onSubmit={handleSubmit} className="p-8 space-y-8">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-forest-900">Branch Setup Command Center</h2>
-            <button type="button" onClick={onClose} className="p-2 text-forest-400 hover:text-forest-600 transition-colors">
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-
-          {error && (
-            <div className="p-4 bg-red-50 text-red-600 rounded-lg border border-red-100 text-sm">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-8">
-            {/* Branch Section */}
-            <section className="space-y-4">
-              <h3 className="text-lg font-semibold text-forest-800 border-b border-sand-200 pb-2">1. Branch Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Branch Name</label>
-                  <input
-                    required
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.branch?.name}
-                    onChange={(e) => updateBranch("name", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Location</label>
-                  <input
-                    required
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.branch?.location}
-                    onChange={(e) => updateBranch("location", e.target.value)}
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* Intake Section */}
-            <section className="space-y-4">
-              <h3 className="text-lg font-semibold text-forest-800 border-b border-sand-200 pb-2">2. Initial Intake Batch</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Source</label>
-                  <select
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.intakeBatch?.source}
-                    onChange={(e) => updateIntake("source", e.target.value)}
-                  >
-                    <option value="internal_transfer">Internal Transfer</option>
-                    <option value="external_purchase">External Purchase</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Placement Date</label>
-                  <OperationDateInput
-                    required
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.intakeBatch?.placement_date}
-                    onChange={(e) => updateIntake("placement_date", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Age at Placement (Days)</label>
-                  <input
-                    required
-                    type="number"
-                    min="0"
-                    step="1"
-                    inputMode="numeric"
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.intakeBatch?.age_at_placement_days}
-                    onChange={(e) =>
-                      updateIntake(
-                        "age_at_placement_days",
-                        e.target.value === "" ? "" : Number(e.target.value)
-                      )
-                    }
-                  />
-                  <p className="text-xs text-forest-500">Use 0 for day-old chicks.</p>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Total Count</label>
-                  <input
-                    required
-                    type="number"
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.intakeBatch?.total_count}
-                    onChange={(e) => updateIntake("total_count", parseInt(e.target.value) || 0)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Supplier</label>
-                  <input
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.intakeBatch?.supplier_name}
-                    onChange={(e) => updateIntake("supplier_name", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Cost per Bird</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.intakeBatch?.purchase_cost_per_bird}
-                    onChange={(e) => updateIntake("purchase_cost_per_bird", parseFloat(e.target.value) || 0)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Notes</label>
-                  <input
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.intakeBatch?.notes}
-                    onChange={(e) => updateIntake("notes", e.target.value)}
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* Farms Section */}
-            <section className="space-y-6">
-              <div className="flex items-center justify-between border-b border-sand-200 pb-2">
-                <h3 className="text-lg font-semibold text-forest-800">3. Infrastructure Hierarchy</h3>
-                <button
-                  type="button"
-                  onClick={addFarm}
-                  className="flex items-center gap-1 px-3 py-1 bg-forest-100 text-forest-700 rounded-md text-xs font-bold hover:bg-forest-200 transition-colors"
-                >
-                  <Plus className="h-3 w-3" /> Add Farm
-                </button>
-              </div>
-              <div className="space-y-8">
-                {(formData.farms || []).map((farm, farmIndex) => (
-                  <div key={farmIndex} className="p-6 bg-sand-50 rounded-2xl border border-sand-200 space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-1 bg-forest-200 text-forest-700 text-xs font-bold rounded-md">FARM {farmIndex + 1}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeFarm(farmIndex)}
-                        className="text-red-400 hover:text-red-600 text-xs font-medium"
-                      >
-                        Remove Farm
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs text-forest-600">Farm Name</label>
-                        <input
-                          required
-                          className="w-full rounded-lg border border-sand-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-forest-600"
-                          value={farm.name}
-                          onChange={(e) => updateFarm(farmIndex, "name", e.target.value)}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4 pl-4 border-l-2 border-forest-200">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold text-forest-700 uppercase">Houses</h4>
-                        <button
-                          type="button"
-                          onClick={() => addHouseToFarm(farmIndex)}
-                          className="flex items-center gap-1 px-2 py-1 bg-white border border-forest-200 text-forest-600 rounded text-[10px] font-bold hover:bg-forest-50 transition-colors"
-                        >
-                          <Plus className="h-3 w-3" /> Add House
-                        </button>
-                      </div>
-
-                      <div className="space-y-6">
-                        {(farm.houses || []).map((house, houseIndex) => (
-                          <div key={houseIndex} className="p-4 bg-white rounded-xl border border-sand-200 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-forest-500 uppercase">House {houseIndex + 1}</span>
-                              <button
-                                type="button"
-                                onClick={() => removeHouse(farmIndex, houseIndex)}
-                                className="text-red-400 hover:text-red-600 text-[10px] font-medium"
-                              >
-                                Remove House
-                              </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div className="space-y-1">
-                                <label className="text-[10px] text-forest-600">House Name</label>
-                                <input
-                                  required
-                                  className="w-full rounded-lg border border-sand-200 bg-white px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-forest-600"
-                                  value={house.name}
-                                  onChange={(e) => updateHouse(farmIndex, houseIndex, "name", e.target.value)}
-                                />
-                              </div>
-                              <div className="space-y-1">
-                                <label className="text-[10px] text-forest-600">Capacity</label>
-                                <input
-                                  required
-                                  type="number"
-                                  className="w-full rounded-lg border border-sand-200 bg-white px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-forest-600"
-                                  value={house.capacity}
-                                  onChange={(e) => updateHouse(farmIndex, houseIndex, "capacity", parseInt(e.target.value) || 0)}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="space-y-3 pl-3 border-l border-sand-200">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-forest-400 uppercase">Flocks</span>
-                                <button
-                                  type="button"
-                                  onClick={() => addFlockToHouse(farmIndex, houseIndex)}
-                                  className="flex items-center gap-1 px-2 py-1 bg-sand-50 border border-sand-200 text-forest-500 rounded text-[9px] font-bold hover:bg-sand-100 transition-colors"
-                                >
-                                  <Plus className="h-2.5 w-2.5" /> Add Flock
-                                </button>
-                              </div>
-                              <div className="space-y-3">
-                                {(house.flocks || []).map((flock, flockIndex) => (
-                                  <div key={flockIndex} className="p-3 bg-sand-50/50 rounded-lg border border-sand-100 space-y-2 relative group">
-                                    <button
-                                      type="button"
-                                      onClick={() => removeFlock(farmIndex, houseIndex, flockIndex)}
-                                      className="absolute top-2 right-2 text-red-300 hover:text-red-500 transition-colors"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </button>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                      <div className="space-y-1">
-                                        <span className="text-[9px] text-forest-400 italic">Flock ID auto-generated</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="rounded-lg border border-sand-200 bg-white px-4 py-3 text-xs">
-                      <p className="font-semibold text-forest-700">
-                        Capacity Check: Houses total = {totalHouseCapacity} | Batch total = {intakeTotalCount}
-                      </p>
-                      {!capacityMatchesBatchTotal ? (
-                        <p className="mt-1 text-red-600">
-                          Warning: house capacities must add up exactly to the batch total count before you can initialize.
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-forest-600">Looks good. Totals are aligned.</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Manager Section */}
-            <section className="space-y-4">
-              <h3 className="text-lg font-semibold text-forest-800 border-b border-sand-200 pb-2">4. Farm Manager Credentials</h3>
-              <div className="grid grid-cols-1 gap-4 max-w-xl">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Full Name</label>
-                  <input
-                    required
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.manager?.fullName}
-                    onChange={(e) => updateManager("fullName", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Email</label>
-                  <input
-                    required
-                    type="email"
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.manager?.email}
-                    onChange={(e) => updateManager("email", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Phone</label>
-                  <input
-                    required
-                    type="tel"
-                    className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 outline-none focus:ring-2 focus:ring-forest-600"
-                    value={formData.manager?.phone ?? ""}
-                    onChange={(e) => updateManager("phone", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-forest-700">Password</label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        required
-                        type={showPassword ? "text" : "password"}
-                        className="w-full rounded-lg border border-sand-200 bg-white px-4 py-2 pr-11 outline-none focus:ring-2 focus:ring-forest-600"
-                        value={formData.manager?.password}
-                        onChange={(e) => updateManager("password", e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-forest-500 hover:bg-sand-100"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={generatePassword}
-                      className="inline-flex items-center justify-center rounded-lg border border-sand-200 bg-sand-50 p-2 text-forest-700 hover:bg-sand-100"
-                      aria-label="Generate password"
-                      title="Generate password"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={copyPassword}
-                      className="inline-flex items-center justify-center rounded-lg border border-sand-200 bg-sand-50 p-2 text-forest-700 hover:bg-sand-100"
-                      aria-label={copiedPassword ? "Password copied" : "Copy password"}
-                      title={copiedPassword ? "Copied" : "Copy password"}
-                    >
-                      {copiedPassword ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-6 border-t border-sand-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-2 text-forest-600 hover:text-forest-900 font-medium transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || !capacityMatchesBatchTotal}
-              className="flex items-center gap-2 px-8 py-2 bg-forest-900 text-sand-50 rounded-lg font-medium hover:bg-forest-800 transition-colors disabled:opacity-50"
-            >
-              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Initialize Branch Hierarchy"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>,
-    document.body
-  );
+  return <dialog ref={dialog} onClose={onClose} onCancel={event => {if (saving) event.preventDefault();}}
+    aria-labelledby="branch-structure-title" className="m-auto max-h-[90dvh] w-[min(95vw,64rem)] overflow-y-auto rounded-2xl border border-sand-200 bg-white p-5 text-forest-900 shadow-xl backdrop:bg-forest-900/50 sm:p-8">
+    <form className="grid gap-6" onSubmit={async event => {
+      event.preventDefault(); if (saving || saved) return;
+      setSaving(true); setFailure(false);
+      try {
+        const response = await fetch("/api/ceo/setup", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({request_id: requestId, branch, farms, manager_id: managerId || null})});
+        if (!response.ok) throw Error();
+        setSaved(true); onSuccess();
+      } catch {setFailure(true);} finally {setSaving(false);}
+    }}>
+      <div className="flex flex-wrap items-center justify-between gap-3"><h2 id="branch-structure-title" className="font-display text-2xl font-semibold">{t.title}</h2><button type="button" disabled={saving} onClick={onClose} className={buttonClass}>{t.cancel}</button></div>
+      <p className="rounded-xl bg-sand-50 p-4 text-sm leading-6">{t.help}</p>
+      {saved ? <section role="status" className="grid gap-4 rounded-xl border border-green-300 bg-green-50 p-4"><p>{t.success}</p><div className="flex flex-wrap gap-3"><Link href="/app/batches" className={buttonClass}>{t.cycles}</Link><Link href="/app/users" className={buttonClass}>{t.access}</Link></div></section> : null}
+      {failure ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{t.failed}</p> : null}
+      <fieldset disabled={saving || saved} className="grid gap-6 disabled:opacity-70">
+        <div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-1">{t.name}<input required maxLength={120} className={fieldClass} value={branch.name} onChange={e => setBranch({...branch, name: e.target.value})}/></label><label className="grid gap-1">{t.location}<input maxLength={300} className={fieldClass} value={branch.location} onChange={e => setBranch({...branch, location: e.target.value})}/></label></div>
+        <label className="grid gap-1">{t.manager}<select className={fieldClass} value={managerId} onChange={e => setManagerId(e.target.value)}><option value="">{t.later}</option>{managers.map(manager => <option key={manager.id} value={manager.id}>{manager.full_name}</option>)}</select><span className="text-sm text-forest-600">{t.managerHelp}</span></label>
+        {managerFailure ? <div role="alert" className="flex flex-wrap items-center gap-3 text-sm"><p>{t.managerFailed}</p><button type="button" className={buttonClass} onClick={() => setReload(current => current + 1)}>{t.retry}</button></div> : null}
+        <h3 className="text-lg font-semibold">{t.farms}</h3>
+        {farms.map((farm, i) => <section key={i} className="grid gap-4 rounded-xl border border-sand-200 p-4">
+          <div className="flex flex-wrap items-end gap-3"><label className="grid flex-1 gap-1">{t.farm}<input required maxLength={120} className={fieldClass} value={farm.name} onChange={e => updateFarm(i, {name: e.target.value})}/></label>{farms.length > 1 ? <button type="button" className={buttonClass} onClick={() => setFarms(current => current.filter((_, index) => index !== i))}>{t.remove}</button> : null}</div>
+          {farm.houses.map((house, j) => <div key={j} className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
+            <label className="grid gap-1">{t.house}<input required maxLength={120} className={fieldClass} value={house.name} onChange={e => updateHouse(i, j, {name: e.target.value})}/></label>
+            <label className="grid gap-1">{t.capacity}<input required type="number" min={1} max={10000000} step={1} className={fieldClass} value={house.capacity || ""} onChange={e => updateHouse(i, j, {capacity: Number(e.target.value)})}/></label>
+            <label className="grid gap-1">{t.type}<select className={fieldClass} value={house.house_type} onChange={e => updateHouse(i, j, {house_type: e.target.value as House["house_type"]})}>{(["layer", "broiler", "rearing", "parent_stock"] as const).map(type => <option key={type} value={type}>{t[type]}</option>)}</select></label>
+            {farm.houses.length > 1 ? <button type="button" className={buttonClass} onClick={() => updateFarm(i, {houses: farm.houses.filter((_, index) => index !== j)})}>{t.remove}</button> : null}
+          </div>)}
+          <button type="button" disabled={farm.houses.length >= 100} className={buttonClass} onClick={() => updateFarm(i, {houses: [...farm.houses, emptyHouse()]})}>{t.addHouse}</button>
+        </section>)}
+        <button type="button" disabled={farms.length >= 20} className={buttonClass} onClick={() => setFarms(current => [...current, {name: "", houses: [emptyHouse()]}])}>{t.addFarm}</button>
+        <button type="submit" className={`${buttonClass} bg-forest-900 text-white`}>{saving ? t.saving : t.save}</button>
+      </fieldset>
+    </form>
+  </dialog>;
 }
