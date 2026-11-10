@@ -5,7 +5,7 @@ import {loadTodayWorkspace} from "@/lib/today-workspace/workspace";
 import type {FlockType} from "@/lib/farm-manager-dashboard";
 
 export class FlockLifecycleError extends Error {
-  constructor(public code: "UNAVAILABLE" | "INVALID_PERIOD" | "SOURCE_LIMIT" | "LOAD_FAILED", public status: number) {super(code);}
+  constructor(public code: "UNAVAILABLE" | "INVALID_PERIOD" | "SOURCE_LIMIT" | "LOAD_FAILED" | "SOURCE_CHANGED", public status: number) {super(code);}
 }
 
 function required<T>(result: {data: T | null; error: unknown}): T {

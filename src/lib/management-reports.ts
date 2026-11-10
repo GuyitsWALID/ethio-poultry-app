@@ -196,22 +196,40 @@ export async function generateManagementReport(ctx: AccessContext, _origin: stri
 }
 
 export async function dispatchScheduledManagementReports(origin: string) {
-  const { data: schedules, error } = await db.from("management_report_schedules").select("*").eq("is_active", true).lte("next_run_at", new Date().toISOString()).order("next_run_at").limit(20);
-  if (error) throw new Error(error.message);
-  let completed = 0, failed = 0, skipped = 0;
-  for (const schedule of schedules ?? []) {
+  const cutoff=new Date().toISOString();
+  let completed = 0, failed = 0, skipped = 0, due=0;
+  // Bound failed-validation RPCs as well as report work for the Worker request budget.
+   const {data:schedules,error}:{data:Row[];error:{message:string}|null}=await db.rpc("due_management_report_schedules",{p_cutoff:cutoff,p_after_time:null,p_after_id:null});
+   if(error)throw new Error(error.message);
+   due+=schedules.length;
+   for (const [index,schedule] of schedules.entries()) {
     const ctx: AccessContext = { userId: String(schedule.created_by), homeOrgId: String(schedule.org_id), orgId: String(schedule.org_id), role: "ceo", capabilities: [], supportSessionId: null, supportExpiresAt: null };
-    // Keep the original due operating period fixed across retries and midnight.
-    const period = reportPeriod(schedule.cadence, Number(schedule.lookback_days), new Date(schedule.next_run_at));
+    let failureCode="GENERATION_FAILED";
+    let generationStarted=false;
     try {
+      // Keep the original due operating period fixed across retries and midnight.
+      const period = reportPeriod(schedule.cadence, Number(schedule.lookback_days), new Date(schedule.next_run_at));
       const {data: creator, error: creatorError} = await db.from("profiles").select("role,is_active").eq("org_id", ctx.orgId).eq("id", ctx.userId).maybeSingle();
-      if (creatorError || !creator?.is_active || creator.role !== "ceo") throw new Error("Report schedule requires its creator's current CEO authority.");
+      if(creatorError)throw new Error("Schedule authority could not be checked.");
+      if (!creator?.is_active || creator.role !== "ceo") {failureCode="CREATOR_AUTHORITY";throw new Error("Report schedule requires its creator's current CEO authority.");}
       ctx.role = creator.role;
+      // A full report gets a fresh invocation's request budget after failed validations.
+      if(failed>0)return {due,completed,failed,skipped:skipped+schedules.length-index};
+      generationStarted=true;
       await generateManagementReport(ctx, origin, { name: schedule.name, scope: schedule.scope, ...period, recipientIds: schedule.recipient_ids, scheduleId: schedule.id }, { scheduled: true, nextRunAt: nextRun(schedule.cadence, Number(schedule.run_day), Number(schedule.run_hour)), scheduleRevision: schedule.updated_at }); completed += 1;
+      return {due,completed,failed,skipped:skipped+schedules.length-index-1};
     }
-    catch (error) { if (error instanceof ReportBusyError) skipped += 1; else failed += 1; }
-  }
-  return { due: schedules?.length ?? 0, completed, failed, skipped };
+    catch (error) {
+      if (error instanceof ReportBusyError) skipped += 1;
+      else {
+        await reportRpc("record_report_schedule_failure",{p_id:schedule.id,p_revision:schedule.updated_at,p_failures:schedule.dispatch_failures,p_code:failureCode});
+        failed += 1;
+        if(failed>=20)return {due,completed,failed,skipped:skipped+schedules.length-index-1};
+      }
+    }
+    if(generationStarted)return {due,completed,failed,skipped:skipped+schedules.length-index-1};
+   }
+  return { due, completed, failed, skipped };
 }
 
 export async function getManagementReportRun(ctx: AccessContext, runId: string, allowFailed = false) {

@@ -60,10 +60,11 @@ test("notification experience supports unread state and user-controlled threshol
 });
 
 test("external delivery is opt-in, bounded, and disabled by default", () => {
-  assert.match(service, /history\.length >= 3/);
-  assert.match(service, /email_enabled/);
-  assert.match(service, /enabledAtByRecipient/);
+  assert.match(service, /claim_notification_emails/);
+  assert.match(service, /record_notification_email_phase/);
+  assert.match(service, /definitelyUnsent\?"failed":"uncertain"/);
   assert.match(emailAdapter, /NOTIFICATION_EMAIL_ENABLED.*=== "true"/);
   assert.match(wrangler, /"send_email"/);
   assert.match(monitoring, /platform-monitoring\.mjs notifications/);
+  assert.equal((monitoring.match(/run: node scripts\/platform-monitoring\.mjs reports\r?\n\s+if: \$\{\{ !cancelled\(\) \}\}/g)??[]).length,2);
 });

@@ -6,8 +6,11 @@ import {FlockLifecycleError} from "@/lib/flock-lifecycle/server";
 export async function GET(request: Request) {
   const ctx = await getAccessContext({tenant: true});
   if (isAccessResponse(ctx)) return ctx;
-  const id = z.uuid().safeParse(new URL(request.url).searchParams.get("cycle_id"));
+  const params=new URL(request.url).searchParams;
+  const id = z.uuid().safeParse(params.get("cycle_id"));
   if (!id.success) return accessJson({code: "UNAVAILABLE"}, 404);
-  try {return accessJson(await loadArchivedCorrectionContext(ctx, id.data));}
+  const options=z.object({cursor:z.string().max(2048).optional(),revision:z.string().max(200).optional(),recordIds:z.array(z.uuid()).max(500).optional()}).safeParse({cursor:params.get("cursor")??undefined,revision:params.get("revision")??undefined,recordIds:params.has("record_id")?params.getAll("record_id"):undefined});
+  if(!options.success)return accessJson({code:"UNAVAILABLE"},400);
+  try {return accessJson(await loadArchivedCorrectionContext(ctx, id.data,options.data));}
   catch (error) {return accessJson({code: error instanceof FlockLifecycleError ? error.code : "LOAD_FAILED"}, error instanceof FlockLifecycleError ? error.status : 500);}
 }

@@ -32,6 +32,7 @@ jobs:
       - run: node scripts/platform-monitoring.mjs probe
       - run: node scripts/platform-monitoring.mjs notifications
       - run: node scripts/platform-monitoring.mjs reports
+        if: ${{ !cancelled() }}
 
   staging-probe:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/15 * * * *'
@@ -51,6 +52,7 @@ jobs:
       - run: node scripts/platform-monitoring.mjs probe
       - run: node scripts/platform-monitoring.mjs notifications
       - run: node scripts/platform-monitoring.mjs reports
+        if: ${{ !cancelled() }}
 
   production-backup:
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 4 * * *'

@@ -291,7 +291,7 @@ export async function loadTodayWorkspace(
   const warehouseIds = (warehouseScopeResult.data ?? []).map((row: Row) => String(row.id));
 
   const empty = Promise.resolve({data: [] as Row[], error: null});
-  const [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, operatingRevision, starts] = await Promise.all([
+  const [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, starts] = await Promise.all([
     houseIds.length ? governanceAdmin.from("houses").select("id,name").eq("org_id", context.orgId).in("id", houseIds) : empty,
     batchIds.length ? governanceAdmin.from("batches").select("id,batch_code").eq("org_id", context.orgId).in("id", batchIds) : empty,
     flockIds.length ? governanceAdmin.from("daily_farm_records").select("id,flock_id,opening_birds,closing_birds,deaths,culls,transfers_in,transfers_out,other_removals,normal_eggs,broken_eggs,dirty_eggs,total_eggs,water_consumed_liters,updated_at").eq("org_id", context.orgId).in("flock_id", flockIds).eq("record_date", selection.workDate).is("voided_at", null) : empty,
@@ -307,10 +307,9 @@ export async function loadTodayWorkspace(
     governanceAdmin.from("daily_sales_records").select("id").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("sale_date", selection.workDate),
     governanceAdmin.from("cost_entries").select("id").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("entry_date", selection.workDate),
     governanceAdmin.from("farm_operating_days").select("status").eq("org_id", context.orgId).eq("farm_id", selection.farmId).eq("operating_date", selection.workDate).maybeSingle(),
-    governanceAdmin.rpc("today_resource_revision", {p_resource_type: "operating_day", p_resource_id: selection.farmId, p_work_date: selection.workDate}),
     flockIds.length ? governanceAdmin.from("flock_recording_starts").select("flock_id,effective_date,live_birds").eq("org_id",context.orgId).eq("farm_id",selection.farmId).in("flock_id",flockIds).eq("effective_date",selection.workDate) : empty,
   ]);
-  const firstError = [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, operatingRevision, starts]
+  const firstError = [houses, batches, daily, previousDaily, closures, mortality, health, supplies, attestations, actions, stockReceipts, stockCounts, sales, expenses, operatingDay, starts]
     .map((result) => result.error).find(Boolean);
   if (firstError) throw new TodayWorkspaceError("INTERNAL_ERROR", firstError.message, 500);
 
@@ -329,45 +328,13 @@ export async function loadTodayWorkspace(
   const supplyFlocks = new Set((supplies.data ?? []).map((row: Row) => String(row.flock_id)));
   const attestationByKey = new Map((attestations.data ?? []).map((row: Row) => [`${row.flock_id}:${row.task_code}`, String(row.source_fingerprint)]));
 
-  const fingerprintPairs = await Promise.all(flockIds.flatMap((flockId) => ["health_deaths", "routine_supplies"].map(async (taskCode) => {
-    const result = await governanceAdmin.rpc("today_source_fingerprint", {
-      p_farm_id: selection.farmId,
-      p_flock_id: flockId,
-      p_work_date: selection.workDate,
-      p_task_code: taskCode,
-    });
-    if (result.error) throw new TodayWorkspaceError("INTERNAL_ERROR", result.error.message, 500);
-    return [`${flockId}:${taskCode}`, String(result.data)] as const;
-  })));
-  const fingerprints = new Map(fingerprintPairs);
-  const dailyRevisionPairs = await Promise.all([...dailyByFlock.entries()].map(async ([flockId, record]) => {
-    const result = await governanceAdmin.rpc("today_resource_revision", {
-      p_resource_type: "daily_record",
-      p_resource_id: String(record.id),
-      p_work_date: null,
-    });
-    if (result.error) throw new TodayWorkspaceError("INTERNAL_ERROR", result.error.message, 500);
-    return [flockId, String(result.data)] as const;
-  }));
-  const feedRevisionPairs = await Promise.all(flockIds.map(async (flockId) => {
-    const result = await governanceAdmin.rpc("today_resource_revision", {
-      p_resource_type: "feed_day",
-      p_resource_id: flockId,
-      p_work_date: selection.workDate,
-    });
-    if (result.error) throw new TodayWorkspaceError("INTERNAL_ERROR", result.error.message, 500);
-    return [flockId, String(result.data)] as const;
-  }));
-  const dailyRevisions = new Map(dailyRevisionPairs);
-  const feedRevisions = new Map(feedRevisionPairs);
-
   const data: TodayWorkspaceData = {
     organization: {todayWorkspaceEnabled: Boolean(organization.today_workspace_enabled)},
     profile: {preferredLocale: profile.preferred_locale === "am" ? "am" : "en"},
     farm: {id: String(farm.id), name: String(farm.name)},
     operatingDay: {
       status: (operatingDay.data?.status ?? "open") as "open" | "closed" | "locked",
-      revision: String(operatingRevision.data),
+      revision: "",
     },
     flocks: flockRows.map((row) => {
       const id = String(row.id);
@@ -400,16 +367,16 @@ export async function loadTodayWorkspace(
           dirtyEggs: asNumber(record.dirty_eggs),
           totalEggs: asNumber(record.total_eggs),
           waterLiters: asNumber(record.water_consumed_liters),
-          revision: dailyRevisions.get(id) ?? "",
+          revision: "",
         } : null,
         previousClosingBirds: asNumber(previousByFlock.get(id)?.closing_birds),
         feedClosed: closure?.status === "closed",
         feedActualKg: closure?.status === "closed" ? asNumber(closure.actual_feed_kg) : null,
-        feedRevision: feedRevisions.get(id) ?? "",
+        feedRevision: "",
         hasHealthOrDeathActivity: mortalityFlocks.has(id) || healthFlocks.has(id) || Number(record?.deaths ?? 0) > 0 || Number(record?.culls ?? 0) > 0,
         hasRoutineSupplyUsage: supplyFlocks.has(id),
-        healthFingerprint: fingerprints.get(`${id}:health_deaths`) ?? "",
-        suppliesFingerprint: fingerprints.get(`${id}:routine_supplies`) ?? "",
+        healthFingerprint: "",
+        suppliesFingerprint: "",
         healthAttestationFingerprint: attestationByKey.get(`${id}:health_deaths`) ?? null,
         suppliesAttestationFingerprint: attestationByKey.get(`${id}:routine_supplies`) ?? null,
       };
@@ -426,14 +393,27 @@ export async function loadTodayWorkspace(
   const scheduled=await dueScheduledWork(context,selection.farmId,selection.workDate);
   data.scheduledWork=flockIds.map(id=>({flockId:id,pending:scheduled.filter(row=>row.flock_id===id).length,revision:scheduled.filter(row=>row.flock_id===id).map(row=>`${row.id}:${row.revision}`).join("|")}));
   const missingStarts = data.flocks.filter(flock=>!flock.dailyRecord && !flock.completedAt && resolveBirdOpening({...flock,workDate:selection.workDate}).openingBirds===null);
+  const tokens = await governanceAdmin.rpc("today_farm_resource_tokens", {
+    p_actor:context.userId,p_farm:selection.farmId,p_day:selection.workDate,p_flocks:flockIds,p_starts:missingStarts.map(f=>f.id),
+  });
+  const snapshot = tokens.data as {operating_revision:string; flocks:Array<{flock_id:string;daily_record_id:string|null;daily_updated_at:string|null;daily_revision:string|null;feed_revision:string;health_fingerprint:string;supplies_fingerprint:string;start_context:(RecordingStartContext & {farm_id:string})|null}>}|null;
+  if(tokens.error || !snapshot?.operating_revision || !Array.isArray(snapshot.flocks) || snapshot.flocks.length!==flockIds.length || new Set(snapshot.flocks.map(f=>f.flock_id)).size!==flockIds.length)
+    throw new TodayWorkspaceError("INTERNAL_ERROR","Farm evidence could not be loaded.",500);
+  data.operatingDay.revision=snapshot.operating_revision;
+  for(const flock of data.flocks){
+    const token=snapshot.flocks.find(row=>row.flock_id===flock.id);
+    if(!token?.feed_revision || !token.health_fingerprint || !token.supplies_fingerprint || token.daily_record_id!==(flock.dailyRecord?.id??null) || (flock.dailyRecord&&(!token.daily_revision || token.daily_updated_at!==dailyByFlock.get(flock.id)?.updated_at)))
+      throw new TodayWorkspaceError("INTERNAL_ERROR","Farm evidence changed. Refresh and try again.",500);
+    if(flock.dailyRecord)flock.dailyRecord.revision=token.daily_revision!;
+    flock.feedRevision=token.feed_revision;flock.healthFingerprint=token.health_fingerprint;flock.suppliesFingerprint=token.supplies_fingerprint;
+  }
   if(missingStarts.length){
     const {addisOperatingDate}=await import("@/lib/flock-lifecycle/server");
     const today=addisOperatingDate(new Date());
-    const blockers=await Promise.all(missingStarts.map(async flock=>{
-      const result=await governanceAdmin.rpc("recording_start_context",{p_actor:context.userId,p_flock:flock.id});
-      const start=result.data as (RecordingStartContext & {farm_id:string}) | null;
-      return [flock.id,result.error || !start || start.farm_id!==selection.farmId ? "START_UNAVAILABLE" : recordingStartBlocker(start,selection.workDate,today)] as const;
-    }));
+    const blockers=missingStarts.map(flock=>{
+      const start=snapshot.flocks.find(row=>row.flock_id===flock.id)?.start_context;
+      return [flock.id,!start || start.farm_id!==selection.farmId ? "START_UNAVAILABLE" : recordingStartBlocker(start,selection.workDate,today)] as const;
+    });
     data.recordingStartBlockers=Object.fromEntries(blockers);
   }
   return deriveTodayWorkspace(data, selection, context.role === "farm_manager");

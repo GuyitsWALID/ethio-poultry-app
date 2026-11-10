@@ -172,60 +172,41 @@ export async function updateNotificationCenter(ctx: AccessContext, input: unknow
   return loadNotificationCenter(ctx);
 }
 
-export async function dispatchNotificationOutbox(limit = 25) {
+export async function dispatchNotificationOutbox(limit = 5) {
   const readiness = emailDeliveryReadiness();
   if (!readiness.available) return { status: "disabled", attempted: 0, sent: 0, failed: 0, reason: readiness.reason };
 
-  const { data: preferences, error: preferenceError } = await db.from("notification_preferences").select("profile_id,org_id,email_minimum_severity,updated_at").eq("email_enabled", true);
-  if (preferenceError) throw new Error(preferenceError.message);
-  const recipientIds = (preferences ?? []).map((row: Row) => text(row.profile_id)).filter(Boolean);
-  if (!recipientIds.length) return { status: "ready", attempted: 0, sent: 0, failed: 0 };
-
-  const { data: pending, error: notificationError } = await db.from("authorized_notifications").select("id,org_id,recipient_id,action_id,event_type,severity,title,message,route,read_at,created_at").in("recipient_id", recipientIds).is("archived_at", null).order("created_at", { ascending: false }).limit(250);
-  if (notificationError) throw new Error(notificationError.message);
-  const notificationIds = (pending ?? []).map((row: Row) => text(row.id));
-  const { data: attempts, error: attemptError } = notificationIds.length
-    ? await db.from("notification_delivery_attempts").select("notification_id,attempt_number,status,retry_after").in("notification_id", notificationIds).eq("channel", "email")
-    : { data: [], error: null };
-  if (attemptError) throw new Error(attemptError.message);
-
-  const thresholdByRecipient = new Map<string, NotificationSeverity>((preferences ?? []).map((row: Row) => [text(row.profile_id), text(row.email_minimum_severity) as NotificationSeverity]));
-  const enabledAtByRecipient = new Map<string, number>((preferences ?? []).map((row: Row) => [text(row.profile_id), Date.parse(text(row.updated_at))]));
-  const now = Date.now();
-  const eligible = (pending ?? []).filter((row: Row) => {
-    const recipientId = text(row.recipient_id);
-    const threshold = thresholdByRecipient.get(recipientId) ?? "high";
-    if (!allows(threshold, text(row.severity) as NotificationSeverity)) return false;
-    if (Date.parse(text(row.created_at)) < (enabledAtByRecipient.get(recipientId) ?? now)) return false;
-    const history = (attempts ?? []).filter((attempt: Row) => text(attempt.notification_id) === text(row.id));
-    if (history.some((attempt: Row) => text(attempt.status) === "sent") || history.length >= 3) return false;
-    const latest = history.sort((left: Row, right: Row) => Number(right.attempt_number) - Number(left.attempt_number))[0];
-    return !latest?.retry_after || Date.parse(text(latest.retry_after)) <= now;
-  }).slice(0, limit);
-
-  let sent = 0, failed = 0;
-  for (const row of eligible) {
-    const history = (attempts ?? []).filter((attempt: Row) => text(attempt.notification_id) === text(row.id));
-    const attemptNumber = history.length + 1;
+  // Each message also needs access, Auth, provider and durable evidence requests.
+  const {data:eligible,error}=await db.rpc("claim_notification_emails",{p_limit:Math.min(limit,5)});
+  if(error)throw new Error("Email deliveries could not be claimed.");
+  let sent = 0, failed = 0, uncertain=0, skipped=0;
+  for (const row of eligible as Row[]) {
+    if(row.dispatch_status==="uncertain"){uncertain++;continue;}
+    const phase=async(status:string,code:string|null=null,messageId:string|null=null,retry=false)=>{
+      const result=await db.rpc("record_notification_email_phase",{p_notification:row.id,p_token:row.claim_token,p_status:status,p_code:code,p_message_id:messageId,p_retry:retry});
+      if(result.error)throw new Error("Email delivery evidence could not be stored.");
+      return result.data as string;
+    };
+    let sending=false;
     try {
       // Access may have been revoked after the outbox read.
       const {data: authorized, error: accessError} = await db.rpc("notification_recipient_has_access", {p_notification: row.id});
       if (accessError) throw Object.assign(new Error("Recipient access could not be checked."), {code: "RECIPIENT_ACCESS_CHECK_FAILED"});
-      if (authorized !== true) continue;
+      if (authorized !== true) {await phase("sending");skipped++;continue;}
       const { data: authUser } = await governanceAdmin.auth.admin.getUserById(text(row.recipient_id));
       const email = authUser.user?.email;
       if (!email) throw Object.assign(new Error("Recipient email is unavailable."), { code: "RECIPIENT_EMAIL_MISSING" });
+      if(await phase("sending")!=="sending"){skipped++;continue;}
+      sending=true;
       const result = await sendNotificationEmail({ to: email, notification: item(row) });
-      const { error: sentEvidenceError } = await db.from("notification_delivery_attempts").insert({ org_id: row.org_id, notification_id: row.id, channel: "email", attempt_number: attemptNumber, status: "sent", provider: "cloudflare-email", provider_message_id: result.providerMessageId });
-      if (sentEvidenceError) throw Object.assign(new Error("Email was sent but delivery evidence could not be stored."), { code: "DELIVERY_EVIDENCE_WRITE_FAILED" });
-      sent += 1;
+      if(await phase("sent",null,result.providerMessageId)==="sent")sent++;
     } catch (error: unknown) {
       const code = typeof error === "object" && error && "code" in error ? text((error as { code?: unknown }).code) : "PROVIDER_ERROR";
-      const retryMinutes = 5 * 2 ** (attemptNumber - 1);
-      const { error: failedEvidenceError } = await db.from("notification_delivery_attempts").insert({ org_id: row.org_id, notification_id: row.id, channel: "email", attempt_number: attemptNumber, status: "failed", provider: "cloudflare-email", failure_code: code.slice(0, 80), retry_after: attemptNumber < 3 ? new Date(now + retryMinutes * 60_000).toISOString() : null });
-      if (failedEvidenceError && code !== "DELIVERY_EVIDENCE_WRITE_FAILED") throw new Error("Notification delivery failed and its evidence could not be stored.");
-      failed += 1;
+      const definitelyUnsent=!sending || (typeof error==="object"&&error!==null&&"definitelyUnsent" in error&&error.definitelyUnsent===true);
+      // An unknown provider result must not turn into an automatic duplicate send.
+      const outcome=await phase(definitelyUnsent?"failed":"uncertain",code,null,definitelyUnsent);
+      if(outcome==="sent")sent++;else if(outcome==="uncertain")uncertain++;else failed++;
     }
   }
-  return { status: "ready", attempted: eligible.length, sent, failed };
+  return { status: "ready", attempted: eligible.length, sent, failed, uncertain, skipped };
 }

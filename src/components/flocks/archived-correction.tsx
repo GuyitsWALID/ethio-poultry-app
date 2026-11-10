@@ -11,6 +11,10 @@ export function ArchivedCorrection({cycleId}: {cycleId: string}) {
   const t=useTranslations("ArchivedCorrection"), locale=useLocale() as AppLocale;
   const c=useTranslations("FlockCycles");
   const [context,setContext]=useState<ArchivedCorrectionContext|null>(null), [failed,setFailed]=useState(false);
+  const [cursor,setCursor]=useState<string|undefined>(),[loading,setLoading]=useState(false);
+  const [recordDetails,setRecordDetails]=useState<Record<string,ArchivedCorrectionContext["records"][number]>>({});
+  const sourceRevision=useRef<string|null>(null);
+  const pageCopy=locale==="am"?{more:"ተጨማሪ መዝገቦች",first:"የመጀመሪያ ገጽ",selected:"የተመረጡ መዝገቦች"}:{more:"More records",first:"First page",selected:"Selected records"};
   const [selected,setSelected]=useState<Record<string,Record<string,string>>>({});
   const [reason,setReason]=useState(""), [reference,setReference]=useState("");
   const [busy,setBusy]=useState(false), [request,setRequest]=useState<string|null>(null), [retry,setRetry]=useState(0);
@@ -21,20 +25,32 @@ export function ArchivedCorrection({cycleId}: {cycleId: string}) {
   const identity=useRef<{body:string;id:string}|null>(null);
   useEffect(()=>{
     const abort=new AbortController();
-    void fetch(`/api/flocks/cycles/corrections?cycle_id=${cycleId}`,{cache:"no-store",signal:abort.signal}).then(async response=>{
+    void fetch(`/api/flocks/cycles/corrections?cycle_id=${cycleId}${cursor?`&cursor=${encodeURIComponent(cursor)}`:""}`,{cache:"no-store",signal:abort.signal}).then(async response=>{
       if(!response.ok)throw new Error("unavailable");const data=await response.json() as ArchivedCorrectionContext;
-      if(!abort.signal.aborted){setContext(data);setFailed(false);
-        if(!reviewLosses)setLosses([...data.lossEvents,...data.records.flatMap(row=>(["death","cull"] as const).flatMap(kind=>{
-          const field=kind==="death"?"deaths":"culls";
-          return row[field]&&!data.lossEvents.some(e=>e.record_id===row.id&&e.kind===kind)?[{id:crypto.randomUUID(),record_id:row.id,kind,count:row[field]!,explanation:""}]:[];
-        }))]);
+      if(sourceRevision.current && sourceRevision.current!==data.cycle.revision)throw new Error("changed");
+      if(!abort.signal.aborted){sourceRevision.current=data.cycle.revision;setContext(data);setFailed(false);
         if(!reviewDepartures)setDepartures(data.departures.map(d=>({flock_id:d.flock_id,kind:d.kind,quantity:d.quantity,sale_id:d.kind==="sale"?d.sale_id:"",physical_head_count:"",reason:d.kind==="other"?d.reason:"",supporting_reference:d.supporting_reference||""})));
       }
     }).catch(()=>{if(!abort.signal.aborted)setFailed(true);});
     return ()=>abort.abort();
   // Draft toggles intentionally do not trigger a source refresh.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[cycleId,retry]);
+  },[cycleId,retry,cursor]);
+  async function selectRecords(ids:string[]){
+    if(!context||loading||!ids.length)return;setLoading(true);setFailed(false);
+    try{
+      const params=new URLSearchParams({cycle_id:cycleId,revision:context.cycle.revision});ids.forEach(id=>params.append("record_id",id));
+      const response=await fetch(`/api/flocks/cycles/corrections?${params}`,{cache:"no-store"});
+      if(!response.ok)throw new Error("unavailable");const data=await response.json() as ArchivedCorrectionContext;
+      if(data.cycle.revision!==sourceRevision.current)throw new Error("changed");
+      setRecordDetails(current=>({...current,...Object.fromEntries(data.records.map(r=>[r.id,r]))}));
+      setSelected(current=>({...current,...Object.fromEntries(data.records.map(r=>[r.id,current[r.id]??Object.fromEntries(archivedBirdFields.map(f=>[f,r[f]===null?"":String(r[f])]))]))}));
+      setLosses(current=>[...current.filter(e=>!ids.includes(e.record_id)),...data.lossEvents,...data.records.flatMap(row=>(["death","cull"] as const).flatMap(kind=>{
+        const field=kind==="death"?"deaths":"culls";
+        return row[field]&&!data.lossEvents.some(e=>e.record_id===row.id&&e.kind===kind)?[{id:crypto.randomUUID(),record_id:row.id,kind,count:row[field]!,explanation:""}]:[];
+      }))]);
+    }catch{setFailed(true);}finally{setLoading(false);}
+  }
   async function submit(event:React.FormEvent){
     event.preventDefault();if(!context||busy)return;
     const parsed=archivedCycleCorrectionSchema.safeParse({cycle_id:cycleId,expected_revision:context.cycle.revision,supporting_reference:reference,
@@ -57,18 +73,24 @@ export function ArchivedCorrection({cycleId}: {cycleId: string}) {
     {!context&&!failed?<p role="status">{t("loading")}</p>:null}
     {request?<p role="status">{t("submitted")} <Link className="inline-flex min-h-12 items-center underline" href={`/app/governance?request=${request}`}>{t("approvals")}</Link></p>:context?<form onSubmit={event=>void submit(event)} className="space-y-4">
       {context.records.map(row=><fieldset key={row.id} className="rounded-xl border border-sand-200 p-3">
-        <label className="flex min-h-12 items-center gap-3 font-semibold"><input type="checkbox" className="size-5" checked={Boolean(selected[row.id])} onChange={event=>setSelected(current=>{
-          const next={...current};if(event.target.checked)next[row.id]=Object.fromEntries(archivedBirdFields.map(field=>[field,row[field]===null?"":String(row[field])]));else delete next[row.id];return next;
-        })}/>{row.flock} · {row.house} · {formatOperationDate(`${row.date}T12:00:00Z`,locale)} {row.final?`· ${t("final")}`:""}</label>
-        {selected[row.id]?<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{archivedBirdFields.map(field=><label key={field} className="grid gap-2 text-sm">{t(field)}<input required min={0} max={2147483647} type="number" inputMode="numeric" step={1} className={control} value={selected[row.id][field]} onChange={event=>setSelected(current=>({...current,[row.id]:{...current[row.id],[field]:event.target.value}}))}/></label>)}</div>:null}
+        <label className="flex min-h-12 items-center gap-3 font-semibold"><input type="checkbox" className="size-5" disabled={loading} checked={Boolean(selected[row.id])} onChange={event=>{
+          if(event.target.checked)void selectRecords([row.id]);else setSelected(current=>{const next={...current};delete next[row.id];return next;});
+        }}/>{row.flock} · {row.house} · {formatOperationDate(`${row.date}T12:00:00Z`,locale)} {row.final?`· ${t("final")}`:""}</label>
+      </fieldset>)}
+      <div className="flex flex-wrap gap-3">{cursor?<button className="min-h-12 rounded-xl border px-3" type="button" onClick={()=>setCursor(undefined)}>{pageCopy.first}</button>:null}{context.nextCursor?<button className="min-h-12 rounded-xl border px-3" type="button" onClick={()=>setCursor(context.nextCursor!)}>{pageCopy.more}</button>:null}</div>
+      {loading?<p role="status">{t("loading")}</p>:null}
+      {Object.keys(selected).length?<h4 className="font-semibold">{pageCopy.selected}</h4>:null}
+      {Object.entries(selected).map(([id,values])=><fieldset key={id} className="rounded-xl border p-3"><legend>{recordDetails[id]?.flock} · {formatOperationDate(`${recordDetails[id]?.date}T12:00:00Z`,locale)}</legend>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{archivedBirdFields.map(field=><label key={field} className="grid gap-2 text-sm">{t(field)}<input required min={0} max={2147483647} type="number" inputMode="numeric" step={1} className={control} value={values[field]} onChange={event=>setSelected(current=>({...current,[id]:{...current[id],[field]:event.target.value}}))}/></label>)}</div>
+        <button type="button" className="min-h-12 underline" onClick={()=>setSelected(current=>{const next={...current};delete next[id];return next;})}>{locale==="am"?"ምርጫውን አስወግድ":"Deselect record"}</button>
       </fieldset>)}
       <label className="flex min-h-12 items-center gap-3"><input type="checkbox" className="size-5" checked={reviewLosses} onChange={e=>setReviewLosses(e.target.checked)}/>{t("reviewLosses")}</label>
-      {reviewLosses?<section className="space-y-3"><p>{t("lossHelp")}</p>{losses.map((loss,index)=>selected[loss.record_id]?<fieldset key={loss.id} className="grid gap-3 rounded-xl border p-3 sm:grid-cols-3"><legend>{context.records.find(r=>r.id===loss.record_id)?.flock} · {formatOperationDate(`${context.records.find(r=>r.id===loss.record_id)?.date}T12:00:00Z`,locale)} · {t(loss.kind==="death"?"deaths":"culls")}</legend>
+      {reviewLosses?<section className="space-y-3"><p>{t("lossHelp")}</p>{losses.map((loss,index)=>selected[loss.record_id]?<fieldset key={loss.id} className="grid gap-3 rounded-xl border p-3 sm:grid-cols-3"><legend>{recordDetails[loss.record_id]?.flock} · {formatOperationDate(`${recordDetails[loss.record_id]?.date}T12:00:00Z`,locale)} · {t(loss.kind==="death"?"deaths":"culls")}</legend>
         <label>{t("quantity")}<input className={control} type="number" min={0} max={2147483647} step={1} inputMode="numeric" required value={loss.count} onChange={e=>setLosses(rows=>rows.map((row,i)=>i===index?{...row,count:Number(e.target.value)}:row))}/></label>
         <label className="sm:col-span-2">{t("explanation")}<input className={control} minLength={3} maxLength={1000} required value={loss.explanation} onChange={e=>setLosses(rows=>rows.map((row,i)=>i===index?{...row,explanation:e.target.value}:row))}/></label>
-      </fieldset>:null)}{Object.keys(selected).map(id=><div key={id} className="flex flex-wrap gap-3"><span>{context.records.find(r=>r.id===id)?.flock} · {formatOperationDate(`${context.records.find(r=>r.id===id)?.date}T12:00:00Z`,locale)}</span>{(["death","cull"] as const).map(kind=><button type="button" key={kind} className="min-h-12 rounded-xl border px-3" onClick={()=>setLosses(rows=>[...rows,{id:crypto.randomUUID(),record_id:id,kind,count:0,explanation:""}])}>{t(kind==="death"?"addDeath":"addCull")}</button>)}</div>)}</section>:null}
+      </fieldset>:null)}{Object.keys(selected).map(id=><div key={id} className="flex flex-wrap gap-3"><span>{recordDetails[id]?.flock} · {formatOperationDate(`${recordDetails[id]?.date}T12:00:00Z`,locale)}</span>{(["death","cull"] as const).map(kind=><button type="button" key={kind} className="min-h-12 rounded-xl border px-3" onClick={()=>setLosses(rows=>[...rows,{id:crypto.randomUUID(),record_id:id,kind,count:0,explanation:""}])}>{t(kind==="death"?"addDeath":"addCull")}</button>)}</div>)}</section>:null}
       <label className="flex min-h-12 items-center gap-3"><input type="checkbox" className="size-5" checked={reviewDepartures} onChange={e=>{
-        setReviewDepartures(e.target.checked);if(e.target.checked)setSelected(current=>({...current,...Object.fromEntries(context.records.filter(r=>r.final).map(r=>[r.id,current[r.id]||Object.fromEntries(archivedBirdFields.map(field=>[field,r[field]===null?"":String(r[field])]))]))}));
+        setReviewDepartures(e.target.checked);if(e.target.checked)void selectRecords(context.finalRecords.filter(r=>!selected[r.id]).map(r=>r.id));
       }}/>{t("reviewDepartures")}</label>
       {reviewDepartures?<section className="space-y-3"><p>{t("departureHelp")}</p>{departures.map((d,index)=><fieldset key={index} className="grid gap-3 rounded-xl border p-3 sm:grid-cols-2">
         <label>{c("flock")}<select className={control} value={d.flock_id} onChange={e=>setDepartures(rows=>rows.map((row,i)=>i===index?{...row,flock_id:e.target.value}:row))}>{context.members.map(m=><option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
@@ -80,7 +102,7 @@ export function ArchivedCorrection({cycleId}: {cycleId: string}) {
       </fieldset>)}<button type="button" className="min-h-12 rounded-xl border px-3" onClick={()=>setDepartures(rows=>[...rows,{flock_id:context.members[0].id,kind:"sale",quantity:0,sale_id:"",physical_head_count:"",reason:"",supporting_reference:""}])}>{t("addDeparture")}</button></section>:null}
       <label className="grid gap-2">{t("reference")}<input className={control} required minLength={3} maxLength={1000} value={reference} onChange={e=>setReference(e.target.value)}/></label>
       <label className="grid gap-2">{t("reason")}<textarea className={`${control} py-3`} required minLength={8} maxLength={2000} value={reason} onChange={e=>setReason(e.target.value)}/></label>
-      <button disabled={busy||!Object.keys(selected).length} className="min-h-12 rounded-xl bg-forest-900 px-4 font-semibold text-white disabled:opacity-50">{t(busy?"sending":"send")}</button>
+      <button disabled={busy||loading||!Object.keys(selected).length} className="min-h-12 rounded-xl bg-forest-900 px-4 font-semibold text-white disabled:opacity-50">{t(busy?"sending":"send")}</button>
     </form>:null}
   </section>;
 }
