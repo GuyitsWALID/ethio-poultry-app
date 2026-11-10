@@ -32,6 +32,7 @@ test('Today complete offline day survives reload and browser restart then closes
     await card.locator('input[name=session_name]').fill(name);await card.locator('input[name=session_time]').fill(time);
     await card.locator('input[name=planned]').fill('5');await card.locator('input[name=actual]').fill('5');
     await card.locator('select[name=feed_item]').selectOption(id(7));await card.locator('select[name=warehouse]').selectOption(id(6));
+    await card.locator('select[name=feed_type]').selectOption('layer_feed');
     await card.getByRole('button',{name:'Save feeding',exact:true}).click();
     await expect(card.getByRole('button',{name:'Add feeding',exact:true})).toBeVisible();
     await expect(card.locator('input[name=session_name]')).toHaveCount(0);

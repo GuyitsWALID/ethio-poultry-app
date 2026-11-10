@@ -1,5 +1,9 @@
 # Tasks
 
+## Audit repair checkpoint — 2026-11-10
+
+All 20 must-fix audit repairs are implemented and released to production through master `2167b4c`, with 113 migrations and 623 passing clean tests. Detailed evidence and genuine follow-ups are in [audit repair status](../../../docs/deployment/audit-repair-status.md). The separate Today follow-up is tracked in [PR #11](https://github.com/GuyitsWALID/ethio-poultry-app/pull/11); it adds rebuilt signed-in bilingual recording acceptance but does not certify physical devices or a real-farm pilot. Staging stays unchanged by the owner's explicit decision. Older dated implementation/release notes below are retained as historical evidence, not automatically reopened work.
+
 ## Current completion boundary — 2026-10-30
 
 Implementation is not the same as pilot certification. Today, offline recovery,
@@ -7,7 +11,7 @@ shared warehouse access, Flocks, History and Farm performance are implemented.
 The owner confirmed the deployed Feed/Sales repair and the offline staging flow.
 Task 4.6's localization implementation, automated staging verification and partner
 review are complete. The owner confirmed full partner approval on 2026-10-30.
-The bilingual Today recording journey remains open under 4.5. Release acceptance and the real
+The bilingual Today recording journey was subsequently verified under 4.5 on 2026-11-10. Release acceptance and the real
 seven-day pilot remain Task 8.
 See `completion-checkpoint.md` for current evidence and remaining work. Older
 dated notes below are retained as history, not renewed implementation blockers.
@@ -46,10 +50,10 @@ dated notes below are retained as history, not renewed implementation blockers.
 - [x] 4.2 Add typed shared and Today message catalogs plus locale/date/number/ETB helpers fixed to `Africa/Addis_Ababa`; verify catalog parity and locale formatting tests.
 - [x] 4.3 Add the CEO/Farm Manager English/Amharic header control, profile persistence, offline device fallback, and Admin exclusion; verify immediate switching, reload persistence, and Admin English-only behavior.
 - [x] 4.4 Build and partner-review the poultry terminology glossary using the selected Amharic references; verify every manager-facing Today term has an approved English and Amharic entry.
-- [ ] 4.5 Migrate Farm Manager navigation, Today, validation, notifications, loading, empty, success, and error text to catalog keys; verify the hard-coded-string check and translated browser tests pass.
+- [x] 4.5 Migrate Farm Manager navigation, Today, validation, notifications, loading, empty, success, and error text to catalog keys; verify the hard-coded-string check and translated browser tests pass.
   - [x] Core Today/navigation/notification catalog migration and stable message mappings implemented. On 2026-10-24, bird, health and embedded saves were aligned with the full shared error map; assigned-fix status badges now reuse translated notification statuses.
   - [x] Add a CI-enforced AST regression for visible Today text, accessible labels and static translation keys; preserve the existing English/Amharic key-parity and Ethiopian-calendar tests.
-  - [ ] Final rebuilt signed-in translated browser acceptance for the current integrated release. Earlier scoped tablet/browser evidence remains valid history but is not a new full-release sign-off.
+  - [x] Final rebuilt signed-in translated browser acceptance for the current integrated release. On 2026-11-10, the fresh Next.js/OpenNext bundle passed signed-in Chromium checks for English/Amharic tablet/calendar controls, CEO-approved recording starts, stale offline conflicts, first deaths/culls on today and an allowed backdated date (including an Amharic save), plus a full offline day through browser restart, seven dependent commands, reconnect, one-time feed deduction and closure. Temporary accounts/data ran only in a disposable migrated local stack. Physical-device confirmation remains open; these checks do not close the broader cross-browser or real-farm pilot gates.
 - [x] 4.6 Migrate the remaining CEO/Farm Manager Feed, Health, Inventory, Sales, Alerts, Governance, Record Checks, and Reports interface text before broad bilingual release; verify missing-key checks and Amharic expansion layouts.
   - 2026-10-30 closure: the product owner confirmed complete partner review and approval. Automated staging acceptance is recorded in run `41049975777`. Future language feedback is new follow-up work; earlier deferred-review notes below are historical.
   - 2026-10-29 implementation phase: migrated operational controls, dynamic states, auxiliary panels and compatibility Reports; added explicit catalogs for generated analytics/mortality explanations, all 22 Record Check rules, exact-source correction guidance, authoritative operation validation, Feed configuration validation and AI error codes. Amharic dates reuse the Ethiopian calendar; wire dates, status codes, calculations and access checks remain unchanged. New AI analyses are language-scoped in their evidence hash; frozen analyses and original names/notes/evidence are not rewritten. Implementation checkboxes below do not certify the release: new tests, type/lint/build checks, signed-in browser acceptance and partner terminology review remain deferred at the user's request. No staging deployment or production approval is implied.
@@ -101,7 +105,7 @@ unverified scenarios remain tracked for release/pilot acceptance.
 
 - [x] 6.1 Add the dedicated Today route with assigned farm/date/flock context, progress summary, feature-flag behavior, and responsive tablet layout; verify portrait, landscape, keyboard, and 44-pixel touch-target checks.
 - [x] 6.2 Implement a lazy, assignment-safe task-detail read interface at `GET /api/farm-manager/today/tasks/[task]`; verify every task returns only its authoritative current values, allowed choices, dependencies, revisions, and correction destinations.
-- [x] 6.3 Implement the expandable Check birds card with authoritative opening values, the movement equation, field guidance, and focused save; water is excluded and recorded once under Eggs and water. Verify zero movements, imbalance, missing source, draft, conflict, collapse, and auto-advance.
+- [x] 6.3 Present Bird count as a read-only summary of the trusted opening and recorded deaths/culls. First recording/feeding close creates the opening prerequisite through the shared durable command path, without a separate Start bird record action. Keep missing-opening recovery, exact governed corrections and queued/conflict visibility. Water is recorded once under Eggs and water. Rebuilt bilingual current/backdated recording and offline dependency checks passed on 2026-11-10; no source calculation or server safeguard was weakened.
 - [x] 6.4 Implement the expandable Record feeding card over existing scheduled sessions and feed close; verify plan completion, inventory selection, missed-session reasons, one-time deduction, reopen effects, collapse, auto-advance, and offline dependency ordering.
 - [x] 6.5 Implement the expandable Eggs and water card so water applies to every flock while egg fields appear only for layer/parent-stock flocks; verify classification totals, focused Daily Record preservation, collapse, and auto-advance.
 - [x] 6.6 Implement the expandable Health and deaths card with explicit no-activity confirmation and conditional mortality, treatment, medicine, vaccination, warehouse, and quantity fields; verify atomic stock rollback, category restrictions, collapse, and auto-advance.
