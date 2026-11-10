@@ -1,5 +1,7 @@
 # Simplification completion checkpoint — 2026-10-24
 
+> Historical checkpoint. For current audit-repair completion as of 2026-11-10, use [audit repair status](../../../docs/deployment/audit-repair-status.md) and the latest boundary in `tasks.md`. Localization 4.6 was subsequently accepted; all 20 audit repairs subsequently shipped to production. PR #11 subsequently verified rebuilt signed-in bilingual Today recording under 4.5. The older counts and deferred-release statements below are not a current code-gap inventory. Physical-device, broader browser/rollback acceptance and the real-farm pilot remain separately gated.
+
 ## What is implemented
 
 - Parent Tasks 1–3: specification, database safeguards, authoritative Today orchestration.

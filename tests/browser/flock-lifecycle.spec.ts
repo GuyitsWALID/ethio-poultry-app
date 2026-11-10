@@ -183,7 +183,7 @@ test('Today tablet controls and Amharic calendar preserve the operational date',
   await expect(date).toBeVisible();
   const iso=await date.inputValue();
   const converted=toEthiopianDate(iso)!;
-  await expect(page.locator('#today-task-birds')).toBeVisible();
+  await expect(page.locator('#today-bird-count')).toBeVisible();
   for(const size of [{width:768,height:1024},{width:1024,height:768}]){
     await page.setViewportSize(size);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -210,7 +210,7 @@ test('Today tablet controls and Amharic calendar preserve the operational date',
   await expect(calendar.locator('input[type=hidden]')).toHaveValue(iso);
   // Persist offline before attempting transport; reconnect must apply once.
   await page.getByRole('group',{name:/Language|ቋንቋ/}).getByRole('button',{name:'EN',exact:true}).click();
-  const birds=page.locator('#today-task-birds');
+  const birds=page.locator('#today-bird-count');
   if(await birds.locator('button[aria-expanded=false]').count()) await birds.locator('button[aria-expanded]').click();
   const workspaceResponse=await page.request.get(`/api/farm-manager/today?farm_id=${farm}&date=${iso}`);
   expect(workspaceResponse.status()).toBe(200);
@@ -219,12 +219,12 @@ test('Today tablet controls and Amharic calendar preserve the operational date',
   const savedResponse=page.waitForResponse(response=>response.url().endsWith('/api/farm-manager/today/commands')&&response.request().method()==='POST');
   await context.setOffline(true);
   try{
-    const save=birds.getByRole('button',{name:'Start bird record',exact:true});
-    await expect(save).toBeEnabled();await save.click();
+    const eggs=page.locator('#today-task-eggs_water');
+    if(await eggs.locator('button[aria-expanded=false]').count())await eggs.locator('button[aria-expanded]').click();
+    for(const name of ['water','normal_eggs','broken_eggs','dirty_eggs'])await eggs.locator(`input[name=${name}]`).fill('0');
+    await eggs.getByRole('button',{name:'Save and continue',exact:true}).click();
     await expect(birds.getByText('Waiting to sync',{exact:true})).toBeVisible();
-    if(await birds.locator('button[aria-expanded=false]').count())await birds.locator('button[aria-expanded]').click();
-    await expect(birds.getByText(/Waiting to sync; not complete yet/).first()).toBeVisible();
-    await expect(birds.getByRole('button',{name:'Start bird record',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'Start bird record',exact:true})).toHaveCount(0);
   }finally{await context.setOffline(false);}
   const saved=await savedResponse;
   expect(saved.status()).toBe(200);

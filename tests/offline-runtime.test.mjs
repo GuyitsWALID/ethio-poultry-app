@@ -7,12 +7,59 @@ import {TodayOfflineRuntime, taskDraftKey, remainingDraft} from '../src/lib/toda
 const identity={tenantId:'org',userId:'manager',authorizedWorkDate:'2026-10-10'};
 const selection={farmId:'farm',flockId:'flock',workDate:'2026-10-10'};
 const grant={tenantId:'org',userId:'manager',farmId:'farm',flockIds:['flock'],workDate:'2026-10-10',issuedAt:'2026-10-10T09:00:00Z',expiresAt:'2026-10-10T21:00:00Z'};
-const workspace={farm:{id:'farm'},workDate:selection.workDate,offlineAccess:grant};
+const workspace={farm:{id:'farm'},workDate:selection.workDate,offlineAccess:grant,flocks:[{id:'flock',birdCheck:{dailyRecordId:'daily',openingBirds:100,openingSource:'daily_record'}}]};
 const command=(id='one')=>({schema_version:1,command_id:id,type:'save_daily_record',farm_id:'farm',flock_id:'flock',work_date:selection.workDate,expected_resource_revision:'original',payload:{value:3}});
 const applied=async c=>({command_id:c.command_id,status:'applied'});
 const key=taskDraftKey(selection,'birds');
 const draft={key,taskId:'birds',workDate:selection.workDate,value:{count:3},updatedAt:grant.issuedAt};
 async function setup(){const store=new MemoryOfflineStore();const state={online:true,now:1000};const runtime=new TodayOfflineRuntime(store,identity,()=>state.online,()=>state.now);await runtime.rememberWorkspace(workspace);return{store,state,runtime};}
+
+test('first loss save automatically chains a verified opening without clearing the health draft',async()=>{
+ const {store,runtime}=await setup();
+ await runtime.rememberWorkspace({...workspace,flocks:[{id:'flock',birdCheck:{dailyRecordId:null,openingBirds:100,openingSource:'previous_close'}}]});
+ const healthKey=taskDraftKey(selection,'health_deaths');
+ await store.putDraft({...draft,key:healthKey,taskId:'health_deaths'});
+ const loss={...command('loss'),payload:{daily_record_id:null,usages:null,record:{record_date:selection.workDate,_today_bird_loss:{deaths:1,culls:2}}}};
+ await runtime.enqueue(loss,healthKey);
+ const queue=await store.listCommands();assert.equal(queue.length,2);
+ assert.deepEqual(queue[0].command.payload.record._today_opening,{source:'previous_close',count:100});
+ assert.equal(queue[1].command.revision_from,queue[0].command.command_id);
+ assert.deepEqual(queue[1].command.payload,loss.payload);
+ assert(await store.getDraft(healthKey));
+ await runtime.enqueue(loss,healthKey);assert.equal((await store.listCommands()).length,2);
+});
+
+test('missing opening blocks automatic initialization without queuing a loss',async()=>{
+ const {store,runtime}=await setup();
+ await runtime.rememberWorkspace({...workspace,flocks:[{id:'flock',birdCheck:{dailyRecordId:null,openingBirds:null,openingSource:'missing'}}]});
+ await assert.rejects(runtime.enqueue({...command(),payload:{daily_record_id:null,record:{}}},key),/OPENING_SOURCE_MISSING/);
+ assert.equal((await store.listCommands()).length,0);
+});
+
+test('online first loss and feed close use current workspace without creating historical offline access',async()=>{
+ for(const type of ['save_daily_record','close_feed_day']){
+  const store=new MemoryOfflineStore(),state={online:true};
+  const runtime=new TodayOfflineRuntime(store,identity,()=>state.online);
+  const workDate='2026-10-09';
+  runtime.rememberOnlineWorkspace({farm:{id:'farm'},workDate,flocks:[{id:'flock',birdCheck:{dailyRecordId:null,openingBirds:100,openingSource:'previous_close'}}]});
+  const input={...command('online-loss'),work_date:workDate,type,payload:type==='save_daily_record'?{daily_record_id:null,usages:null,record:{record_date:workDate,_today_bird_loss:{deaths:1,culls:0}}}:{}};
+  await runtime.enqueue(input,taskDraftKey({...selection,workDate},type==='close_feed_day'?'feeding':'health_deaths'));
+  const queue=await store.listCommands();assert.equal(queue.length,2);
+  assert.deepEqual(queue[0].command.payload.record._today_opening,{source:'previous_close',count:100});
+  assert.equal(type==='close_feed_day'?queue[1].command.daily_revision_from:queue[1].command.revision_from,queue[0].command.command_id);
+  assert.equal((await store.listSnapshots()).length,0);assert.equal((await store.listDrafts()).length,0);
+  state.online=false;
+  await assert.rejects(runtime.enqueue({...input,command_id:'offline-loss'},'health'),/OFFLINE_NOT_AUTHORIZED/);
+  assert.equal((await store.listCommands()).length,2);
+ }
+});
+
+test('online opening evidence cannot initialize a different flock or date',async()=>{
+ const store=new MemoryOfflineStore(),runtime=new TodayOfflineRuntime(store,identity,()=>true);
+ runtime.rememberOnlineWorkspace({farm:{id:'farm'},workDate:selection.workDate,flocks:[{id:'flock',birdCheck:{dailyRecordId:null,openingBirds:100,openingSource:'placement'}}]});
+ for(const change of [{flock_id:'other'},{work_date:'2026-10-09'},{farm_id:'other'}])await assert.rejects(runtime.enqueue({...command(),...change,payload:{daily_record_id:null,record:{}}},key),/OPENING_SOURCE_MISSING/);
+ assert.equal((await store.listCommands()).length,0);
+});
 
 test('offline lease uses server operating day despite initial device clock skew',()=>{
  const stored={grant,receivedAt:1000,lastSeenAt:1000};

@@ -9,15 +9,17 @@ import {createClient} from '@supabase/supabase-js';
 const suffix=randomUUID().replaceAll('-','');
 const database=`flock_browser_${suffix}`;
 const dbContainer='supabase_db_ethio-poultry-app';
-const template='ethio_flock_lifecycle_dryrun_20261007';
+const template=process.env.LOCAL_BROWSER_DB_TEMPLATE??'ethio_flock_lifecycle_dryrun_20261007';
+assert.match(template,/^ethio_[a-z0-9_]+$/);
 const created=[];
 const reuseBuild=process.argv.includes('--reuse-local-build');
 const recordingStartOnly=process.argv.includes('--recording-start-only');
 const eggSalesOnly=process.argv.includes('--egg-sales-only');
 const schedulerOnly=process.argv.includes('--scheduler-only');
 const expensesOnly=process.argv.includes('--expenses-only');
-const specs=expensesOnly?['tests/browser/expenses.spec.ts']:schedulerOnly?['tests/browser/scheduler.spec.ts']:eggSalesOnly?['tests/browser/egg-sale-sources.spec.ts']:recordingStartOnly?['tests/browser/recording-start.spec.ts']:['tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts'];
-const testArgs=process.argv.slice(2).filter(arg=>!['--reuse-local-build','--recording-start-only','--egg-sales-only','--scheduler-only','--expenses-only'].includes(arg));
+const todayCountOnly=process.argv.includes('--today-count-only');
+const specs=todayCountOnly?['tests/browser/today-bird-count.spec.ts','tests/browser/recording-start.spec.ts','tests/browser/today-offline-day.spec.ts','tests/browser/flock-lifecycle.spec.ts']:expensesOnly?['tests/browser/expenses.spec.ts']:schedulerOnly?['tests/browser/scheduler.spec.ts']:eggSalesOnly?['tests/browser/egg-sale-sources.spec.ts']:recordingStartOnly?['tests/browser/recording-start.spec.ts']:['tests/browser/flock-lifecycle.spec.ts','tests/browser/today-offline-day.spec.ts'];
+const testArgs=process.argv.slice(2).filter(arg=>!['--reuse-local-build','--recording-start-only','--egg-sales-only','--scheduler-only','--expenses-only','--today-count-only'].includes(arg));
 let cloned=false, app, proxy;
 assert.match(database,/^flock_browser_[a-f0-9]{32}$/);
 function docker(args,input){
@@ -44,6 +46,7 @@ function runNode(args,env){
 try{
   // Fail bad test filters before creating containers or compiling the app.
   await runNode(['node_modules/@playwright/test/cli.js','test',...specs,'--list',...testArgs],process.env);
+  assert.equal(docker(['exec',dbContainer,'psql','-U','postgres','-d',template,'-Atqc','select count(*) from auth.users']).trim(),'0','Browser templates must not contain real Auth accounts');
   docker(['exec',dbContainer,'createdb','-U','postgres','--template',template,database]);cloned=true;
   // The SQL-only template has Auth's current schema but no migration-history
   // rows. Copy that metadata, not real users, so GoTrue does not replay older
@@ -148,7 +151,7 @@ try{
       commit;`);
   }
   // Test the production bundle once; cold development compiles mask UI failures.
-  if(recordingStartOnly){
+  if(recordingStartOnly||todayCountOnly){
     query(`begin;
       insert into public.houses(id,org_id,branch_id,farm_id,name,house_type) values('12000000-0000-4000-8000-000000000904','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','12000000-0000-4000-8000-000000000003','Recording start house','layer');
       insert into public.batch_cycles(id,org_id,farm_id,cycle_code,production_purpose,status,placement_date,placed_at) values('12000000-0000-4000-8000-000000000902','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000003','START-CYCLE','layer','active',current_date-40,now()-interval '40 days');
@@ -156,6 +159,15 @@ try{
       insert into public.flocks(id,org_id,farm_id,house_id,batch_id,flock_code,flock_type,source,placement_date,placed_at,age_at_placement_days,initial_count,current_count,status) values('12000000-0000-4000-8000-000000000905','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000003','12000000-0000-4000-8000-000000000904','12000000-0000-4000-8000-000000000903','START-LAYER','layer','external_purchase',current_date-40,now()-interval '40 days',120,100,100,'active');
       commit;`);
   }
+  if(todayCountOnly)query(`begin;
+    update public.organizations set operational_day_lock_grace_days=7 where id='12000000-0000-4000-8000-000000000001';
+    insert into public.batches(id,org_id,branch_id,farm_id,house_id,batch_cycle_id,batch_code,source,placement_date,age_at_placement_days,total_count,status)
+    values('12000000-0000-4000-8000-000000000921','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000002','12000000-0000-4000-8000-000000000003','12000000-0000-4000-8000-000000000013','12000000-0000-4000-8000-000000000010','BACKDATED-BATCH','external_purchase',current_date-40,120,100,'active');
+    insert into public.flocks(id,org_id,farm_id,house_id,batch_id,flock_code,flock_type,source,placement_date,placed_at,age_at_placement_days,initial_count,current_count,status)
+    values('12000000-0000-4000-8000-000000000922','12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000003','12000000-0000-4000-8000-000000000013','12000000-0000-4000-8000-000000000921','BACKDATED-LAYER','layer','external_purchase',current_date-40,now()-interval '40 days',120,100,100,'active');
+    insert into public.daily_farm_records(org_id,flock_id,record_date,opening_birds,closing_birds,recorded_by)
+    values('12000000-0000-4000-8000-000000000001','12000000-0000-4000-8000-000000000922',(now() at time zone 'Africa/Addis_Ababa')::date-3,100,100,'${manager.id}');
+    commit;`);
   if(reuseBuild)console.log('Reusing the previously verified LOCAL bundle for test-only retries; never deploy this bundle.');
   else await runNode(['node_modules/@opennextjs/cloudflare/dist/cli/index.js','build'],env);
   app=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3100'],{env,stdio:'inherit'});

@@ -61,7 +61,7 @@ test("Today assigned-fix statuses have real translations and every save uses the
     assert.equal(typeof am.Notifications.status[status], "string");
     assert.notEqual(en.Notifications.status[status], am.Notifications.status[status]);
   }
-  for (const file of ["bird-check-card.tsx", "health-task-form.tsx", "embedded-task-card.tsx"]) {
+  for (const file of ["health-task-form.tsx", "embedded-task-card.tsx"]) {
     const source = await readFile(new URL(`../src/components/today/${file}`, import.meta.url), "utf8");
     assert.match(source, /todayErrorMessageKeys\[result\.error_code\]/, file);
     assert.doesNotMatch(source, /result\.error_code === "RESOURCE_CONFLICT" \? errors\("staleRevision"\)/, file);
