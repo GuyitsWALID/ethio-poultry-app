@@ -8,8 +8,8 @@ import {NextIntlClientProvider} from 'next-intl';
 import {readFile} from 'node:fs/promises';
 import {feedPlanCopy} from '../src/i18n/feed-plan-copy.ts';
 const bundle=await build({entryPoints:['src/components/today/feed-plan-summary.tsx'],bundle:true,write:false,platform:'node',format:'cjs',packages:'external',jsx:'automatic'});
-const module={exports:{}};new Function('require','module','exports',bundle.outputFiles[0].text)(createRequire(import.meta.url),module,module.exports);
-const {FeedPlanSummary}=module.exports;
+const summaryModule={exports:{}};new Function('require','module','exports',bundle.outputFiles[0].text)(createRequire(import.meta.url),summaryModule,summaryModule.exports);
+const {FeedPlanSummary}=summaryModule.exports;
 const render=(locale,plan,sessions)=>renderToStaticMarkup(React.createElement(NextIntlClientProvider,{locale,messages:{},timeZone:'Africa/Addis_Ababa'},React.createElement(FeedPlanSummary,{plan,sessions})));
 test('daily target displays once with arbitrary session allocation and bilingual explanation',()=>{
  const plan={state:'ready',ageDays:325,templateName:'Plan',openingBirds:1000,gramsPerBird:120,dailyKg:120};
