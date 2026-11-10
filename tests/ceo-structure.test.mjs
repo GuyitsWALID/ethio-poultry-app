@@ -8,7 +8,7 @@ const input={request_id:"44000000-0000-4000-8000-000000000001",branch:{name:" Br
 test("branch structure validates capacity/type and rejects the old placement model",()=>{
  assert.equal(branchStructureInput.parse(input).branch.name,"Branch");
  for(const house_type of ["layer","broiler","rearing","parent_stock"])assert.equal(branchStructureInput.safeParse({...input,farms:[{...input.farms[0],houses:[{...input.farms[0].houses[0],house_type}]}]}).success,true);
- for(const extra of [{intakeBatch:{}},{manager:{password:"Not-used"}},{org_id:input.request_id}])assert.equal(branchStructureInput.safeParse({...input,...extra}).success,false);
+ for(const extra of [{intakeBatch:{}},{manager:{password:null}},{org_id:input.request_id}])assert.equal(branchStructureInput.safeParse({...input,...extra}).success,false);
  for(const capacity of [0,-1,1.5,10000001])assert.equal(branchStructureInput.safeParse({...input,farms:[{name:"Farm",houses:[{name:"House",capacity,house_type:"layer"}]}]}).success,false);
  assert.equal(branchStructureInput.safeParse({...input,farms:[]}).success,false);
  assert.equal(branchStructureInput.safeParse({...input,farms:[{name:"Farm",houses:[{...input.farms[0].houses[0],flocks:[{}]}]}]}).success,false);
