@@ -109,6 +109,7 @@ test("email claims precede sending and unknown provider outcomes never request a
   reset();state.rows.authorized_notifications=[{id:id(7),recipient_id:id(1),severity:"high",event_type:"assigned",created_at:new Date().toISOString(),claim_token:id(9)}];
   state.sendError=Object.assign(new Error("Provider failed"),{code:"TEST_FAILURE",definitelyUnsent:definite});
   const result=await api.dispatchNotificationOutbox();
+  assert.equal(state.calls.find(c=>c[1]==="claim_notification_emails")[2].p_limit,5);
   assert.equal(result.uncertain,definite?0:1);assert.equal(result.failed,definite?1:0);
   const phases=state.calls.filter(c=>c[1]==="record_notification_email_phase");
   assert.equal(phases[0][2].p_status,"sending");assert.equal(phases[1][2].p_status,definite?"failed":"uncertain");assert.equal(phases[1][2].p_retry,definite);

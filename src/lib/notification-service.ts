@@ -172,11 +172,12 @@ export async function updateNotificationCenter(ctx: AccessContext, input: unknow
   return loadNotificationCenter(ctx);
 }
 
-export async function dispatchNotificationOutbox(limit = 25) {
+export async function dispatchNotificationOutbox(limit = 5) {
   const readiness = emailDeliveryReadiness();
   if (!readiness.available) return { status: "disabled", attempted: 0, sent: 0, failed: 0, reason: readiness.reason };
 
-  const {data:eligible,error}=await db.rpc("claim_notification_emails",{p_limit:limit});
+  // Each message also needs access, Auth, provider and durable evidence requests.
+  const {data:eligible,error}=await db.rpc("claim_notification_emails",{p_limit:Math.min(limit,5)});
   if(error)throw new Error("Email deliveries could not be claimed.");
   let sent = 0, failed = 0, uncertain=0, skipped=0;
   for (const row of eligible as Row[]) {

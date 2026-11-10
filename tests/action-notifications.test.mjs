@@ -66,4 +66,5 @@ test("external delivery is opt-in, bounded, and disabled by default", () => {
   assert.match(emailAdapter, /NOTIFICATION_EMAIL_ENABLED.*=== "true"/);
   assert.match(wrangler, /"send_email"/);
   assert.match(monitoring, /platform-monitoring\.mjs notifications/);
+  assert.equal((monitoring.match(/run: node scripts\/platform-monitoring\.mjs reports\r?\n\s+if: \$\{\{ !cancelled\(\) \}\}/g)??[]).length,2);
 });
