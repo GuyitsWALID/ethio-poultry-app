@@ -14,7 +14,7 @@ declare
   v_warehouse uuid := '11000000-0000-4000-8000-000000000008';
   v_feed_item uuid := '11000000-0000-4000-8000-000000000009';
   v_health_item uuid := '11000000-0000-4000-8000-000000000010';
-  v_day date := date '2099-01-15';
+  v_day date := (now() at time zone 'Africa/Addis_Ababa')::date-1;
   v_daily uuid;
   v_result jsonb;
   v_count integer;
@@ -71,7 +71,7 @@ declare
   v_warehouse uuid := '11000000-0000-4000-8000-000000000008';
   v_feed_item uuid := '11000000-0000-4000-8000-000000000009';
   v_health_item uuid := '11000000-0000-4000-8000-000000000010';
-  v_day date := date '2099-01-15';
+  v_day date := (now() at time zone 'Africa/Addis_Ababa')::date-1;
   v_daily uuid;
   v_result jsonb;
   v_count integer;

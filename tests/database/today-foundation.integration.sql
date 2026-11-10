@@ -21,7 +21,7 @@ declare
   v_house uuid := '12000000-0000-4000-8000-000000000013';
   v_batch uuid := '12000000-0000-4000-8000-000000000014';
   v_flock uuid := '12000000-0000-4000-8000-000000000015';
-  v_day date := date '2099-02-01';
+  v_day date := (now() at time zone 'Africa/Addis_Ababa')::date;
   v_health_fingerprint text;
   v_supplies_fingerprint text;
   v_result jsonb;
@@ -181,7 +181,7 @@ create temporary table today_test_revisions (
 insert into today_test_revisions(scope, revision) values (
   'active_missing',
   public.today_resource_revision(
-    'operating_day', '12000000-0000-4000-8000-000000000010', date '2099-02-01'
+    'operating_day', '12000000-0000-4000-8000-000000000010', (now() at time zone 'Africa/Addis_Ababa')::date
   )
 );
 grant select on today_test_revisions to authenticated;
@@ -287,9 +287,9 @@ begin
       '12000000-0000-4000-8000-000000000004',
       '12000000-0000-4000-8000-000000000201',
       1,
-      jsonb_build_object('farm_id', '12000000-0000-4000-8000-000000000010', 'date', '2099-02-01'),
+      jsonb_build_object('farm_id', '12000000-0000-4000-8000-000000000010', 'date', ((now() at time zone 'Africa/Addis_Ababa')::date)::text),
       '12000000-0000-4000-8000-000000000010',
-      date '2099-02-01',
+      (now() at time zone 'Africa/Addis_Ababa')::date,
       v_revision
     );
     raise exception 'Finish Day accepted missing Daily Record and feed work.';
@@ -306,7 +306,7 @@ declare
   v_manager uuid := '12000000-0000-4000-8000-000000000004';
   v_batch uuid := '12000000-0000-4000-8000-000000000014';
   v_flock uuid := '12000000-0000-4000-8000-000000000015';
-  v_day date := date '2099-02-01';
+  v_day date := (now() at time zone 'Africa/Addis_Ababa')::date;
 begin
   insert into public.daily_farm_records(
     org_id, flock_id, record_date, opening_birds, closing_birds, deaths, recorded_by
@@ -323,7 +323,7 @@ declare
   v_manager uuid := '12000000-0000-4000-8000-000000000004';
   v_farm uuid := '12000000-0000-4000-8000-000000000010';
   v_flock uuid := '12000000-0000-4000-8000-000000000015';
-  v_day date := date '2099-02-01';
+  v_day date := (now() at time zone 'Africa/Addis_Ababa')::date;
 begin
   -- The new Daily Record changes both source fingerprints. Reconfirming the
   -- tasks supersedes stale evidence and proves Finish Day accepts only the
@@ -364,13 +364,13 @@ insert into today_test_revisions(scope, revision) values
   (
     'active_ready',
     public.today_resource_revision(
-      'operating_day', '12000000-0000-4000-8000-000000000010', date '2099-02-01'
+      'operating_day', '12000000-0000-4000-8000-000000000010', (now() at time zone 'Africa/Addis_Ababa')::date
     )
   ),
   (
     'empty_ready',
     public.today_resource_revision(
-      'operating_day', '12000000-0000-4000-8000-000000000011', date '2099-02-01'
+      'operating_day', '12000000-0000-4000-8000-000000000011', (now() at time zone 'Africa/Addis_Ababa')::date
     )
   );
 
@@ -384,7 +384,7 @@ declare
   v_active_farm uuid := '12000000-0000-4000-8000-000000000010';
   v_empty_farm uuid := '12000000-0000-4000-8000-000000000011';
   v_manager uuid := '12000000-0000-4000-8000-000000000004';
-  v_day date := date '2099-02-01';
+  v_day date := (now() at time zone 'Africa/Addis_Ababa')::date;
   v_revision text;
   v_payload jsonb;
   v_result jsonb;
@@ -445,7 +445,7 @@ reset role;
 insert into today_test_revisions(scope, revision) values (
   'active_closed',
   public.today_resource_revision(
-    'operating_day', '12000000-0000-4000-8000-000000000010', date '2099-02-01'
+    'operating_day', '12000000-0000-4000-8000-000000000010', (now() at time zone 'Africa/Addis_Ababa')::date
   )
 );
 
@@ -457,7 +457,7 @@ declare
   v_active_farm uuid := '12000000-0000-4000-8000-000000000010';
   v_empty_farm uuid := '12000000-0000-4000-8000-000000000011';
   v_manager uuid := '12000000-0000-4000-8000-000000000004';
-  v_day date := date '2099-02-01';
+  v_day date := (now() at time zone 'Africa/Addis_Ababa')::date;
   v_revision text;
   v_result jsonb;
 begin

@@ -73,9 +73,13 @@ begin
   insert into public.mortality_events(org_id,flock_id,record_date,count,cause) values(o,flock,today,20,'Natural death');
   a:=pg_temp.warning(o,'mortality-spike-'||flock::text,farm);
   if public.operational_action_source_state(o,a)->>'state'<>'active' then raise exception 'Exact mortality source not recognized'; end if;
+  perform set_config('app.governance_apply','true',true);
   update public.mortality_events set record_date=today-7 where org_id=o and flock_id=flock;
+  perform set_config('app.governance_apply','false',true);
   if public.operational_action_source_state(o,a)->>'state'<>'clear' then raise exception 'Mortality window includes eighth day'; end if;
+  perform set_config('app.governance_apply','true',true);
   update public.mortality_events set record_date=today-6 where org_id=o and flock_id=flock;
+  perform set_config('app.governance_apply','false',true);
   if public.operational_action_source_state(o,a)->>'state'<>'active' then raise exception 'Mortality window excludes seventh day'; end if;
   a:=pg_temp.warning(o,'schedule-missed-'||flock::text,farm);
   insert into public.health_events(org_id,flock_id,event_date,event_type,description,created_at) values

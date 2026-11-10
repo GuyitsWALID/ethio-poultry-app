@@ -19,8 +19,11 @@ begin
   insert into public.flocks(id,org_id,farm_id,house_id,batch_id,breed_id,flock_code,flock_type,source,placement_date,
     initial_count,current_count,age_at_placement_days,status)
     values(flock,o,farm,house,batch,breed,'PERFORMANCE','layer','external_purchase',today-100,200,50,0,'active');
+  -- Seed existing historical reporting evidence, not a routine backdated write.
+  perform set_config('app.governance_apply','true',true);
   insert into public.daily_farm_records(org_id,flock_id,record_date,opening_birds,closing_birds,deaths,culls,total_eggs,recorded_by)
     select o,flock,today-n,100+100*(n%2),99+100*(n%2),1,0,80+80*(n%2),actor from generate_series(0,29) n;
+  perform set_config('app.governance_apply','false',true);
   select value into metric from jsonb_array_elements(public.operational_performance_warnings(o,flock,today)) where value->>'kind'='production';
   if metric->>'actual'<>'80.00' or metric->>'target'<>'85.00' or metric->>'state'<>'active'
     or metric->>'severity'<>'medium' or metric->>'evidence_days'<>'30' then
@@ -39,9 +42,13 @@ begin
   select value into metric from jsonb_array_elements(public.operational_performance_warnings(o,flock,today)) where value->>'kind'='production';
   if (metric->>'target')::numeric<>85.44 then raise exception 'Age target not bird-day weighted: %',metric; end if;
   -- Missing evidence cannot be interpreted as zero or as a successfully fixed issue.
+  perform set_config('app.governance_apply','true',true);
   update public.daily_farm_records set total_eggs=null where flock_id=flock;
+  perform set_config('app.governance_apply','false',true);
   if public.operational_action_source_state(o,a)->>'state'<>'unavailable' then raise exception 'Missing eggs treated as zero/clear'; end if;
+  perform set_config('app.governance_apply','true',true);
   update public.daily_farm_records set total_eggs=0 where flock_id=flock;
+  perform set_config('app.governance_apply','false',true);
   if public.operational_action_source_state(o,a)->>'state'<>'active' then raise exception 'Real zero eggs not warned'; end if;
   update public.breed_standards set target_hdep_pct=null where breed_id=breed and week_number=14;
   if public.operational_action_source_state(o,a)->>'state'<>'unavailable' then raise exception 'Missing age target guessed'; end if;
@@ -49,13 +56,17 @@ begin
   if public.operational_action_source_state(o,a)->>'state'<>'clear' then raise exception 'Broilers counted as laying hens'; end if;
   update public.flocks set flock_type='parent_stock' where id=flock;
   update public.breed_standards set target_hdep_pct=85 where breed_id=breed;
+  perform set_config('app.governance_apply','true',true);
   update public.daily_farm_records set total_eggs=coalesce(opening_birds,closing_birds) where flock_id=flock;
+  perform set_config('app.governance_apply','false',true);
   if public.operational_action_source_state(o,a)->>'state'<>'clear' then raise exception 'Parent stock healthy result not clear'; end if;
   update public.daily_farm_records set total_eggs=null where flock_id=flock and record_date=today;
   select value into metric from jsonb_array_elements(public.operational_performance_warnings(o,flock,today)) where value->>'kind'='production';
   if (metric->>'actual')::numeric<>100 or metric->>'evidence_days'<>'29' or metric->>'expected_days'<>'30' then
     raise exception 'Missing numerator diluted rate or hid coverage: %',metric; end if;
+  perform set_config('app.governance_apply','true',true);
   update public.daily_farm_records set voided_at=now() where flock_id=flock;
+  perform set_config('app.governance_apply','false',true);
   if public.operational_action_source_state(o,a)->>'state'<>'unavailable' then raise exception 'Voided evidence used'; end if;
   if public.operational_performance_warnings(gen_random_uuid(),flock,today)<>'[]'::jsonb then raise exception 'Tenant isolation failed'; end if;
   update public.operational_actions set source_key='kpi-production-rate' where id=a;

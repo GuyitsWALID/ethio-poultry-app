@@ -45,7 +45,7 @@ test("shared operations retain authoritative atomic boundaries and audit evidenc
   assert.match(operations, /close_feed_day/);
   assert.match(operations, /record_health_event_with_inventory/);
   assert.match(operations, /complete_vaccination_with_inventory/);
-  assert.match(operations, /daily_sales_records/);
+  assert.match(operations, /record_operational_sale/);
   assert.match(operations, /record_operational_expense/);
   assert.match(operations, /recordAuditEvent/);
   assert.match(inventory, /receive_inventory_stock/);
