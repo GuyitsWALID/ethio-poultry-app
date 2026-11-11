@@ -58,6 +58,12 @@ test("Today meets the first tablet interaction and accessibility contract", () =
   assert.doesNotMatch(`${screen}\n${embeddedTasks}`, /<table|overflow-x-auto/);
 });
 
+test("task status stays on one line without squeezing the badge on narrow screens", () => {
+  assert.match(embeddedTasks, /className="min-w-0 flex-1"><span className="font-semibold/);
+  assert.match(embeddedTasks, /className="flex shrink-0 items-center gap-2"><span className="whitespace-nowrap rounded-full/);
+  assert.match(embeddedTasks, /className="shrink-0 whitespace-nowrap text-xs text-forest-700">\{stateLabel/);
+});
+
 test("Bird count is a display and health owns routine losses", () => {
   assert.match(screen, /<BirdCheckCard/);
   assert.match(birdCheck, /assessBirdCheck/);

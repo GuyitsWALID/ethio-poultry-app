@@ -1,5 +1,9 @@
 # Review of preserved Today edits — 2026-11-10
 
+## Owner layout feedback — 2026-11-11
+
+The owner supplied English/Amharic narrow-screen screenshots and accepted the tested experience apart from the wrapped, squeezed Not started badge. The follow-up keeps task statuses on one line, prevents their controls shrinking and lets the heading/summary use the remaining width, for normal and read-only cards. This records the owner's reported acceptance scope, not additional cross-browser, upgrade-failure or real-farm pilot certification. The badge-only change still needs its post-release visual confirmation.
+
 What this change does: makes Bird count a read-only summary and starts the Daily Record automatically when saving other work. It also adjusts Health, offline queue preparation, translations and browser tests. These were uncommitted edits at review time, not part of production master `2167b4c`.
 
 ## Resolution and acceptance
