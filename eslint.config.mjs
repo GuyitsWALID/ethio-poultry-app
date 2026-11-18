@@ -13,6 +13,7 @@ const eslintConfig = defineConfig([
     ".wrangler/**",
     ".release/**",
     "test-results/**",
+    "artifacts/**/.playwright-artifacts-*/**",
     "playwright-report/**",
     "out/**",
     "build/**",

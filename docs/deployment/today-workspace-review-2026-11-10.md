@@ -2,7 +2,7 @@
 
 ## Owner layout feedback — 2026-11-11
 
-The owner supplied English/Amharic narrow-screen screenshots and accepted the tested experience apart from the wrapped, squeezed Not started badge. The follow-up keeps task statuses on one line, prevents their controls shrinking and lets the heading/summary use the remaining width, for normal and read-only cards. This records the owner's reported acceptance scope, not additional cross-browser, upgrade-failure or real-farm pilot certification. The badge-only change still needs its post-release visual confirmation.
+The owner supplied English/Amharic narrow-screen screenshots and accepted the tested experience apart from the wrapped, squeezed Not started badge. The follow-up keeps task statuses on one line, prevents their controls shrinking and lets the heading/summary use the remaining width, for normal and read-only cards. It shipped to master as `3d4a6d6`; the owner subsequently confirmed the fix. This closes the reported layout issue and the owner's supplied-screen review, not additional cross-browser, upgrade-failure or real-farm pilot certification.
 
 What this change does: makes Bird count a read-only summary and starts the Daily Record automatically when saving other work. It also adjusts Health, offline queue preparation, translations and browser tests. These were uncommitted edits at review time, not part of production master `2167b4c`.
 
@@ -16,7 +16,7 @@ The review below records the original unpublished state. All three findings were
 - Full local unit checks, lint, TypeScript and fresh Next.js/OpenNext Cloudflare builds passed. The clean release CI checkpoint also passed.
 - Five signed-in Chromium scenarios passed on disposable migrated local fixtures: bilingual portrait/landscape and Ethiopian dates; manager/CEO recording-start approval and stale-command conflicts; current first-loss save; an Amharic backdated first-loss save without an offline grant; and a full offline day through reload/restart, seven dependent commands, one-time inventory deduction, reconnect and one-time closure.
 
-The owner approved production release only and requested staging remain unchanged. No new migration or real production acceptance records are needed. Actual physical-device confirmation is still pending the owner's check after rollout. Final release/build/smoke evidence is recorded on PR #11, not inferred from these local fixtures.
+The owner approved production release only and requested staging remain unchanged. No new migration or real production acceptance records are needed. The owner's supplied-screen review and subsequent badge confirmation are recorded above; broader device/browser coverage remains separate. Final release/build/smoke evidence is recorded on PR #11, not inferred from these local fixtures.
 
 Scope: traced both live Today and recovered offline callers, the draft provider, offline runtime/store, receipt dependency SQL, loss-save SQL, workspace derivation, catalogs and changed tests. Assumed ordinary multi-house tablet use, including reload/reconnect, existing offline queues, and authorized backdated entry. No new production writes or deployments were performed.
 
@@ -55,4 +55,4 @@ Scope: traced both live Today and recovered offline callers, the draft provider,
 
 Original verdict: fix 1 and 2 before shipping; include the small status correction in 3. All three are now resolved as described above.
 
-Original review exclusions were later addressed by the implementation/build and signed-in browser checks above. Physical-device acceptance remains open. The original review itself changed no application code; the separately authorized follow-up does.
+Original review exclusions were later addressed by the implementation/build and signed-in browser checks above. The owner's narrow-screen acceptance is recorded above; broader device/browser coverage remains open. The original review itself changed no application code; the separately authorized follow-up does.

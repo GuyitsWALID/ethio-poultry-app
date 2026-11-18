@@ -1,6 +1,7 @@
 import {expect as baseExpect, test, type Page} from '@playwright/test';
 import {toEthiopianDate} from '../../src/i18n/ethiopian-calendar';
 import messages from '../../messages/en.json';
+import type {OfflineDraft,QueuedCommand} from '../../src/lib/today-workspace/offline-store';
 
 // Local dev routes compile lazily; functional assertions remain unchanged.
 const expect=baseExpect.configure({timeout:90_000});
@@ -259,7 +260,7 @@ test('Today draft recovery, quota failure, midnight lock and revoked access pres
     const db=await new Promise<IDBDatabase>((resolve,reject)=>{const request=indexedDB.open(name);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
     try {
       const read=(store:string)=>new Promise<unknown[]>((resolve,reject)=>{const request=db.transaction(store).objectStore(store).getAll();request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
-      return {drafts:await read('drafts'),outbox:await read('outbox')};
+      return {drafts:await read('drafts'),outbox:await read('outbox') as QueuedCommand[]};
     }finally{db.close();}
   });
   await open();
@@ -287,7 +288,13 @@ test('Today draft recovery, quota failure, midnight lock and revoked access pres
   await expect(water).toHaveValue('123');
   await context.setOffline(true);
   await card.getByRole('button',{name:'Save and continue',exact:true}).click();
-  await expect.poll(async()=>(await readLocal()).outbox.length).toBe(1);
+  await expect.poll(async()=>(await readLocal()).outbox.length).toBe(2);
+  const queued=(await readLocal()).outbox;
+  const opening=queued.find(row=>row.command.type==='save_daily_record'&&row.command.payload.record?._today_opening);
+  expect(opening).toBeTruthy();
+  const record=queued.find(row=>row.command.command_id!==opening!.command.command_id);
+  expect(record?.command.type).toBe('save_daily_record');
+  expect(record?.command.depends_on).toContain(opening!.command.command_id);
   const ceoContext=await browser.newContext({baseURL:process.env.APP_BASE_URL});
   try {
     const ceoPage=await ceoContext.newPage();await login(ceoPage,'CEO');
@@ -299,8 +306,64 @@ test('Today draft recovery, quota failure, midnight lock and revoked access pres
     expect(revoked.status()).toBe(200);
     await context.setOffline(false);
     await expect(page.getByText(/Saving is paused\. Keep this browser profile/)).toBeVisible();
-    expect((await readLocal()).outbox).toHaveLength(1);
+    expect((await readLocal()).outbox.map(row=>row.command)).toEqual(queued.map(row=>row.command));
     const current=await page.request.get(`/api/farm-manager/today?farm_id=${farm}&date=${workDate}`);
     expect(current.status()).toBe(403);
   }finally{await context.setOffline(false);await ceoContext.close();}
+});
+
+test('CEO feature-disable rollback restores legacy navigation and preserves unsent Today work',async({page,context,browser})=>{
+  await page.addInitScript(()=>localStorage.setItem('ethiopoultry.today.guide.dismissed.v1','true'));
+  await login(page);
+  await page.goto(`/app/today?farm_id=${farm}&flock_id=${flock}`);
+  const date=await page.getByLabel('Work date',{exact:true}).inputValue();
+  const card=page.locator('#today-task-eggs_water');
+  await expect(card.locator('button[aria-expanded]')).toBeVisible();
+  if(await card.locator('button[aria-expanded=false]').count())await card.locator('button[aria-expanded]').click();
+  await expect(card.getByLabel('Water used (litres)',{exact:true})).toBeEnabled();
+  await card.getByLabel('Water used (litres)',{exact:true}).fill('123');
+  for(const name of ['normal_eggs','broken_eggs','dirty_eggs'])await card.locator(`input[name=${name}]`).fill('0');
+  const savedWork=()=>page.evaluate(async()=>{
+    const name=localStorage.getItem('ethiopoultry.offline_identity');if(!name)throw Error('Missing offline identity');
+    const db=await new Promise<IDBDatabase>((resolve,reject)=>{const request=indexedDB.open(name);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+    try{
+      const read=(store:string)=>new Promise<unknown[]>((resolve,reject)=>{const request=db.transaction(store).objectStore(store).getAll();request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+      return {drafts:(await read('drafts') as OfflineDraft[]).filter(row=>row.taskId==='eggs_water'),outbox:await read('outbox') as QueuedCommand[]};
+    }finally{db.close();}
+  });
+  await expect.poll(async()=>JSON.stringify((await savedWork()).drafts)).toContain('123');
+  await context.setOffline(true);
+  await card.getByRole('button',{name:'Save and continue',exact:true}).click();
+  await expect.poll(async()=>(await savedWork()).outbox.length).toBe(2);
+  const original=await savedWork();
+  expect(original.drafts).toHaveLength(1);
+  const ceoContext=await browser.newContext({baseURL:process.env.APP_BASE_URL});
+  let disabled=false;
+  try{
+    const ceo=await ceoContext.newPage();await login(ceo,'CEO');
+    const state=await ceo.request.get('/api/ceo/feature-flags/today-workspace');
+    expect(state.status()).toBe(200);expect((await state.json()).enabled).toBe(true);
+    const result=await ceo.request.post('/api/ceo/feature-flags/today-workspace',{data:{enabled:false,reason:'Disposable local rollback acceptance'}});
+    expect(result.status()).toBe(200);disabled=true;
+    await context.setOffline(false);
+    await page.goto('/app/farm-manager');
+    const navigation=page.getByRole('navigation',{name:'Primary navigation'});
+    await expect(navigation.getByRole('link',{name:'Manager Dashboard',exact:true})).toBeVisible();
+    await expect(navigation.getByRole('link',{name:'Daily Records',exact:true})).toBeVisible();
+    await expect(navigation.getByRole('link',{name:'Today',exact:true})).toHaveCount(0);
+    const workspace=await page.request.get(`/api/farm-manager/today?farm_id=${farm}&date=${date}`);
+    expect(workspace.status()).toBe(404);expect((await workspace.json()).error_code).toBe('FEATURE_DISABLED');
+    const rejected=await page.request.post('/api/farm-manager/today/commands',{data:original.outbox[0].command});
+    expect(rejected.status()).toBe(404);expect((await rejected.json()).error_code).toBe('FEATURE_DISABLED');
+    expect((await savedWork()).outbox.map(row=>row.command)).toEqual(original.outbox.map(row=>row.command));
+    expect((await savedWork()).drafts).toEqual(original.drafts);
+    const restored=await ceo.request.post('/api/ceo/feature-flags/today-workspace',{data:{enabled:true,reason:'Restore disposable organization after rollback acceptance'}});
+    expect(restored.status()).toBe(200);disabled=false;
+    await page.goto('/app/today');
+    await expect(page.getByRole('navigation',{name:'Primary navigation'}).getByRole('link',{name:'Today',exact:true})).toBeVisible();
+  }finally{
+    await context.setOffline(false);
+    if(disabled)expect((await ceoContext.request.post('/api/ceo/feature-flags/today-workspace',{data:{enabled:true,reason:'Restore disposable rollback fixture'}})).status()).toBe(200);
+    await ceoContext.close();
+  }
 });
